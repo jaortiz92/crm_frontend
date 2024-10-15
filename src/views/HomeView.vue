@@ -1,9 +1,9 @@
 <script setup>
-import TheWelcome from '../components/TheWelcome.vue'
+import PendingActivities from '@/components/PendingActivities.vue'
 </script>
 
 <template>
   <main>
-    <TheWelcome />
+    <PendingActivities></PendingActivities>
   </main>
 </template>

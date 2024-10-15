@@ -10,20 +10,22 @@ const logout = async () => {
   router.push({ name: 'Login' })
 }
 
-const hasToken = computed(() => !!userStore.token)
+const hasToken = computed(() => userStore.token)
 
 const first_name = ref('')
 const last_name = ref('')
 
 const addDataUser = async () => {
-  first_name.value = await userStore.user.first_name
   last_name.value = await userStore.user.last_name
+  first_name.value = await userStore.user.first_name
 }
 
 watch(
   () => userStore.user,
   () => {
-    addDataUser()
+    if (userStore.user) {
+      addDataUser()
+    }
   },
   { immediate: true }
 )
@@ -33,7 +35,7 @@ watch(
   <div class="header">
     <div :class="{ 'logo-logged': hasToken, 'logo-login': !hasToken }">
       <img src="@/assets/logo.svg" alt="Logo" />
-      <h4 v-show="hasToken">Bienvenido {{ first_name }} {{ last_name }}</h4>
+      <h4 v-if="hasToken">Bienvenido {{ first_name }} {{ last_name }}</h4>
     </div>
     <nav v-show="hasToken" class="nav">
       <div>

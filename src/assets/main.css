@@ -53,3 +53,56 @@ label {
   text-align: center;
   color: var(--dark-color-opposite-one);
 }
+
+/* Tables */
+table {
+  border: 1px solid var(--gray-border);
+  border-spacing: 0px;
+  width: 100%;
+}
+thead {
+  background-color: var(--dark-color);
+  width: 100%;
+}
+th {
+  height: 30px;
+  text-align: center;
+  padding: 12px 15px;
+  font-size: 110%;
+  color: var(--text-white);
+}
+
+td {
+  width: fit-content;
+  text-align: left;
+  padding: 2px 4px 2px 4px;
+  font-size: 90%;
+}
+
+tbody tr:nth-child(even) {
+  background-color: var(--text-white);
+}
+tbody tr:nth-child(odd) {
+  background-color: var(--light-color-opposite-two);
+}
+.item-detail-value {
+  font-size: 75%;
+}
+.item-number-value {
+  text-align: right;
+}
+.item-special-size {
+  min-width: 85px;
+}
+
+.buttons-to-show button {
+  margin: 5px;
+}
+.buttons-to-show {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.button-less {
+  background-color: var(--dark-color);
+}

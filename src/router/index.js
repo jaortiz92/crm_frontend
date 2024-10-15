@@ -37,7 +37,6 @@ router.beforeEach(async (to, from, next) => {
       next({ name: 'Login' })
     }
   } else if (userStore.token && !userStore.user) {
-    console.log(userStore.user)
     try {
       await userStore.getUserDetails()
       next()
