@@ -1,6 +1,7 @@
 <script setup>
 import { useUserStore } from '@/stores/userStore.js'
 import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -8,12 +9,33 @@ const logout = async () => {
   userStore.logout()
   router.push({ name: 'Login' })
 }
+
+const hasToken = computed(() => !!userStore.token)
+
+const first_name = ref('')
+const last_name = ref('')
+
+const addDataUser = async () => {
+  first_name.value = await userStore.user.first_name
+  last_name.value = await userStore.user.last_name
+}
+
+watch(
+  () => userStore.user,
+  () => {
+    addDataUser()
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
   <div class="header">
-    <img src="@/assets/logo.svg" alt="Logo" class="logo" />
-    <nav v-show="userStore.token" class="nav">
+    <div :class="{ 'logo-logged': hasToken, 'logo-login': !hasToken }">
+      <img src="@/assets/logo.svg" alt="Logo" />
+      <h4 v-show="hasToken">Bienvenido {{ first_name }} {{ last_name }}</h4>
+    </div>
+    <nav v-show="hasToken" class="nav">
       <div>
         <ul>
           <li class="button-nav">
@@ -36,8 +58,19 @@ const logout = async () => {
   align-items: center;
 }
 
-.logo {
+.logo-login img {
   width: 200px;
+  margin-bottom: 0px;
+  padding-bottom: 10px;
+}
+
+.logo-logged {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+}
+.logo-logged img {
+  width: 100px;
   margin-bottom: 0px;
   padding-bottom: 10px;
 }
