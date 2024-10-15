@@ -44,7 +44,16 @@ watch(
             <RouterLink to="/">Home</RouterLink>
           </li>
           <li class="button-nav">
-            <RouterLink to="/">Home</RouterLink>
+            <RouterLink to="/">Clientes</RouterLink>
+          </li>
+          <li class="button-nav">
+            <RouterLink to="/">Viajes De Cliente</RouterLink>
+          </li>
+          <li class="button-nav">
+            <RouterLink to="/">Ordenes</RouterLink>
+          </li>
+          <li class="button-nav">
+            <RouterLink to="/">Facturas</RouterLink>
           </li>
           <li class="button-nav logout"><div @click="logout">Cerrar Sesion</div></li>
         </ul>

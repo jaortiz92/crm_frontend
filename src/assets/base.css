@@ -8,11 +8,11 @@
   --normal-color: #14a1d9;
   --light-color: #05c7f2;
   --dark-color: #0d6ba6;
-  --normal-color-opposite-one: #0ce35c;
+  --normal-color-opposite-one: #a5d5b7;
   --normal-color-opposite-two: #2643df;
-  --light-color-opposite-one: #63eb96;
+  --light-color-opposite-one: #d0ebda;
   --light-color-opposite-two: #7385e8;
-  --dark-color-opposite-one: #00a13c;
+  --dark-color-opposite-one: #499a67;
   --dark-color-opposite-two: #0a2098;
   --shadow: var(--dark-color-opposite-two);
 }

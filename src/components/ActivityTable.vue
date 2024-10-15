@@ -1,35 +1,15 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { useUserStore } from '@/stores/userStore.js'
-import { activityService } from '@/services/activityService'
-import { alertService } from '@/services/alertService'
+import { ref, computed, defineProps, toRefs } from 'vue'
 
-const userStore = useUserStore()
-const id_user = ref('')
-const pendingActivities = ref([])
 const itemsScale = ref(5)
 const itemsToShow = ref(itemsScale.value)
+const props = defineProps({
+  activities: Array
+})
 
-const addPendingActivities = async () => {
-  try {
-    const response = await activityService.pendingActivities(id_user.value)
-    pendingActivities.value = response.data
-  } catch (error) {
-    alertService.generalError('Las actividades no se pudieron cargar')
-  }
-}
-
-const addDataUser = async () => {
-  id_user.value = await userStore.user.id_user
-  if (id_user.value) {
-    addPendingActivities()
-  }
-}
-
-addDataUser()
-
+const { activities } = toRefs(props)
 const limitedItems = computed(() => {
-  return pendingActivities.value.slice(0, itemsToShow.value)
+  return activities.value.slice(0, itemsToShow.value)
 })
 
 const showMore = () => {
@@ -41,10 +21,7 @@ const showLess = () => {
 </script>
 
 <template>
-  <div>
-    <h2>Actividades Pendientes</h2>
-  </div>
-  <div v-if="pendingActivities.length > 0">
+  <div v-if="activities.length > 0">
     <table class="table-activities">
       <thead>
         <tr>
@@ -81,7 +58,7 @@ const showLess = () => {
       <button class="button-less" v-if="itemsToShow > itemsScale" @click="showLess">
         Mostrar menos
       </button>
-      <button class="button-more" v-if="itemsToShow < pendingActivities.length" @click="showMore">
+      <button class="button-more" v-if="itemsToShow < activities.length" @click="showMore">
         Mostrar más
       </button>
     </div>
