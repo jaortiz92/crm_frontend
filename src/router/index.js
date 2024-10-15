@@ -16,8 +16,8 @@ const router = createRouter({
       name: 'Home',
       component: HomeView,
       meta: { requiresAuth: true }
-    },
-    {
+    }
+    /*    {
       path: '/about',
       name: 'About',
       // route level code-splitting
@@ -25,7 +25,7 @@ const router = createRouter({
       // which is lazy-loaded when the route is visited.
       component: () => import('../views/AboutView.vue'),
       meta: { requiresAuth: true }
-    }
+    }*/
   ]
 })
 

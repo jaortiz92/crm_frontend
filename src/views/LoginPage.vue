@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/userStore.js'
+import { alertService } from '@/services/alertService'
 
 const username = ref('')
 const password = ref('')
@@ -13,7 +14,7 @@ const submitLogin = async () => {
     await userStore.login(username.value, password.value)
     router.push({ name: 'Home' })
   } catch (error) {
-    alert('Usuario o contraseña incorrectos')
+    alertService.generalError('Usuario o contraseña incorrectos')
   }
 }
 </script>
