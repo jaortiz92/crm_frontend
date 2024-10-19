@@ -2,8 +2,8 @@
 import { ref } from 'vue'
 import { useUserStore } from '@/stores/userStore.js'
 
-import PendingTasks from '@/components/TasksTable.vue'
-import ActivityTable from '@/components/ActivityTable.vue'
+import TasksTable from '@/components/task/TasksTable.vue'
+import ActivityTable from '@/components/activity/ActivityTable.vue'
 
 import { activityService } from '@/services/activityService'
 import { alertService } from '@/services/alertService'
@@ -62,11 +62,11 @@ addDataUser()
     </div>
     <div>
       <h3>Tareas Pendientes</h3>
-      <PendingTasks :tasks="pendingTasks"></PendingTasks>
+      <TasksTable :tasks="pendingTasks"></TasksTable>
     </div>
     <div>
       <h3>Tareas Asignadas Pendientes</h3>
-      <PendingTasks :tasks="pendingAssignedTasks"></PendingTasks>
+      <TasksTable :tasks="pendingAssignedTasks"></TasksTable>
     </div>
   </main>
 </template>

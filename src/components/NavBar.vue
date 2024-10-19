@@ -44,7 +44,7 @@ watch(
             <RouterLink to="/">Home</RouterLink>
           </li>
           <li class="button-nav">
-            <RouterLink to="/">Clientes</RouterLink>
+            <RouterLink to="/customer">Clientes</RouterLink>
           </li>
           <li class="button-nav">
             <RouterLink to="/">Viajes De Cliente</RouterLink>
@@ -86,7 +86,7 @@ watch(
   padding-bottom: 10px;
 }
 nav {
-  padding: 10px;
+  padding: 0px 10px 0px 10px;
   box-shadow: 0 1px 6px var(--shadow);
   margin-bottom: 10px;
   width: 100%;
@@ -100,7 +100,9 @@ ul {
 }
 
 li {
-  margin: 0 20px;
+  margin: 2px;
+  display: flex;
+  align-items: center;
 }
 
 .logout {

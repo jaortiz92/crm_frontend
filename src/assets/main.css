@@ -74,7 +74,7 @@ th {
 
 td {
   width: fit-content;
-  text-align: left;
+  text-align: center;
   padding: 2px 4px 2px 4px;
   font-size: 90%;
 }
@@ -84,6 +84,10 @@ tbody tr:nth-child(odd) {
 }
 tbody tr:nth-child(even) {
   background-color: var(--normal-color-opposite-one);
+}
+
+tbody tr:hover {
+  background-color: var(--light-color-opposite-two);
 }
 .item-detail-value {
   font-size: 75%;
@@ -105,4 +109,19 @@ tbody tr:nth-child(even) {
 
 .button-less {
   background-color: var(--dark-color);
+}
+
+/* Boolean variables */
+.checkbox {
+  margin: 2%;
+  width: 12px;
+  height: 16px;
+  border: 2px solid var(--gray-border);
+  display: inline-block;
+  text-align: center;
+  line-height: 16px;
+}
+
+.checked::after {
+  content: '✔';
 }
