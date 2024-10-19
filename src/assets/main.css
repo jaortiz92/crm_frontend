@@ -59,7 +59,25 @@ table {
   border: 1px solid var(--gray-border);
   border-spacing: 0px;
   width: 100%;
+  border-radius: var(--border-radius-size);
 }
+
+thead th:first-child {
+  border-top-left-radius: var(--border-radius-size);
+}
+
+thead th:last-child {
+  border-top-right-radius: var(--border-radius-size);
+}
+
+tr:last-child td:first-child {
+  border-bottom-left-radius: var(--border-radius-size);
+}
+
+tr:last-child td:last-child {
+  border-bottom-right-radius: var(--border-radius-size);
+}
+
 thead {
   background-color: var(--dark-color);
   width: 100%;

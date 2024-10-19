@@ -6,5 +6,8 @@ export const customerService = {
   },
   getCustomerFull: function (id_customer) {
     return axiosInstance.get(`/customer/full/${id_customer}`)
+  },
+  getContactsByCustomer: function (id_customer) {
+    return axiosInstance.get(`/contact/customer/${id_customer}`)
   }
 }
