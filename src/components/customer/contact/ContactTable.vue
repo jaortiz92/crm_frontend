@@ -1,5 +1,10 @@
 <script setup>
 import { ref, computed, defineProps, toRefs } from 'vue'
+import { formatters } from '@/plugins/formatters.js'
+
+import { customerService } from '@/services/customerService'
+
+import ContactInfo from '@/components/customer/contact/ContactInfo.vue'
 
 const itemsScale = ref(20)
 const itemsToShow = ref(itemsScale.value)
@@ -17,6 +22,15 @@ const showMore = () => {
 }
 const showLess = () => {
   itemsToShow.value -= itemsScale.value
+}
+
+const contact = ref(null)
+const isModalContactVisible = ref(false)
+
+const showContactDetails = async (idContact) => {
+  contact.value = (await customerService.getContactsById(idContact)).data
+
+  isModalContactVisible.value = true
 }
 </script>
 
@@ -38,13 +52,12 @@ const showLess = () => {
           <td>{{ item.id_contact }}</td>
           <td>{{ item.first_name }} {{ item.last_name }}</td>
           <td>{{ item.document }}</td>
-          <td>{{ item.phone }}</td>
+          <td>{{ formatters.formatterPhoneNumber(item.phone) }}</td>
           <td>{{ item.role.role_name }}</td>
           <td>
-            Ver mas
-            <!--      <router-link :to="{ name: 'contactDetail', params: { id: item.id_contact } }">
-              Ver mas
-            </router-link>-->
+            <div class="contact-deatail" @click="showContactDetails(item.id_contact)">
+              Más detalles
+            </div>
           </td>
         </tr>
       </tbody>
@@ -56,6 +69,15 @@ const showLess = () => {
       <button class="button-more" v-if="itemsToShow < contacts.length" @click="showMore">
         Mostrar más
       </button>
+    </div>
+    <div>
+      <div>
+        <ContactInfo
+          :contact="contact"
+          :isModalContactVisible="isModalContactVisible"
+          @close="isModalContactVisible = close"
+        ></ContactInfo>
+      </div>
     </div>
   </div>
   <div v-else>
@@ -70,5 +92,9 @@ const showLess = () => {
   margin-left: auto;
   display: table;
   min-width: 400px;
+}
+
+.contact-deatail:hover {
+  cursor: pointer;
 }
 </style>

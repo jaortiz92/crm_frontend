@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, defineProps, toRefs } from 'vue'
+import { formatters } from '@/plugins/formatters.js'
 
 const itemsScale = ref(20)
 const itemsToShow = ref(itemsScale.value)
@@ -38,7 +39,7 @@ const showLess = () => {
           <td>{{ item.id_customer }}</td>
           <td>{{ item.company_name }}</td>
           <td>{{ item.document }}</td>
-          <td>{{ item.phone }}</td>
+          <td>{{ formatters.formatterPhoneNumber(item.phone) }}</td>
           <td :class="{ checkbox: true, checked: item.active }"></td>
           <td>
             <router-link :to="{ name: 'CustomerDetail', params: { id: item.id_customer } }">

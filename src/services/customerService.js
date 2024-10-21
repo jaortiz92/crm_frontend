@@ -9,5 +9,8 @@ export const customerService = {
   },
   getContactsByCustomer: function (id_customer) {
     return axiosInstance.get(`/contact/customer/${id_customer}`)
+  },
+  getContactsById: function (id_contact) {
+    return axiosInstance.get(`/contact/full/${id_contact}`)
   }
 }

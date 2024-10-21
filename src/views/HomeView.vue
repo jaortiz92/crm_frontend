@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useUserStore } from '@/stores/userStore.js'
 
 import TasksTable from '@/components/task/TasksTable.vue'
@@ -51,7 +51,9 @@ const addDataUser = async () => {
   }
 }
 
-addDataUser()
+onMounted(async () => {
+  addDataUser()
+})
 </script>
 
 <template>
