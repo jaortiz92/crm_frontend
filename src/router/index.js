@@ -1,9 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useUserStore } from '@/stores/userStore.js'
 import HomeView from '@/views/HomeView.vue'
 import LoginPage from '@/views/LoginPage.vue'
 import CustomerView from '@/views/CustomerView.vue'
 import CustomerDetail from '@/views/CustomerDetail.vue'
-import { useUserStore } from '@/stores/userStore.js'
+import CustomerTripView from '@/views/CustomerTripView.vue'
+import CustomerTripDetail from '@/views/CustomerTripDetail.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -29,6 +31,18 @@ const router = createRouter({
       path: '/customer/:id',
       name: 'CustomerDetail',
       component: CustomerDetail,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/customerTrip',
+      name: 'CustomerTrip',
+      component: CustomerTripView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/customerTrip/:id',
+      name: 'CustomerTripDetail',
+      component: CustomerTripDetail,
       meta: { requiresAuth: true }
     }
     /*    {

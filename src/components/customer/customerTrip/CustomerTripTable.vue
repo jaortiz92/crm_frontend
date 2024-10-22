@@ -2,13 +2,19 @@
 import { ref, computed, defineProps, toRefs } from 'vue'
 import { formatters } from '@/plugins/formatters.js'
 
-const itemsScale = ref(5)
+const itemsScale = ref(15)
 const itemsToShow = ref(itemsScale.value)
 const props = defineProps({
-  customerTrips: Array
+  customerTrips: {
+    type: Array
+  },
+  additionalInfo: {
+    type: Boolean,
+    default: false
+  }
 })
 
-const { customerTrips } = toRefs(props)
+const { customerTrips, additionalInfo } = toRefs(props)
 const limitedItems = computed(() => {
   return customerTrips.value.slice(0, itemsToShow.value)
 })
@@ -27,10 +33,12 @@ const showLess = () => {
       <thead>
         <tr>
           <th>ID</th>
+          <th v-if="additionalInfo">Cliente</th>
           <th>Colección</th>
           <th>Fecha Temporada</th>
           <th>Presupuesto</th>
           <th>Linea</th>
+          <th>Asesor</th>
           <th>Ordenó</th>
           <th>Detalles</th>
         </tr>
@@ -38,16 +46,19 @@ const showLess = () => {
       <tbody>
         <tr v-for="item in limitedItems" :key="item.id_customer_trips">
           <td>{{ item.id_customer_trip }}</td>
+          <td v-if="additionalInfo">{{ item.customer.company_name }}</td>
           <td>{{ item.collection.short_collection_name }}</td>
           <td>{{ item.collection.year }} Q{{ item.collection.quarter }}</td>
           <td>{{ formatters.formatterGeneralNumber(item.budget) }}</td>
           <td>{{ item.collection.line.line_name }}</td>
+          <td>{{ item.seller.first_name }} {{ item.seller.last_name }}</td>
           <td :class="{ checkbox: true, checked: item.ordered }"></td>
           <td>
-            Ver mas
-            <!-- <router-link :to="{ name: 'CustomerDetail', params: { id: item.id_customer } }">
+            <router-link
+              :to="{ name: 'CustomerTripDetail', params: { id: item.id_customer_trip } }"
+            >
               Ver mas
-            </router-link>-->
+            </router-link>
           </td>
         </tr>
       </tbody>
@@ -62,7 +73,7 @@ const showLess = () => {
     </div>
   </div>
   <div v-else>
-    <h4>El Usuario no cuenta con clientes asignados</h4>
+    <h4>Clientes sin viajes asignados</h4>
   </div>
 </template>
 

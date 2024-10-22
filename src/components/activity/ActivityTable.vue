@@ -1,13 +1,22 @@
 <script setup>
 import { ref, computed, defineProps, toRefs } from 'vue'
 
-const itemsScale = ref(5)
-const itemsToShow = ref(itemsScale.value)
 const props = defineProps({
-  activities: Array
+  activities: {
+    type: Array
+  },
+  additionalInfo: {
+    type: Boolean,
+    default: false
+  },
+  itemsScale: {
+    type: Number,
+    default: 5
+  }
 })
 
-const { activities } = toRefs(props)
+const { activities, additionalInfo, itemsScale } = toRefs(props)
+const itemsToShow = ref(itemsScale.value)
 const limitedItems = computed(() => {
   return activities.value.slice(0, itemsToShow.value)
 })
@@ -26,31 +35,35 @@ const showLess = () => {
       <thead>
         <tr>
           <th>ID</th>
-          <th>Cliente</th>
+          <th v-if="additionalInfo">Cliente</th>
           <th>Vendedor</th>
-          <th>Temporada</th>
-          <th>Linea</th>
+          <th v-if="additionalInfo">Temporada</th>
+          <th v-if="additionalInfo">Linea</th>
           <th>Actividad</th>
-          <th>Ciudad</th>
+          <th v-if="additionalInfo">Ciudad</th>
           <th>Responsable</th>
           <th>Creacion</th>
           <th>Fecha para ejecutar</th>
+          <th v-if="additionalInfo">Completado</th>
+          <th>Detalles</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="item in limitedItems" :key="item.id_activity">
           <td>{{ item.id_activity }}</td>
-          <td>{{ item.customer_trip.customer.company_name }}</td>
+          <td v-if="additionalInfo">{{ item.customer_trip.customer.company_name }}</td>
           <td>
             {{ item.customer_trip.seller.first_name }} {{ item.customer_trip.seller.last_name }}
           </td>
-          <td>{{ item.customer_trip.collection.short_collection_name }}</td>
-          <td>{{ item.customer_trip.collection.line.line_name }}</td>
+          <td v-if="additionalInfo">{{ item.customer_trip.collection.short_collection_name }}</td>
+          <td v-if="additionalInfo">{{ item.customer_trip.collection.line.line_name }}</td>
           <td>{{ item.activity_type.activity }}</td>
-          <td>{{ item.customer_trip.customer.city.city_name }}</td>
+          <td v-if="additionalInfo">{{ item.customer_trip.customer.city.city_name }}</td>
           <td>{{ item.user_activities.first_name }} {{ item.user_activities.last_name }}</td>
           <td>{{ item.creation_date }}</td>
-          <td>{{ item.estimated_date }}</td>
+          <td v-if="additionalInfo">{{ item.estimated_date }}</td>
+          <td :class="{ checkbox: true, checked: item.ordered }"></td>
+          <td>Más detalles</td>
         </tr>
       </tbody>
     </table>

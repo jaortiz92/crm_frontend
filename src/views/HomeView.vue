@@ -60,7 +60,7 @@ onMounted(async () => {
   <main>
     <div>
       <h3>Actividades Pendientes</h3>
-      <ActivityTable :activities="pendingActivities"></ActivityTable>
+      <ActivityTable :activities="pendingActivities" :additionalInfo="true"></ActivityTable>
     </div>
     <div>
       <h3>Tareas Pendientes</h3>
