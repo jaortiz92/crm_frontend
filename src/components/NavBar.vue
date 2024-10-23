@@ -50,7 +50,7 @@ watch(
             <RouterLink to="/customerTrip">Viajes De Cliente</RouterLink>
           </li>
           <li class="button-nav">
-            <RouterLink to="/">Ordenes</RouterLink>
+            <RouterLink to="/order">Ordenes</RouterLink>
           </li>
           <li class="button-nav">
             <RouterLink to="/">Facturas</RouterLink>

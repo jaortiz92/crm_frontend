@@ -4,18 +4,22 @@ import { useRoute } from 'vue-router'
 
 import { customerTripService } from '@/services/customerTripService'
 import { activityService } from '@/services/activityService'
+import { orderService } from '@/services/orderService'
 
 import CustomerTripInfo from '@/components/customer/customerTrip/CustomerTripInfo.vue'
 import ActivityTable from '@/components/activity/ActivityTable.vue'
+import OrderTable from '@/components/order/OrderTable.vue'
 
 const route = useRoute()
 const customerTrip = ref(null)
 const activities = ref([])
+const orders = ref([])
 
 onMounted(async () => {
   const idCustomerTrip = route.params.id
   customerTrip.value = (await customerTripService.getCustomerTripsById(idCustomerTrip)).data
   activities.value = (await activityService.getActivitiesByCutomerTrip(idCustomerTrip)).data
+  orders.value = (await orderService.getOrdersByCutomerTrip(idCustomerTrip)).data
 })
 </script>
 
@@ -31,6 +35,7 @@ onMounted(async () => {
       </div>
       <div class="orders">
         <h2>Ordenes</h2>
+        <OrderTable :orders="orders" :itemsScale="3"></OrderTable>
       </div>
       <div class="invoices">
         <h2>Facturas</h2>
