@@ -6,7 +6,8 @@ const itemsScale = ref(15)
 const itemsToShow = ref(itemsScale.value)
 const props = defineProps({
   customerTrips: {
-    type: Array
+    type: Array,
+    default: () => []
   },
   additionalInfo: {
     type: Boolean,

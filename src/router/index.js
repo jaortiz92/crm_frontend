@@ -7,6 +7,7 @@ import CustomerDetail from '@/views/CustomerDetail.vue'
 import CustomerTripView from '@/views/CustomerTripView.vue'
 import CustomerTripDetail from '@/views/CustomerTripDetail.vue'
 import OrderView from '@/views/OrderView.vue'
+import InvoiceView from '@/views/InvoiceView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -50,6 +51,12 @@ const router = createRouter({
       path: '/order',
       name: 'Order',
       component: OrderView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/invoice',
+      name: 'Invoice',
+      component: InvoiceView,
       meta: { requiresAuth: true }
     }
     /*    {

@@ -1,9 +1,9 @@
 <script setup>
-import { ref, computed, defineProps, toRefs } from 'vue'
+import { ref, computed, toRefs } from 'vue'
 import { formatters } from '@/plugins/formatters.js'
 
 const props = defineProps({
-  orders: {
+  invoices: {
     type: Array,
     default: () => []
   },
@@ -17,10 +17,10 @@ const props = defineProps({
   }
 })
 
-const { orders, additionalInfo, itemsScale } = toRefs(props)
+const { invoices, additionalInfo, itemsScale } = toRefs(props)
 const itemsToShow = ref(itemsScale.value)
 const limitedItems = computed(() => {
-  return orders.value.slice(0, itemsToShow.value)
+  return invoices.value.slice(0, itemsToShow.value)
 })
 
 const showMore = () => {
@@ -32,37 +32,47 @@ const showLess = () => {
 </script>
 
 <template>
-  <div v-if="orders.length > 0">
-    <table class="table-orders">
+  <div v-if="invoices.length > 0">
+    <table class="table-invoices">
       <thead>
         <tr>
           <th>ID</th>
+          <th>Numero de Factura</th>
+          <th>No</th>
+          <th>ID Orden</th>
           <th>Fecha</th>
           <th v-if="additionalInfo">Cliente</th>
           <th>Vendedor</th>
           <th v-if="additionalInfo">Temporada</th>
           <th v-if="additionalInfo">Linea</th>
           <th>Cantidades</th>
+          <th>Descuento</th>
           <th>Valor Sin impuestos</th>
           <th>Total</th>
           <th v-if="additionalInfo">Ciudad</th>
-          <th>Forma de pago</th>
+          <th v-if="additionalInfo">Forma de pago</th>
           <th>Detalles</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="item in limitedItems" :key="item.id_order">
+        <tr v-for="item in limitedItems" :key="item.id_invoice">
+          <td>{{ item.id_invoice }}</td>
+          <td>{{ item.invoice_number }}</td>
+          <td>{{ item.key }}</td>
           <td>{{ item.id_order }}</td>
-          <td>{{ item.date_order }}</td>
-          <td v-if="additionalInfo">{{ item.customer_trip.customer.company_name }}</td>
-          <td>{{ item.seller.first_name }} {{ item.seller.last_name }}</td>
-          <td v-if="additionalInfo">{{ item.customer_trip.collection.short_collection_name }}</td>
-          <td v-if="additionalInfo">{{ item.customer_trip.collection.line.line_name }}</td>
+          <td>{{ item.invoice_date }}</td>
+          <td v-if="additionalInfo">{{ item.order.customer_trip.customer.company_name }}</td>
+          <td>{{ item.order.seller.first_name }} {{ item.order.seller.last_name }}</td>
+          <td v-if="additionalInfo">
+            {{ item.order.customer_trip.collection.short_collection_name }}
+          </td>
+          <td v-if="additionalInfo">{{ item.order.customer_trip.collection.line.line_name }}</td>
           <td>{{ formatters.formatterGeneralNumber(item.total_quantities) }}</td>
+          <td>{{ formatters.formatterGeneralNumber(item.total_discount) }}</td>
           <td>{{ formatters.formatterGeneralNumber(item.total_without_tax) }}</td>
           <td>{{ formatters.formatterGeneralNumber(item.total_with_tax) }}</td>
-          <td v-if="additionalInfo">{{ item.customer_trip.customer.city.city_name }}</td>
-          <td>{{ item.payment_method.payment_method_name }}</td>
+          <td v-if="additionalInfo">{{ item.order.customer_trip.customer.city.city_name }}</td>
+          <td v-if="additionalInfo">{{ item.order.payment_method.payment_method_name }}</td>
           <td>Más detalles</td>
         </tr>
       </tbody>
@@ -71,18 +81,18 @@ const showLess = () => {
       <button class="button-less" v-if="itemsToShow > itemsScale" @click="showLess">
         Mostrar menos
       </button>
-      <button class="button-more" v-if="itemsToShow < orders.length" @click="showMore">
+      <button class="button-more" v-if="itemsToShow < invoices.length" @click="showMore">
         Mostrar más
       </button>
     </div>
   </div>
   <div v-else>
-    <h4>Sin ordenes</h4>
+    <h4>Sin facturas</h4>
   </div>
 </template>
 
 <style scoped>
-.table-orders {
+.table-invoices {
   width: 95%;
   margin-right: auto;
   margin-left: auto;

@@ -3,7 +3,8 @@ import { ref, computed, defineProps, toRefs } from 'vue'
 
 const props = defineProps({
   activities: {
-    type: Array
+    type: Array,
+    default: () => []
   },
   additionalInfo: {
     type: Boolean,

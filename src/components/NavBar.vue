@@ -53,7 +53,7 @@ watch(
             <RouterLink to="/order">Ordenes</RouterLink>
           </li>
           <li class="button-nav">
-            <RouterLink to="/">Facturas</RouterLink>
+            <RouterLink to="/invoice">Facturas</RouterLink>
           </li>
           <li class="button-nav logout"><div @click="logout">Cerrar Sesion</div></li>
         </ul>
