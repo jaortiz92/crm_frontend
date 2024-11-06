@@ -44,8 +44,8 @@ const showLess = () => {
           <th v-if="additionalInfo">Ciudad</th>
           <th>Responsable</th>
           <th>Creacion</th>
-          <th>Fecha para ejecutar</th>
-          <th v-if="additionalInfo">Completado</th>
+          <th v-if="additionalInfo">Fecha para ejecutar</th>
+          <th>Completado</th>
           <th>Detalles</th>
         </tr>
       </thead>

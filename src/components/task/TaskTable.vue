@@ -1,13 +1,23 @@
 <script setup>
 import { ref, computed, toRefs, defineProps } from 'vue'
 
-const itemsScale = ref(5)
-const itemsToShow = ref(itemsScale.value)
 const props = defineProps({
-  tasks: Array
+  tasks: {
+    type: Array,
+    default: () => []
+  },
+  additionalInfo: {
+    type: Boolean,
+    default: false
+  },
+  itemsScale: {
+    type: Number,
+    default: 5
+  }
 })
 
-const { tasks } = toRefs(props)
+const { tasks, additionalInfo, itemsScale } = toRefs(props)
+const itemsToShow = ref(itemsScale.value)
 
 const limitedItems = computed(() => {
   return tasks.value.slice(0, itemsToShow.value)
@@ -34,6 +44,9 @@ const showLess = () => {
           <th>Ciudad</th>
           <th>Responsable</th>
           <th>Creacion</th>
+          <th v-if="additionalInfo">Completado</th>
+          <th v-if="additionalInfo">Fecha Completado</th>
+          <th>Detalles</th>
         </tr>
       </thead>
       <tbody>
@@ -46,6 +59,9 @@ const showLess = () => {
           <td>{{ item.customer.city.city_name }}</td>
           <td>{{ item.responsible_task.first_name }} {{ item.responsible_task.last_name }}</td>
           <td>{{ item.creation_date }}</td>
+          <td v-if="additionalInfo" :class="{ checkbox: true, checked: item.completed }"></td>
+          <td v-if="additionalInfo">{{ item.closing_date }}</td>
+          <td>Más detalles</td>
         </tr>
       </tbody>
     </table>

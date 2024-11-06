@@ -8,6 +8,8 @@ import CustomerTripView from '@/views/CustomerTripView.vue'
 import CustomerTripDetail from '@/views/CustomerTripDetail.vue'
 import OrderView from '@/views/OrderView.vue'
 import InvoiceView from '@/views/InvoiceView.vue'
+import ActivityView from '@/views/ActivityView.vue'
+import TaskView from '@/views/TaskView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -57,6 +59,18 @@ const router = createRouter({
       path: '/invoice',
       name: 'Invoice',
       component: InvoiceView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/activity',
+      name: 'Activity',
+      component: ActivityView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/task',
+      name: 'Task',
+      component: TaskView,
       meta: { requiresAuth: true }
     }
     /*    {

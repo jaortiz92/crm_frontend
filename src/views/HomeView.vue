@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useUserStore } from '@/stores/userStore.js'
 
-import TasksTable from '@/components/task/TasksTable.vue'
+import TasksTable from '@/components/task/TaskTable.vue'
 import ActivityTable from '@/components/activity/ActivityTable.vue'
 
 import { activityService } from '@/services/activityService'

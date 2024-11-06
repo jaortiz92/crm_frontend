@@ -6,5 +6,11 @@ export const taskService = {
   },
   pendingAssignedTasks: function (id_user) {
     return axiosInstance.get(`/task/query/?id_creator=${id_user}&completed=false`)
+  },
+  getTasks: function (id_user) {
+    return axiosInstance.get(`/task/query/?id_responsible=${id_user}`)
+  },
+  getAssignedTasks: function (id_user) {
+    return axiosInstance.get(`/task/query/?id_creator=${id_user}`)
   }
 }

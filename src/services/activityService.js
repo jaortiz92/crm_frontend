@@ -6,5 +6,8 @@ export const activityService = {
   },
   getActivitiesByCutomerTrip: function (id_customer_trip) {
     return axiosInstance.get(`/activity/customer_trip/${id_customer_trip}`)
+  },
+  getActivities: function (id_user) {
+    return axiosInstance.get(`/activity/query/?id_user=${id_user}`)
   }
 }
