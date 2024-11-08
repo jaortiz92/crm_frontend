@@ -63,7 +63,9 @@ const showLess = () => {
           <td>{{ formatters.formatterGeneralNumber(item.total_with_tax) }}</td>
           <td v-if="additionalInfo">{{ item.customer_trip.customer.city.city_name }}</td>
           <td>{{ item.payment_method.payment_method_name }}</td>
-          <td>Más detalles</td>
+          <router-link :to="{ name: 'OrderDetail', params: { id: item.id_order } }">
+            Ver mas
+          </router-link>
         </tr>
       </tbody>
     </table>
