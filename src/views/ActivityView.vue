@@ -34,7 +34,11 @@ addDataUser()
   <main>
     <div>
       <h3>Actividades</h3>
-      <ActivityTable :activities="activities" :additionalInfo="true"></ActivityTable>
+      <ActivityTable
+        :activities="activities"
+        :additionalInfo="true"
+        :itemsScale="10"
+      ></ActivityTable>
     </div>
   </main>
 </template>

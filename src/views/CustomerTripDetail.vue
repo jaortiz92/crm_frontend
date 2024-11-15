@@ -71,10 +71,4 @@ onMounted(async () => {
 .customer-trip-additional {
   flex-grow: 1;
 }
-
-h2 {
-  text-align: center;
-  font-size: 150%;
-  margin-top: 10px;
-}
 </style>

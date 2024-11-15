@@ -64,12 +64,6 @@ const { customerTrip } = toRefs(props)
 </template>
 
 <style scoped>
-h2 {
-  text-align: center;
-  font-size: 150%;
-  margin-top: 10px;
-}
-
 .detail-row {
   display: flex;
   margin: 1%;

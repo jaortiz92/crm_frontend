@@ -13,7 +13,7 @@ const props = defineProps({
   },
   itemsScale: {
     type: Number,
-    default: 5
+    default: 15
   }
 })
 

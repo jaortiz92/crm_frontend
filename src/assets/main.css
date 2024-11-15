@@ -11,6 +11,12 @@ nav {
   color: var(--basic-select);
 }
 
+h2 {
+  text-align: center;
+  font-size: 150%;
+  margin-top: 10px;
+}
+
 button {
   color: var(--text-white);
   font-weight: bold;
