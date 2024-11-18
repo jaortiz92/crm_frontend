@@ -28,6 +28,9 @@ onMounted(async () => {
 </script>
 
 <template>
+  <div>
+    <h1>Viaje de Cliente</h1>
+  </div>
   <div v-if="customerTrip">
     <div class="customer-trip">
       <div class="customer-trip-detail">
@@ -61,6 +64,7 @@ onMounted(async () => {
 .customer-trip-detail {
   max-width: 600px;
   min-width: 500px;
+  max-height: 460px;
   margin: 10px;
   padding: 10px;
   background-color: var(--light-border);

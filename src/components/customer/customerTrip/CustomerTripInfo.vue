@@ -13,7 +13,7 @@ const { customerTrip } = toRefs(props)
     <h2>{{ customerTrip.customer.company_name }}</h2>
   </router-link>
   <div class="detail-row">
-    <p><strong>ID:</strong></p>
+    <p><strong>Viaje de Cliente ID:</strong></p>
     <p>{{ customerTrip.id_customer_trip }}</p>
   </div>
   <div class="detail-row">
