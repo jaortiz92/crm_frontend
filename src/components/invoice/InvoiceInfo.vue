@@ -14,17 +14,17 @@ const { invoice } = toRefs(props)
     <div class="details-wrapper">
       <div class="detail-column">
         <div class="detail-row">
-          <p><strong>Factura ID:</strong></p>
+          <p><strong>ID Factura:</strong></p>
           <p>{{ invoice.id_invoice }}-{{ invoice.key }}</p>
         </div>
         <div class="detail-row">
-          <p><strong>Order ID:</strong></p>
+          <p><strong>Order:</strong></p>
           <router-link :to="{ name: 'OrderDetail', params: { id: invoice.id_order } }">
             <p>{{ invoice.id_order }}</p>
           </router-link>
         </div>
         <div class="detail-row">
-          <p><strong>Viaje del cliente ID:</strong></p>
+          <p><strong>ID Viaje del cliente:</strong></p>
           <router-link
             :to="{ name: 'CustomerTripDetail', params: { id: invoice.order.id_customer_trip } }"
           >

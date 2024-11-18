@@ -26,7 +26,7 @@ const showLess = () => {
     <table class="table-customers">
       <thead>
         <tr>
-          <th>ID</th>
+          <th>ID Cliente</th>
           <th>Nombre Cliente</th>
           <th>Documento</th>
           <th>Telefono</th>

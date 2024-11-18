@@ -39,7 +39,7 @@ const showContactDetails = async (idContact) => {
     <table class="table-contacts">
       <thead>
         <tr>
-          <th>ID</th>
+          <th>ID Contacto</th>
           <th>Nombre Cliente</th>
           <th>Documento</th>
           <th>Telefono</th>

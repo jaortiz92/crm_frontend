@@ -36,7 +36,7 @@ const showLess = () => {
     <table class="table-tasks">
       <thead>
         <tr>
-          <th>ID</th>
+          <th>ID Tarea</th>
           <th>Cliente</th>
           <th>Creador Tarea</th>
           <th>Tarea</th>

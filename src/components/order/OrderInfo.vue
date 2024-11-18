@@ -10,11 +10,11 @@ const { order } = toRefs(props)
 
 <template>
   <div class="template-container">
-    <h2>Orden ID {{ order.id_order }}</h2>
+    <h2>ID Orden {{ order.id_order }}</h2>
     <div class="details-wrapper">
       <div class="detail-column">
         <div class="detail-row">
-          <p><strong>Viaje del cliente ID:</strong></p>
+          <p><strong>ID Viaje del cliente:</strong></p>
           <router-link :to="{ name: 'CustomerTripDetail', params: { id: order.id_customer_trip } }">
             <p>{{ order.id_customer_trip }}</p>
           </router-link>

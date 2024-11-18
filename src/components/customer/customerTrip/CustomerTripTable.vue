@@ -33,7 +33,7 @@ const showLess = () => {
     <table class="table-customerTrips">
       <thead>
         <tr>
-          <th>ID</th>
+          <th>ID Viaje de Cliente</th>
           <th v-if="additionalInfo">Cliente</th>
           <th>Colección</th>
           <th>Fecha Temporada</th>

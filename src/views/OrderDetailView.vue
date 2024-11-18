@@ -3,13 +3,16 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { orderService } from '@/services/orderService'
+import { invoiceService } from '@/services/invoiceService'
 
 import OrderDetailTable from '@/components/order/OrderDetailTable.vue'
 import OrderInfo from '@/components/order/OrderInfo.vue'
+import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
 
 const route = useRoute()
 const orderDetails = ref([])
 const order = ref(null)
+const invoices = ref([])
 
 onMounted(async () => {
   const idOrder = route.params.id
@@ -18,6 +21,7 @@ onMounted(async () => {
     orderDetails.value = order.value.order_details
     delete order.value.order_details
   }
+  invoices.value = (await invoiceService.getInvoiceByOrder(idOrder)).data
 })
 </script>
 
@@ -27,7 +31,12 @@ onMounted(async () => {
       <div class="order-header">
         <OrderInfo :order="order"></OrderInfo>
       </div>
+      <div>
+        <h2>Facturas</h2>
+        <InvoiceTable :invoices="invoices"></InvoiceTable>
+      </div>
       <div class="order-detail">
+        <h2>Detalle Orden</h2>
         <OrderDetailTable :orderDetails="orderDetails"></OrderDetailTable>
       </div>
     </div>

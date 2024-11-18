@@ -36,9 +36,8 @@ const showLess = () => {
     <table class="table-invoices">
       <thead>
         <tr>
-          <th>ID</th>
           <th>Numero de Factura</th>
-          <th>No</th>
+          <th>ID Factura</th>
           <th>ID Orden</th>
           <th>Fecha</th>
           <th v-if="additionalInfo">Cliente</th>
@@ -56,9 +55,8 @@ const showLess = () => {
       </thead>
       <tbody>
         <tr v-for="item in limitedItems" :key="item.id_invoice">
-          <td>{{ item.id_invoice }}</td>
           <td>{{ item.invoice_number }}</td>
-          <td>{{ item.key }}</td>
+          <td>{{ item.id_invoice }}-{{ item.key }}</td>
           <td>{{ item.id_order }}</td>
           <td>{{ item.invoice_date }}</td>
           <td v-if="additionalInfo">{{ item.order.customer_trip.customer.company_name }}</td>
@@ -73,9 +71,11 @@ const showLess = () => {
           <td>{{ formatters.formatterGeneralNumber(item.total_with_tax) }}</td>
           <td v-if="additionalInfo">{{ item.order.customer_trip.customer.city.city_name }}</td>
           <td v-if="additionalInfo">{{ item.order.payment_method.payment_method_name }}</td>
-          <router-link :to="{ name: 'InvoiceDetail', params: { id: item.id_invoice } }">
-            Ver mas
-          </router-link>
+          <td>
+            <router-link :to="{ name: 'InvoiceDetail', params: { id: item.id_invoice } }">
+              Ver mas
+            </router-link>
+          </td>
         </tr>
       </tbody>
     </table>
