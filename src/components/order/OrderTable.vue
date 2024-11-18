@@ -40,7 +40,7 @@ const showLess = () => {
           <th>Fecha</th>
           <th v-if="additionalInfo">Cliente</th>
           <th>Vendedor</th>
-          <th v-if="additionalInfo">Temporada</th>
+          <th v-if="additionalInfo">Colección</th>
           <th v-if="additionalInfo">Linea</th>
           <th>Cantidades</th>
           <th>Valor Sin impuestos</th>

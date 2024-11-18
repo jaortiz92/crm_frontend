@@ -3,60 +3,74 @@ import { toRefs } from 'vue'
 import { formatters } from '@/plugins/formatters.js'
 
 const props = defineProps({
-  order: Object
+  invoice: Object
 })
-const { order } = toRefs(props)
+const { invoice } = toRefs(props)
 </script>
 
 <template>
   <div class="template-container">
-    <h2>Orden ID {{ order.id_order }}</h2>
+    <h2>Factura No {{ invoice.invoice_number }}</h2>
     <div class="details-wrapper">
       <div class="detail-column">
         <div class="detail-row">
+          <p><strong>Factura ID:</strong></p>
+          <p>{{ invoice.id_invoice }}-{{ invoice.key }}</p>
+        </div>
+        <div class="detail-row">
+          <p><strong>Order ID:</strong></p>
+          <router-link :to="{ name: 'OrderDetail', params: { id: invoice.id_order } }">
+            <p>{{ invoice.id_order }}</p>
+          </router-link>
+        </div>
+        <div class="detail-row">
           <p><strong>Viaje del cliente ID:</strong></p>
-          <router-link :to="{ name: 'CustomerTripDetail', params: { id: order.id_customer_trip } }">
-            <p>{{ order.id_customer_trip }}</p>
+          <router-link
+            :to="{ name: 'CustomerTripDetail', params: { id: invoice.order.id_customer_trip } }"
+          >
+            <p>{{ invoice.order.id_customer_trip }}</p>
           </router-link>
         </div>
         <div class="detail-row">
           <p><strong>Cliente:</strong></p>
-          <p>{{ order.customer_trip.customer.company_name }}</p>
+          <p>{{ invoice.order.customer_trip.customer.company_name }}</p>
         </div>
         <div class="detail-row">
           <p><strong>Documento:</strong></p>
-          <p>{{ order.customer_trip.customer.document }}</p>
+          <p>{{ invoice.order.customer_trip.customer.document }}</p>
         </div>
         <div class="detail-row">
           <p><strong>Ciudad:</strong></p>
-          <p>{{ order.customer_trip.customer.city.city_name }}</p>
+          <p>{{ invoice.order.customer_trip.customer.city.city_name }}</p>
         </div>
         <div class="detail-row">
           <p><strong>Departamento:</strong></p>
-          <p>{{ order.customer_trip.customer.city.department.department_name }}</p>
-        </div>
-        <div class="detail-row">
-          <p>
-            <strong>Vendedor:</strong>
-          </p>
-          <p>{{ order.seller.first_name }} {{ order.seller.last_name }}</p>
+          <p>{{ invoice.order.customer_trip.customer.city.department.department_name }}</p>
         </div>
       </div>
       <div class="detail-column">
         <div class="detail-row">
           <p><strong>Colección:</strong></p>
-          <p>{{ order.customer_trip.collection.short_collection_name }}</p>
+          <p>{{ invoice.order.customer_trip.collection.short_collection_name }}</p>
         </div>
         <div class="detail-row">
           <p><strong>Prendas:</strong></p>
-          <p>{{ order.total_quantities }}</p>
+          <p>{{ invoice.total_quantities }}</p>
         </div>
         <div class="detail-row">
           <p>
             <strong>Valor Sin IVA:</strong>
           </p>
           <p>
-            {{ formatters.formatterGeneralNumber(order.total_without_tax) }}
+            {{ formatters.formatterGeneralNumber(invoice.total_without_tax) }}
+          </p>
+        </div>
+        <div class="detail-row">
+          <p>
+            <strong>Descuento:</strong>
+          </p>
+          <p>
+            {{ formatters.formatterGeneralNumber(invoice.total_discount) }}
           </p>
         </div>
         <div class="detail-row">
@@ -64,16 +78,18 @@ const { order } = toRefs(props)
             <strong>Valor Total:</strong>
           </p>
           <p>
-            {{ formatters.formatterGeneralNumber(order.total_with_tax) }}
+            {{ formatters.formatterGeneralNumber(invoice.total_with_tax) }}
           </p>
         </div>
         <div class="detail-row">
           <p><strong>Fecha:</strong></p>
-          <p>{{ order.date_order }}</p>
+          <p>{{ invoice.invoice_date }}</p>
         </div>
         <div class="detail-row">
-          <p><strong>Fecha de Entrega acordada:</strong></p>
-          <p>{{ order.delivery_date }}</p>
+          <p>
+            <strong>Vendedor:</strong>
+          </p>
+          <p>{{ invoice.order.seller.first_name }} {{ invoice.order.seller.last_name }}</p>
         </div>
       </div>
     </div>
@@ -84,7 +100,7 @@ const { order } = toRefs(props)
 .template-container {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--gray-border);
+  border: 1px solid var(--gray-binvoice);
   border-radius: 8px;
   padding: 20px;
   max-width: 100%;
@@ -105,7 +121,7 @@ const { order } = toRefs(props)
 }
 
 .detail-column:first-child {
-  border-right: 1px solid var(--gray-border);
+  border-right: 1px solid var(--gray-binvoice);
   padding-right: 15px;
   margin-right: 15px;
 }

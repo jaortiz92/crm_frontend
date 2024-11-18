@@ -3,7 +3,7 @@ import { ref, computed, defineProps, toRefs } from 'vue'
 import { formatters } from '@/plugins/formatters.js'
 
 const props = defineProps({
-  orderDetails: {
+  invoiceDetails: {
     type: Array,
     default: () => []
   },
@@ -13,10 +13,10 @@ const props = defineProps({
   }
 })
 
-const { orderDetails, itemsScale } = toRefs(props)
+const { invoiceDetails, itemsScale } = toRefs(props)
 const itemsToShow = ref(itemsScale.value)
 const limitedItems = computed(() => {
-  return orderDetails.value.slice(0, itemsToShow.value)
+  return invoiceDetails.value.slice(0, itemsToShow.value)
 })
 
 const showMore = () => {
@@ -28,8 +28,8 @@ const showLess = () => {
 </script>
 
 <template>
-  <div v-if="orderDetails.length > 0">
-    <table class="table-order-details">
+  <div v-if="invoiceDetails.length > 0">
+    <table class="table-invoice-details">
       <thead>
         <tr>
           <th>Item</th>
@@ -41,11 +41,12 @@ const showLess = () => {
           <th>Valor Unidad</th>
           <th>Cantidad</th>
           <th>Valor Sin IVA</th>
+          <th>Descuento</th>
           <th>Valor Total</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="(item, index) in limitedItems" :key="item.id_order_detail">
+        <tr v-for="(item, index) in limitedItems" :key="item.id_invoice_detail">
           <td>{{ index + 1 }}</td>
           <td>{{ item.product }}</td>
           <td>{{ item.brand.brand_name }}</td>
@@ -55,6 +56,7 @@ const showLess = () => {
           <td>{{ formatters.formatterGeneralNumber(item.unit_value) }}</td>
           <td>{{ formatters.formatterGeneralNumber(item.quantity) }}</td>
           <td>{{ formatters.formatterGeneralNumber(item.value_without_tax) }}</td>
+          <td>{{ formatters.formatterGeneralNumber(item.discount) }}</td>
           <td>{{ formatters.formatterGeneralNumber(item.value_with_tax) }}</td>
         </tr>
       </tbody>
@@ -63,7 +65,7 @@ const showLess = () => {
       <button class="button-less" v-if="itemsToShow > itemsScale" @click="showLess">
         Mostrar menos
       </button>
-      <button class="button-more" v-if="itemsToShow < orderDetails.length" @click="showMore">
+      <button class="button-more" v-if="itemsToShow < invoiceDetails.length" @click="showMore">
         Mostrar más
       </button>
     </div>
@@ -74,7 +76,7 @@ const showLess = () => {
 </template>
 
 <style scoped>
-.table-orders {
+.table-invoices {
   width: 95%;
   margin-right: auto;
   margin-left: auto;
