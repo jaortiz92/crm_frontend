@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 
 import { customerService } from '@/services/customerService'
 import { customerTripService } from '@/services/customerTripService'
+import { ratingService } from '@/services/ratingService'
 
 import ContactTable from '@/components/customer/contact/ContactTable.vue'
 import CustomerInfo from '@/components/customer/CustomerInfo.vue'
@@ -13,9 +14,11 @@ const route = useRoute()
 const customer = ref(null)
 const contacts = ref([])
 const customerTrips = ref([])
+const lastRating = ref(null)
 
 onMounted(async () => {
   const idCustomer = route.params.id
+  lastRating.value = (await ratingService.getLastRatingByCustomer(idCustomer)).data
   customer.value = (await customerService.getCustomerFull(idCustomer)).data
   contacts.value = (await customerService.getContactsByCustomer(idCustomer)).data
   customerTrips.value = (await customerTripService.getCustomerTripsByCustomer(idCustomer)).data
@@ -23,9 +26,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="customer" v-if="customer">
+  <div class="customer" v-if="customer && lastRating">
     <div class="customer-detail">
-      <CustomerInfo :customer="customer"></CustomerInfo>
+      <CustomerInfo :customer="customer" :lastRating="lastRating"></CustomerInfo>
     </div>
     <div class="customer_additional">
       <div class="contacts">

@@ -1,11 +1,20 @@
 <script setup>
-import { toRefs } from 'vue'
+import { toRefs, ref } from 'vue'
 import { formatters } from '@/plugins/formatters.js'
 
+import RatingInfo from './RatingInfo.vue'
+
 const props = defineProps({
-  customer: Object
+  customer: Object,
+  lastRating: Object
 })
 const { customer } = toRefs(props)
+
+const isModalRatingVisible = ref(false)
+
+const showRatingDetails = async () => {
+  isModalRatingVisible.value = true
+}
 </script>
 
 <template>
@@ -60,12 +69,26 @@ const { customer } = toRefs(props)
     <p>{{ customer.city.city_name }}</p>
   </div>
   <div class="detail-row">
+    <p><strong>Categoria:</strong></p>
+    <p class="rating-detail" @click="showRatingDetails()">
+      ({{ lastRating.rating_category.level }})
+      <strong>{{ lastRating.rating_category.rating_category }}</strong>
+    </p>
+  </div>
+  <div class="detail-row">
     <p>
       <strong>Activo:</strong>
     </p>
     <p>
       <span :class="{ checkbox: true, checked: customer.active }"></span>
     </p>
+  </div>
+  <div>
+    <RatingInfo
+      :rating="lastRating"
+      :isModalRatingVisible="isModalRatingVisible"
+      @close="isModalRatingVisible = close"
+    ></RatingInfo>
   </div>
 </template>
 
@@ -101,5 +124,9 @@ const { customer } = toRefs(props)
 
 .checkbox {
   margin: 0;
+}
+
+.rating-detail:hover {
+  cursor: pointer;
 }
 </style>

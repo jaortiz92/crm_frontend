@@ -55,7 +55,7 @@ const showContactDetails = async (idContact) => {
           <td>{{ formatters.formatterPhoneNumber(item.phone) }}</td>
           <td>{{ item.role.role_name }}</td>
           <td>
-            <div class="contact-deatail" @click="showContactDetails(item.id_contact)">
+            <div class="contact-detail" @click="showContactDetails(item.id_contact)">
               Más detalles
             </div>
           </td>
@@ -94,7 +94,7 @@ const showContactDetails = async (idContact) => {
   min-width: 400px;
 }
 
-.contact-deatail:hover {
+.contact-detail:hover {
   cursor: pointer;
 }
 </style>
