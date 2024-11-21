@@ -63,7 +63,7 @@ const showLess = () => {
           <td>{{ item.user_activities.first_name }} {{ item.user_activities.last_name }}</td>
           <td>{{ item.creation_date }}</td>
           <td v-if="additionalInfo">{{ item.estimated_date }}</td>
-          <td :class="{ checkbox: true, checked: item.ordered }"></td>
+          <td :class="{ checkbox: true, checked: item.completed }"></td>
           <td>Más detalles</td>
         </tr>
       </tbody>

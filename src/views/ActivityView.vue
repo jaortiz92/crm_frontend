@@ -62,10 +62,40 @@ const activityFilterFields = [
     label: 'Ciudad',
     type: 'text',
     placeholder: 'Filtrar por Ciudad'
+  },
+  {
+    key: 'creation_date_more',
+    label: 'Desde fecha de creación',
+    type: 'date',
+    placeholder: 'Filtrar por fecha de creación'
+  },
+  {
+    key: 'creation_date_less',
+    label: 'Hasta fecha de creación',
+    type: 'date',
+    placeholder: 'Filtrar por fecha de creación'
+  },
+  {
+    key: 'estimated_date_more',
+    label: 'Desde fecha para ejecución',
+    type: 'date',
+    placeholder: 'Filtrar por fecha para ejecución'
+  },
+  {
+    key: 'estimated_date_less',
+    label: 'Hasta fecha para ejecución',
+    type: 'date',
+    placeholder: 'Filtrar por fecha para ejecución'
+  },
+  {
+    key: 'completed',
+    label: 'Completado',
+    type: 'checkbox',
+    placeholder: 'Filtrar por Estado'
   }
 ]
 
-const filter = (filterValues) => {
+const filter = (filterValues, checkboxTouched) => {
   filteredActivities.value = activities.value.filter(
     (activity) =>
       (!filterValues.company_name ||
@@ -101,7 +131,16 @@ const filter = (filterValues) => {
       (!filterValues.city_name ||
         activity.customer_trip.customer.city.city_name
           .toLowerCase()
-          .includes(filterValues.city_name.toLowerCase()))
+          .includes(filterValues.city_name)) &&
+      (!checkboxTouched.completed || activity.completed === filterValues.completed) &&
+      (!filterValues.creation_date_more ||
+        activity.creation_date > filterValues.creation_date_more) &&
+      (!filterValues.creation_date_less ||
+        activity.creation_date < filterValues.creation_date_less) &&
+      (!filterValues.estimated_date_more ||
+        activity.estimated_date > filterValues.estimated_date_more) &&
+      (!filterValues.estimated_date_less ||
+        activity.estimated_date < filterValues.estimated_date_less)
   )
 }
 

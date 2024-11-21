@@ -28,6 +28,10 @@ button {
   cursor: pointer;
 }
 
+button:hover {
+  background-color: var(--light-color-opposite-two);
+}
+
 form {
   width: 70%;
   min-width: 350px;

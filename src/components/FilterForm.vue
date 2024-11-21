@@ -11,32 +11,47 @@ const props = defineProps({
 
 const emit = defineEmits(['filter'])
 const filterValues = reactive({})
+const checkboxTouched = reactive({})
 
 const applyFilter = () => {
-  emit('filter', filterValues)
+  emit('filter', filterValues, checkboxTouched)
 }
 
 props.filterFields.forEach((field) => {
   filterValues[field.key] = ''
+  checkboxTouched[field.key] = false
 })
+
+const handleCheckboxChange = (key) => {
+  checkboxTouched[key] = true
+}
 </script>
 
 <template>
   <div class="filter-form-container">
-    <form @submit.prevent="applyFilter" class="filter-form-horizontal">
-      <div v-for="field in filterFields" :key="field.key">
-        <label :for="field.key">{{ field.label }}</label>
-        <input v-model="filterValues[field.key]" :type="field.type" />
+    <form @submit.prevent="applyFilter">
+      <div class="filter-form">
+        <div v-for="field in filterFields" :key="field.key" class="field">
+          <div class="field-block">
+            <label :for="field.key">{{ field.label }}</label>
+            <input
+              v-model="filterValues[field.key]"
+              :type="field.type"
+              @change="handleCheckboxChange(field.key)"
+            />
+          </div>
+        </div>
       </div>
-      <button type="submit">Aplicar Filtro</button>
+      <div class="button-form">
+        <button type="submit">Aplicar Filtro</button>
+      </div>
     </form>
   </div>
 </template>
 
 <style scoped>
 .filter-form-container {
-  display: flex;
-  flex-direction: column;
+  width: 90%;
   padding: 5px;
   border: 1px solid var(--gray-border);
   border-radius: 8px;
@@ -47,7 +62,7 @@ props.filterFields.forEach((field) => {
 
 .filter-form-container input {
   padding: 0.5rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--gray-border);
   border-radius: 4px;
   min-width: 100px;
   width: 100%;
@@ -56,18 +71,37 @@ props.filterFields.forEach((field) => {
 }
 
 /* Efecto de enfoque en los campos de entrada */
-.filter-form-container input[type='text']:focus {
+.filter-form-container input:focus {
   outline: none;
-  border-color: #007acc;
+  border-color: var(--normal-color);
 }
 
-.filter-form-container button:hover {
-  background-color: #005a99;
-}
-
-.filter-form-horizontal {
+.filter-form {
   display: flex;
   gap: 10px;
-  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-around;
+}
+
+.field {
+  flex: 1 1 calc(15% - 10px);
+  padding: 7px;
+  border: 1px solid var(--light-border);
+  border-radius: 5px;
+  box-shadow: 0 1px 4px var(--shadow);
+  min-width: 150px;
+}
+
+.field-block {
+  place-self: center;
+}
+
+input {
+  min-height: 25px;
+}
+
+.button-form {
+  margin-top: 10px;
 }
 </style>
