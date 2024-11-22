@@ -48,7 +48,6 @@ const activityFilterFields = [
 ]
 
 const filter = (filterValues, checkboxTouched) => {
-  console.log(filterValues.creationDateFrom, typeof filterValues.estimatedDateFrom)
   filteredActivities.value = activities.value.filter(
     (activity) =>
       (!filterValues.companyName ||
