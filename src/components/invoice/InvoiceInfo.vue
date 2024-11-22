@@ -87,7 +87,7 @@ const { invoice } = toRefs(props)
         </div>
         <div class="detail-row">
           <p>
-            <strong>Vendedor:</strong>
+            <strong>Asesor:</strong>
           </p>
           <p>{{ invoice.order.seller.first_name }} {{ invoice.order.seller.last_name }}</p>
         </div>

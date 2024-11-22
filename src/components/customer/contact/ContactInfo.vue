@@ -27,7 +27,7 @@ const close = () => {
       <p><strong>Correo:</strong> {{ contact.email }}</p>
       <p><strong>Fecha Nacimiento:</strong> {{ contact.birth_date }}</p>
       <p><strong>Genero:</strong> {{ formatters.formatterGender(contact.gender) }}</p>
-      <p><strong>Compañia:</strong> {{ contact.customer.company_name }}</p>
+      <p><strong>Cliente:</strong> {{ contact.customer.company_name }}</p>
       <p><strong>Ciudad:</strong> {{ contact.city.city_name }}</p>
       <p><strong>Departamento:</strong> {{ contact.city.department.department_name }}</p>
       <strong>Activo:</strong> <span :class="{ checkbox: true, checked: contact.active }"></span>

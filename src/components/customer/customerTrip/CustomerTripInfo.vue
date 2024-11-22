@@ -33,7 +33,7 @@ const { customerTrip } = toRefs(props)
   </div>
   <div class="detail-row">
     <p>
-      <strong>Vendedor:</strong>
+      <strong>Asesor:</strong>
     </p>
     <p>
       {{ customerTrip.seller.first_name }}

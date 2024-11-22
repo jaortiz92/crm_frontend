@@ -41,7 +41,7 @@ const showLess = () => {
           <th>ID Orden</th>
           <th>Fecha</th>
           <th v-if="additionalInfo">Cliente</th>
-          <th>Vendedor</th>
+          <th>Asesor</th>
           <th v-if="additionalInfo">Colección</th>
           <th v-if="additionalInfo">Linea</th>
           <th>Cantidades</th>

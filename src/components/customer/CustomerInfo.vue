@@ -53,7 +53,7 @@ const showRatingDetails = async () => {
   </div>
   <div class="detail-row">
     <p>
-      <strong>Vendedor:</strong>
+      <strong>Asesor:</strong>
     </p>
     <p>
       {{ customer.seller.first_name }}

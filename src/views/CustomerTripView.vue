@@ -8,6 +8,8 @@ import FilterForm from '@/components/FilterForm.vue'
 import { alertService } from '@/services/alertService'
 import { customerTripService } from '@/services/customerTripService'
 
+import { filterFormat } from '@/plugins/filterFormat'
+
 const userStore = useUserStore()
 const id_user = ref('')
 const skip = 0
@@ -33,37 +35,33 @@ const addDataUser = async () => {
 }
 
 const customerFilterFields = [
-  {
-    key: 'company_name',
-    label: 'Compañia',
-    type: 'text',
-    placeholder: 'Filtrar por nombre compañia'
-  },
-  {
-    key: 'short_collection_name',
-    label: 'Collección',
-    type: 'text',
-    placeholder: 'Filtrar por Collección'
-  },
-  {
-    key: 'ordered',
-    label: 'Ordenó',
-    type: 'checkbox',
-    placeholder: 'Filtrar si ordenó'
-  }
+  filterFormat.companyName,
+  filterFormat.shortCollectionName,
+  filterFormat.lineName,
+  filterFormat.seller,
+  filterFormat.budgetFrom,
+  filterFormat.budgetUntil,
+  filterFormat.ordered
 ]
 
 const filter = (filterValues, checkboxTouched) => {
   filteredCustomerTrips.value = customerTrips.value.filter(
     (customerTrip) =>
-      (!filterValues.company_name ||
+      (!filterValues.companyName ||
         customerTrip.customer.company_name
           .toLowerCase()
-          .includes(filterValues.company_name.toLowerCase())) &&
-      (!filterValues.short_collection_name ||
+          .includes(filterValues.companyName.toLowerCase())) &&
+      (!filterValues.shortCollectionName ||
         customerTrip.collection.short_collection_name
           .toLowerCase()
-          .includes(filterValues.short_collection_name)) &&
+          .includes(filterValues.shortCollectionName)) &&
+      (!filterValues.lineName ||
+        customerTrip.collection.line.line_name.toLowerCase().includes(filterValues.lineName)) &&
+      (!filterValues.seller ||
+        customerTrip.seller.last_name.toLowerCase().includes(filterValues.seller.toLowerCase()) ||
+        customerTrip.seller.first_name.toLowerCase().includes(filterValues.seller.toLowerCase())) &&
+      (!filterValues.budgetFrom || customerTrip.budget >= filterValues.budgetFrom) &&
+      (!filterValues.budgetUntil || customerTrip.budget <= filterValues.budgetUntil) &&
       (!checkboxTouched.ordered || customerTrip.ordered === filterValues.ordered)
   )
 }

@@ -37,7 +37,7 @@ const { order } = toRefs(props)
         </div>
         <div class="detail-row">
           <p>
-            <strong>Vendedor:</strong>
+            <strong>Asesor:</strong>
           </p>
           <p>{{ order.seller.first_name }} {{ order.seller.last_name }}</p>
         </div>

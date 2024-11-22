@@ -8,6 +8,8 @@ import FilterForm from '@/components/FilterForm.vue'
 import { alertService } from '@/services/alertService'
 import { activityService } from '@/services/activityService'
 
+import { filterFormat } from '@/plugins/filterFormat'
+
 const userStore = useUserStore()
 const id_user = ref('')
 const activities = ref([])
@@ -31,81 +33,32 @@ const addDataUser = async () => {
 }
 
 const activityFilterFields = [
-  {
-    key: 'company_name',
-    label: 'Compañia',
-    type: 'text',
-    placeholder: 'Filtrar por Nombre Compañia'
-  },
-  { key: 'line_name', label: 'Linea', type: 'text', placeholder: 'Filtrar por linea' },
-  {
-    key: 'short_collection_name',
-    label: 'Colección',
-    type: 'text',
-    placeholder: 'Filtrar por Colección'
-  },
-  { key: 'seller', label: 'Vendedor', type: 'text', placeholder: 'Filtrar por Vendedor' },
-  {
-    key: 'user_activities',
-    label: 'Responsable',
-    type: 'text',
-    placeholder: 'Filtrar por Responsable'
-  },
-  {
-    key: 'activity',
-    label: 'Actividad',
-    type: 'text',
-    placeholder: 'Filtrar por Actividad'
-  },
-  {
-    key: 'city_name',
-    label: 'Ciudad',
-    type: 'text',
-    placeholder: 'Filtrar por Ciudad'
-  },
-  {
-    key: 'creation_date_more',
-    label: 'Desde fecha de creación',
-    type: 'date',
-    placeholder: 'Filtrar por fecha de creación'
-  },
-  {
-    key: 'creation_date_less',
-    label: 'Hasta fecha de creación',
-    type: 'date',
-    placeholder: 'Filtrar por fecha de creación'
-  },
-  {
-    key: 'estimated_date_more',
-    label: 'Desde fecha para ejecución',
-    type: 'date',
-    placeholder: 'Filtrar por fecha para ejecución'
-  },
-  {
-    key: 'estimated_date_less',
-    label: 'Hasta fecha para ejecución',
-    type: 'date',
-    placeholder: 'Filtrar por fecha para ejecución'
-  },
-  {
-    key: 'completed',
-    label: 'Completado',
-    type: 'checkbox',
-    placeholder: 'Filtrar por Estado'
-  }
+  filterFormat.companyName,
+  filterFormat.lineName,
+  filterFormat.shortCollectionName,
+  filterFormat.seller,
+  filterFormat.responsibleUser,
+  filterFormat.activity,
+  filterFormat.city,
+  filterFormat.creationDateFrom,
+  filterFormat.creationDateUntil,
+  filterFormat.estimatedDateFrom,
+  filterFormat.estimatedDateUntil,
+  filterFormat.completed
 ]
 
 const filter = (filterValues, checkboxTouched) => {
+  console.log(filterValues.creationDateFrom, typeof filterValues.estimatedDateFrom)
   filteredActivities.value = activities.value.filter(
     (activity) =>
-      (!filterValues.company_name ||
+      (!filterValues.companyName ||
         activity.customer_trip.customer.company_name
           .toLowerCase()
-          .includes(filterValues.company_name.toLowerCase())) &&
-      (!filterValues.line_name ||
+          .includes(filterValues.companyName.toLowerCase())) &&
+      (!filterValues.lineName ||
         activity.customer_trip.collection.line.line_name
           .toLowerCase()
-          .includes(filterValues.line_name.toLowerCase())) &&
+          .includes(filterValues.lineName.toLowerCase())) &&
       (!filterValues.seller ||
         activity.customer_trip.seller.last_name
           .toLowerCase()
@@ -113,34 +66,31 @@ const filter = (filterValues, checkboxTouched) => {
         activity.customer_trip.seller.first_name
           .toLowerCase()
           .includes(filterValues.seller.toLowerCase())) &&
-      (!filterValues.short_collection_name ||
+      (!filterValues.shortCollectionName ||
         activity.customer_trip.collection.short_collection_name
           .toLowerCase()
-          .includes(filterValues.short_collection_name.toLowerCase())) &&
-      (!filterValues.user_activities ||
+          .includes(filterValues.shortCollectionName.toLowerCase())) &&
+      (!filterValues.responsibleUser ||
         activity.user_activities.last_name
           .toLowerCase()
-          .includes(filterValues.user_activities.toLowerCase()) ||
+          .includes(filterValues.responsibleUser.toLowerCase()) ||
         activity.user_activities.first_name
           .toLowerCase()
-          .includes(filterValues.user_activities.toLowerCase())) &&
+          .includes(filterValues.responsibleUser.toLowerCase())) &&
       (!filterValues.activity ||
         activity.activity_type.activity
           .toLowerCase()
           .includes(filterValues.activity.toLowerCase())) &&
-      (!filterValues.city_name ||
-        activity.customer_trip.customer.city.city_name
-          .toLowerCase()
-          .includes(filterValues.city_name)) &&
+      (!filterValues.city ||
+        activity.customer_trip.customer.city.city_name.toLowerCase().includes(filterValues.city)) &&
       (!checkboxTouched.completed || activity.completed === filterValues.completed) &&
-      (!filterValues.creation_date_more ||
-        activity.creation_date > filterValues.creation_date_more) &&
-      (!filterValues.creation_date_less ||
-        activity.creation_date < filterValues.creation_date_less) &&
-      (!filterValues.estimated_date_more ||
-        activity.estimated_date > filterValues.estimated_date_more) &&
-      (!filterValues.estimated_date_less ||
-        activity.estimated_date < filterValues.estimated_date_less)
+      (!filterValues.creationDateFrom || activity.creation_date >= filterValues.creationDateFrom) &&
+      (!filterValues.creationDateUntil ||
+        activity.creation_date <= filterValues.creationDateUntil) &&
+      (!filterValues.estimatedDateFrom ||
+        activity.estimated_date >= filterValues.estimatedDateFrom) &&
+      (!filterValues.estimatedDateUntil ||
+        activity.estimated_date <= filterValues.estimatedDateUntil)
   )
 }
 

@@ -3,20 +3,25 @@ import { ref } from 'vue'
 import { useUserStore } from '@/stores/userStore.js'
 
 import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
+import FilterForm from '@/components/FilterForm.vue'
 
 import { alertService } from '@/services/alertService'
 import { invoiceService } from '@/services/invoiceService'
+
+import { filterFormat } from '@/plugins/filterFormat'
 
 const userStore = useUserStore()
 const id_user = ref('')
 const skip = 0
 const limit = 500
 const invoices = ref([])
+const filteredInvoices = ref([])
 
 const addInvoices = async () => {
   try {
     const response = await invoiceService.getInvoices(skip, limit)
     invoices.value = response.data
+    filteredInvoices.value = [...invoices.value]
   } catch (error) {
     alertService.generalError('Las ordenes pudieron cargar')
   }
@@ -29,6 +34,55 @@ const addDataUser = async () => {
   }
 }
 
+const invoiceFilterFields = [
+  filterFormat.companyName,
+  filterFormat.noInvoice,
+  filterFormat.idOrder,
+  filterFormat.dateFrom,
+  filterFormat.dateUntil,
+  filterFormat.seller,
+  filterFormat.shortCollectionName,
+  filterFormat.lineName,
+  filterFormat.city,
+  filterFormat.paymentMethod
+]
+
+const filter = (filterValues) => {
+  filteredInvoices.value = invoices.value.filter(
+    (invoice) =>
+      (!filterValues.companyName ||
+        invoice.order.customer_trip.customer.company_name
+          .toLowerCase()
+          .includes(filterValues.companyName.toLowerCase())) &&
+      (!filterValues.noInvoice ||
+        invoice.invoice_number.toLowerCase().includes(filterValues.noInvoice)) &&
+      (!filterValues.idOrder || invoice.id_order === filterValues.idOrder) &&
+      (!filterValues.dateFrom || invoice.invoice_date >= filterValues.dateFrom) &&
+      (!filterValues.dateUntil || invoice.invoice_date <= filterValues.dateUntil) &&
+      (!filterValues.seller ||
+        invoice.order.seller.last_name.toLowerCase().includes(filterValues.seller.toLowerCase()) ||
+        invoice.order.seller.first_name
+          .toLowerCase()
+          .includes(filterValues.seller.toLowerCase())) &&
+      (!filterValues.shortCollectionName ||
+        invoice.order.customer_trip.collection.short_collection_name
+          .toLowerCase()
+          .includes(filterValues.shortCollectionName)) &&
+      (!filterValues.lineName ||
+        invoice.order.customer_trip.collection.line.line_name
+          .toLowerCase()
+          .includes(filterValues.lineName)) &&
+      (!filterValues.city ||
+        invoice.order.customer_trip.customer.city.city_name
+          .toLowerCase()
+          .includes(filterValues.city)) &&
+      (!filterValues.paymentMethod ||
+        invoice.order.payment_method.payment_method_name
+          .toLowerCase()
+          .includes(filterValues.paymentMethod))
+  )
+}
+
 addDataUser()
 </script>
 
@@ -36,7 +90,8 @@ addDataUser()
   <main>
     <div>
       <h3>Facturas</h3>
-      <InvoiceTable :invoices="invoices" :additionalInfo="true"></InvoiceTable>
+      <FilterForm :filterFields="invoiceFilterFields" @filter="filter" />
+      <InvoiceTable :invoices="filteredInvoices" :additionalInfo="true"></InvoiceTable>
     </div>
   </main>
 </template>
