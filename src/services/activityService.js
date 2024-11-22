@@ -9,5 +9,8 @@ export const activityService = {
   },
   getActivities: function (id_user) {
     return axiosInstance.get(`/activity/query/?id_user=${id_user}`)
+  },
+  getActivityById: function (id_activity) {
+    return axiosInstance.get(`/activity/full/${id_activity}`)
   }
 }

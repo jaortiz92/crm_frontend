@@ -43,7 +43,6 @@ onMounted(async () => {
   </div>
   <div v-else>
     <p>Cargando detalles...</p>
-    <p>{{ orderDetails }}</p>
   </div>
 </template>
 

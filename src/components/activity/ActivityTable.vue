@@ -64,7 +64,11 @@ const showLess = () => {
           <td>{{ item.creation_date }}</td>
           <td v-if="additionalInfo">{{ item.estimated_date }}</td>
           <td :class="{ checkbox: true, checked: item.completed }"></td>
-          <td>Más detalles</td>
+          <td>
+            <router-link :to="{ name: 'ActivityDetail', params: { id: item.id_activity } }">
+              Más detalles
+            </router-link>
+          </td>
         </tr>
       </tbody>
     </table>
