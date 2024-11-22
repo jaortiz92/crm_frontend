@@ -99,6 +99,11 @@ const handleCheckboxChange = (key) => {
 
 input {
   min-height: 25px;
+  font-size: 80%;
+}
+
+label {
+  font-size: 80%;
 }
 
 .button-form {
