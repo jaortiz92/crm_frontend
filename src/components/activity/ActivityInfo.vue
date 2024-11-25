@@ -44,10 +44,7 @@ const { activity } = toRefs(props)
             {{ activity.customer_trip.collection.year }}
           </p>
         </div>
-        <div class="detail-row">
-          <p><strong>Actividad:</strong></p>
-          <p>{{ activity.activity_type.activity }}</p>
-        </div>
+
         <div class="detail-row">
           <p><strong>Ciudad:</strong></p>
           <p>{{ activity.customer_trip.customer.city.city_name }}</p>
@@ -81,7 +78,8 @@ const { activity } = toRefs(props)
           <p>
             <strong>Fecha Ejecución:</strong>
           </p>
-          <p>{{ activity.execution_date }}</p>
+          <p v-if="activity.execution_date">{{ activity.execution_date }}</p>
+          <p v-else>Sin Completar</p>
         </div>
       </div>
       <div class="detail-column">
@@ -123,6 +121,7 @@ const { activity } = toRefs(props)
             {{ activity.authorizer_activities.first_name }}
             {{ activity.authorizer_activities.last_name }}
           </p>
+          <p v-else>{{ activity.budget > 0 ? 'Sin autorizar' : 'No necesario' }}</p>
         </div>
         <div class="detail-row">
           <p>
@@ -132,11 +131,18 @@ const { activity } = toRefs(props)
         </div>
       </div>
     </div>
-    <div class="comment-row">
-      <p>
-        <strong>Comentarios:</strong>
-      </p>
-      <p>{{ activity.comment }}</p>
+    <div class="text-row">
+      <div class="detail-column">
+        <p><strong>Actividad:</strong></p>
+        <p class="space-for-text">{{ activity.activity_type.activity }}</p>
+      </div>
+      <div class="detail-column">
+        <p>
+          <strong>Comentarios:</strong>
+        </p>
+        <p class="space-for-text" v-if="activity.comment">{{ activity.comment }}</p>
+        <p class="space-for-text" v-else>Sin Comentarios</p>
+      </div>
     </div>
   </div>
 </template>
@@ -155,7 +161,6 @@ const { activity } = toRefs(props)
 .details-wrapper {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
 }
 
 .detail-column {
@@ -197,5 +202,16 @@ const { activity } = toRefs(props)
 .comment-row {
   border-top: 1px solid var(--gray-border);
   margin-top: 15px;
+}
+
+.text-row {
+  display: flex;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--gray-border);
+  margin-top: 15px;
+  padding-top: 15px;
+}
+.space-for-text {
+  text-align: justify;
 }
 </style>

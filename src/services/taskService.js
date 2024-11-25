@@ -12,5 +12,8 @@ export const taskService = {
   },
   getAssignedTasks: function (id_user) {
     return axiosInstance.get(`/task/query/?id_creator=${id_user}`)
+  },
+  getTaskById: function (id_task) {
+    return axiosInstance.get(`/task/full/${id_task}`)
   }
 }

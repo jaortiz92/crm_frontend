@@ -40,28 +40,28 @@ const showLess = () => {
           <th>Cliente</th>
           <th>Creador Tarea</th>
           <th>Tarea</th>
-          <th>Comentarios</th>
           <th>Ciudad</th>
           <th>Responsable</th>
-          <th>Creacion</th>
+          <th>Fecha Creacion</th>
           <th v-if="additionalInfo">Completado</th>
           <th v-if="additionalInfo">Fecha Completado</th>
           <th>Detalles</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="item in limitedItems" :key="item.id_activity">
+        <tr v-for="item in limitedItems" :key="item.id_task">
           <td>{{ item.id_task }}</td>
           <td>{{ item.customer.company_name }}</td>
           <td>{{ item.creator_tasks.first_name }} {{ item.creator_tasks.last_name }}</td>
           <td>{{ item.task }}</td>
-          <td>{{ item.comment }}</td>
           <td>{{ item.customer.city.city_name }}</td>
           <td>{{ item.responsible_task.first_name }} {{ item.responsible_task.last_name }}</td>
           <td>{{ item.creation_date }}</td>
           <td v-if="additionalInfo" :class="{ checkbox: true, checked: item.completed }"></td>
           <td v-if="additionalInfo">{{ item.closing_date }}</td>
-          <td>Más detalles</td>
+          <router-link :to="{ name: 'TaskDetail', params: { id: item.id_task } }">
+            Más detalles
+          </router-link>
         </tr>
       </tbody>
     </table>

@@ -13,6 +13,7 @@ import TaskView from '@/views/task/TaskView.vue'
 import OrderDetailView from '@/views/order/OrderDetailView.vue'
 import InvoiceDetailView from '@/views/invoice/InvoiceDetailView.vue'
 import ActivityDetailView from '@/views/activity/ActivityDetailView.vue'
+import TaskDetailView from '@/views/task/TaskDetailView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -92,6 +93,12 @@ const router = createRouter({
       path: '/activity/:id',
       name: 'ActivityDetail',
       component: ActivityDetailView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/task/:id',
+      name: 'TaskDetail',
+      component: TaskDetailView,
       meta: { requiresAuth: true }
     }
     /*    {
