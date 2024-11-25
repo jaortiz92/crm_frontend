@@ -6,5 +6,8 @@ export const userService = {
   },
   me: function () {
     return axiosInstance.get(`/login/me/`)
+  },
+  getUsers: function (skip, limit) {
+    return axiosInstance.get(`/user/?skip=${skip}&limit=${limit}`)
   }
 }
