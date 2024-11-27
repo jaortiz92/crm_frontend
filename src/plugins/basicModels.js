@@ -8,5 +8,17 @@ export const basicModels = {
     completed: false,
     execution_date: null,
     comment: null
+  },
+  activity: {
+    id_customer_trip: null,
+    id_activity_type: null,
+    id_user: null,
+    estimated_date: null,
+    execution_date: null,
+    budget: null,
+    completed: false,
+    execution_value: null,
+    comment: null,
+    creation_date: null
   }
 }

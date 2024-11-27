@@ -12,5 +12,14 @@ export const activityService = {
   },
   getActivityById: function (id_activity) {
     return axiosInstance.get(`/activity/full/${id_activity}`)
+  },
+  createActivity: function (activity) {
+    return axiosInstance.post(`/activity/`, activity)
+  },
+  updateActivity: function (id_activity, activity) {
+    return axiosInstance.put(`/activity/${id_activity}`, activity)
+  },
+  getActivityTypes: function () {
+    return axiosInstance.get(`/activity_type/?skip=0&limit=100`)
   }
 }
