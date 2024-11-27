@@ -15,5 +15,11 @@ export const taskService = {
   },
   getTaskById: function (id_task) {
     return axiosInstance.get(`/task/full/${id_task}`)
+  },
+  createTask: function (task) {
+    return axiosInstance.post(`/task/`, task)
+  },
+  updateTask: function (id_task, task) {
+    return axiosInstance.put(`/task/${id_task}`, task)
   }
 }

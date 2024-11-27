@@ -17,7 +17,12 @@
         :type="field.type"
         :required="formData[field.isRequired]"
       ></textarea>
-      <input v-else v-model="formData[field.key]" :type="field.type" required />
+      <input
+        v-else
+        v-model="formData[field.key]"
+        :type="field.type"
+        required="formData[field.isRequired]"
+      />
     </div>
     <button type="submit">{{ submitLabel }}</button>
   </form>

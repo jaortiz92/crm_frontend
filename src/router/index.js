@@ -103,7 +103,7 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
-      path: '/form',
+      path: '/taskForm',
       name: 'TaskForm',
       component: TaskFormView,
       meta: { requiresAuth: true }

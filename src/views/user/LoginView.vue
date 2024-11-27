@@ -34,4 +34,8 @@ const submitLogin = async () => {
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+input {
+  width: 95%;
+}
+</style>

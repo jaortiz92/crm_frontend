@@ -1,6 +1,8 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/userStore.js'
+import { useTaskStore } from '@/stores/taskStore'
 
 import TaskTable from '@/components/task/TaskTable.vue'
 
@@ -11,6 +13,8 @@ const userStore = useUserStore()
 const id_user = ref('')
 const tasks = ref([])
 const tasksAssigned = ref([])
+const router = useRouter()
+const taskStore = useTaskStore()
 
 const addTasks = async () => {
   try {
@@ -38,10 +42,18 @@ const addDataUser = async () => {
   }
 }
 
+const create = () => {
+  taskStore.clearTask()
+  router.push('/taskForm')
+}
+
 addDataUser()
 </script>
 
 <template>
+  <div class="button-create">
+    <button @click="create">Crear</button>
+  </div>
   <main>
     <div>
       <h3>Tareas</h3>
