@@ -45,7 +45,7 @@ export const alertService = {
     const response = await Swal.fire({
       title: textTitle,
       html: text,
-      icon: 'warning',
+      icon: 'question',
       showCancelButton: true,
       confirmButtonColor: colors.confirmColor,
       cancelButtonColor: colors.cancelColor,

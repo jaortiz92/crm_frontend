@@ -1,6 +1,8 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/userStore.js'
+import { useOrderStore } from '@/stores/orderStore'
 
 import OrderTable from '@/components/order/OrderTable.vue'
 import FilterForm from '@/components/FilterForm.vue'
@@ -16,6 +18,8 @@ const skip = 0
 const limit = 500
 const orders = ref([])
 const filteredOrders = ref([])
+const router = useRouter()
+const orderStore = useOrderStore()
 
 const addOrders = async () => {
   try {
@@ -74,10 +78,18 @@ const addDataUser = async () => {
   }
 }
 
+const create = () => {
+  orderStore.clearOrder()
+  router.push('/orderForm')
+}
+
 addDataUser()
 </script>
 
 <template>
+  <div class="button-create">
+    <button @click="create">Crear</button>
+  </div>
   <main>
     <div>
       <h3>Ordenes</h3>

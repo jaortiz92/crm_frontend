@@ -20,5 +20,16 @@ export const basicModels = {
     execution_value: 0,
     comment: null,
     creation_date: null
+  },
+  order: {
+    id_customer_trip: null,
+    id_seller: null,
+    date_order: null,
+    id_payment_method: null,
+    total_quantities: 0,
+    system_quantities: 0,
+    total_without_tax: 0,
+    total_with_tax: 0,
+    delivery_date: null
   }
 }

@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+
+import { alertService } from '@/services/alertService'
 
 import { orderService } from '@/services/orderService'
 import { invoiceService } from '@/services/invoiceService'
@@ -8,11 +10,14 @@ import { invoiceService } from '@/services/invoiceService'
 import OrderDetailTable from '@/components/order/OrderDetailTable.vue'
 import OrderInfo from '@/components/order/OrderInfo.vue'
 import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
+import { useOrderStore } from '@/stores/orderStore'
 
 const route = useRoute()
 const orderDetails = ref([])
 const order = ref(null)
 const invoices = ref([])
+const orderStore = useOrderStore()
+const router = useRouter()
 
 onMounted(async () => {
   const idOrder = route.params.id
@@ -23,6 +28,14 @@ onMounted(async () => {
   }
   invoices.value = (await invoiceService.getInvoiceByOrder(idOrder)).data
 })
+
+const edit = async () => {
+  const responseUser = await alertService.editElement(order.value.id_order, 'Tarea')
+  if (responseUser.isConfirmed) {
+    orderStore.setOrder(order.value)
+    router.push('/orderForm')
+  }
+}
 </script>
 
 <template>
@@ -39,6 +52,9 @@ onMounted(async () => {
         <h2>Detalle Orden</h2>
         <OrderDetailTable :orderDetails="orderDetails"></OrderDetailTable>
       </div>
+    </div>
+    <div class="button-edit">
+      <button @click="edit">Editar</button>
     </div>
   </div>
   <div v-else>

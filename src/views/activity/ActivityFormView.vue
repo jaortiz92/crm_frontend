@@ -1,7 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-//import { useUserStore } from '@/stores/userStore.js'
 import { useActivityStore } from '@/stores/activityStore'
 
 import { basicModels } from '@/plugins/basicModels'
@@ -22,7 +21,6 @@ const activity = ref({})
 const isEdit = ref(false)
 const router = useRouter()
 
-//const userStore = useUserStore()
 const activityStore = useActivityStore()
 
 if (activityStore.isThereActivity()) {

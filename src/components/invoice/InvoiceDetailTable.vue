@@ -71,7 +71,7 @@ const showLess = () => {
     </div>
   </div>
   <div v-else>
-    <h4>Sin ordenes</h4>
+    <h4>Factura sin detalle</h4>
   </div>
 </template>
 

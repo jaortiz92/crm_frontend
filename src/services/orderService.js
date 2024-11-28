@@ -9,5 +9,11 @@ export const orderService = {
   },
   getOrderWithDetails: function (id_ortder) {
     return axiosInstance.get(`/order/${id_ortder}/details`)
+  },
+  createOrder: function (order) {
+    return axiosInstance.post(`/order/`, order)
+  },
+  updateOrder: function (id_order, order) {
+    return axiosInstance.put(`/order/${id_order}`, order)
   }
 }
