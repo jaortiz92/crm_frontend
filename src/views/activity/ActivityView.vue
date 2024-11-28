@@ -1,6 +1,8 @@
 <script setup>
 import { ref } from 'vue'
 import { useUserStore } from '@/stores/userStore.js'
+import { useRouter } from 'vue-router'
+import { useActivityStore } from '@/stores/activityStore'
 
 import ActivityTable from '@/components/activity/ActivityTable.vue'
 import FilterForm from '@/components/FilterForm.vue'
@@ -14,6 +16,8 @@ const userStore = useUserStore()
 const id_user = ref('')
 const activities = ref([])
 const filteredActivities = ref([])
+const router = useRouter()
+const activityStore = useActivityStore()
 
 const addActivities = async () => {
   try {
@@ -93,10 +97,18 @@ const filter = (filterValues, checkboxTouched) => {
   )
 }
 
+const create = () => {
+  activityStore.clearActivity()
+  router.push('/activityForm')
+}
+
 addDataUser()
 </script>
 
 <template>
+  <div class="button-create">
+    <button @click="create">Crear</button>
+  </div>
   <main>
     <div>
       <h3>Actividades</h3>

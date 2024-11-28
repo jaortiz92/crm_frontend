@@ -27,8 +27,16 @@ export const alertService = {
   },
   generalInformation(textTitle, text) {
     Swal.fire({
-      icon: 'success',
-      title: 'Completado Exitosamente',
+      icon: 'info',
+      title: textTitle,
+      text: `${text}`,
+      confirmButtonColor: colors.succesColor
+    })
+  },
+  generalWarning(textTitle, text) {
+    Swal.fire({
+      icon: 'warning',
+      title: textTitle,
       text: `${text}`,
       confirmButtonColor: colors.succesColor
     })

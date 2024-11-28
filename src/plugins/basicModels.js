@@ -15,9 +15,9 @@ export const basicModels = {
     id_user: null,
     estimated_date: null,
     execution_date: null,
-    budget: null,
+    budget: 0,
     completed: false,
-    execution_value: null,
+    execution_value: 0,
     comment: null,
     creation_date: null
   }

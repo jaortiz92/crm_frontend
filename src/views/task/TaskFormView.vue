@@ -44,25 +44,25 @@ const save = async (task) => {
   if (!isEdit.value) {
     const responseUser = await alertService.createElement('Tarea')
     if (responseUser.isConfirmed) {
-      task.id_creator = userStore.user.id_user
-      task.creation_date = new Date().toISOString().split('T')[0]
-      const response = await taskService.createTask(task)
-      if (response.status === 200) {
+      try {
+        task.id_creator = userStore.user.id_user
+        task.creation_date = new Date().toISOString().split('T')[0]
+        const response = await taskService.createTask(task)
         const id = response.data.id_task
         alertService.generalSucces(`La Tarea fue creadá exitosamente con el ID ${id}`)
         router.push(`task/${id}`)
-      } else {
-        alertService.generalError(`La Tarea no pudo ser creada`)
+      } catch {
+        alertService.generalError(`La Tarea no pudo ser creada.`)
       }
     }
   } else {
     const responseUser = await alertService.updateElement(task.id_task, 'Tarea')
     if (responseUser.isConfirmed) {
-      const response = await taskService.updateTask(task.id_task, task)
-      if (response.status === 200) {
+      try {
+        await taskService.updateTask(task.id_task, task)
         alertService.generalSucces(`La Tarea con ID ${task.id_task}, fue actualizada exitosamente`)
         router.push(`task/${task.id_task}`)
-      } else {
+      } catch {
         alertService.generalError(`La Tarea con ID ${task.id_task}, no pudo ser actualizada`)
       }
     }

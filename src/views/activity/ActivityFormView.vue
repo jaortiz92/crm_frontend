@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUserStore } from '@/stores/userStore.js'
+//import { useUserStore } from '@/stores/userStore.js'
 import { useActivityStore } from '@/stores/activityStore'
 
 import { basicModels } from '@/plugins/basicModels'
@@ -22,7 +22,7 @@ const activity = ref({})
 const isEdit = ref(false)
 const router = useRouter()
 
-const userStore = useUserStore()
+//const userStore = useUserStore()
 const activityStore = useActivityStore()
 
 if (activityStore.isThereActivity()) {
@@ -46,27 +46,28 @@ const save = async (activity) => {
   if (!isEdit.value) {
     const responseUser = await alertService.createElement('Actividad')
     if (responseUser.isConfirmed) {
-      activity.id_creator = userStore.user.id_user
-      activity.creation_date = new Date().toISOString().split('T')[0]
-      const response = await activityService.createActivity(activity)
-      if (response.status === 200) {
+      try {
+        activity.creation_date = new Date().toISOString().split('T')[0]
+        const response = await activityService.createActivity(activity)
         const id = response.data.id_activity
         alertService.generalSucces(`La Actividad fue creadá exitosamente con el ID ${id}`)
         router.push(`activity/${id}`)
-      } else {
-        alertService.generalError(`La Actividad no pudo ser creada`)
+      } catch {
+        alertService.generalError(
+          `La Actividad no pudo ser creada. Confirme que el numero del viaje del cliente este correcto`
+        )
       }
     }
   } else {
     const responseUser = await alertService.updateElement(activity.id_activity, 'Actividad')
     if (responseUser.isConfirmed) {
-      const response = await activityService.updateActivity(activity.id_activity, activity)
-      if (response.status === 200) {
+      try {
+        await activityService.updateActivity(activity.id_activity, activity)
         alertService.generalSucces(
           `La Actividad con ID ${activity.id_activity}, fue actualizada exitosamente`
         )
         router.push(`activity/${activity.id_activity}`)
-      } else {
+      } catch {
         alertService.generalError(
           `La Actividad con ID ${activity.id_activity}, no pudo ser actualizada`
         )

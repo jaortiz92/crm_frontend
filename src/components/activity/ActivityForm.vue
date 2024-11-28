@@ -1,8 +1,7 @@
 <script setup>
 import { defineProps, defineEmits, toRefs, ref } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
-
-import { useUserStore } from '@/stores/userStore'
+import { alertService } from '@/services/alertService'
 
 const props = defineProps({
   initialActivity: {
@@ -23,21 +22,36 @@ const props = defineProps({
   }
 })
 
-const userStore = useUserStore()
 const { initialActivity, options, isEdit } = toRefs(props)
 
 const activity = ref({ ...initialActivity.value })
 
-const isDisabledEdit = () => {
-  if ((userStore.user.id_user !== activity.value.id_creator) & isEdit.value) {
-    return true
-  }
-  return false
-}
-
 const emit = defineEmits(['save'])
 const save = () => {
-  emit('save', activity.value)
+  if (validateAuthorization()) {
+    emit('save', activity.value)
+  }
+}
+
+const alertByAuthorization = () => {
+  alertService.generalWarning(
+    'Actividad no autorizada',
+    'Recuerde que para completar una actividad con presupuesto, primero debe ser autorizada'
+  )
+}
+
+const validateAuthorization = () => {
+  if (
+    (activity.value.completed & (activity.value.budget > 0)) |
+    (activity.value.completed & (activity.value.execution_value > 0))
+  ) {
+    activity.value.completed = false
+    activity.value.execution_value = 0
+
+    alertByAuthorization()
+    return false
+  }
+  return true
 }
 </script>
 
@@ -45,16 +59,11 @@ const save = () => {
   <form @submit.prevent="save" class="form-activity">
     <div class="field-input">
       <label>ID Viaje del Cliente</label>
-      <input
-        v-model="activity.id_customer_trip"
-        required
-        :disabled="isDisabledEdit()"
-        type="number"
-      />
+      <input v-model="activity.id_customer_trip" required activityStore type="number" />
     </div>
     <div class="field-input">
       <label>Tipo de Actividad</label>
-      <select v-model="activity.id_activity_type" required :disabled="isDisabledEdit()">
+      <select v-model="activity.id_activity_type" required activityStore>
         <option
           v-for="option in options.activityTypes"
           :key="option.id_activity_type"
@@ -66,7 +75,7 @@ const save = () => {
     </div>
     <div class="field-input">
       <label>Responsable</label>
-      <select v-model="activity.id_user" required :disabled="isDisabledEdit()">
+      <select v-model="activity.id_user" required activityStore>
         <option v-for="option in options.users" :key="option.id_user" :value="option.id_user">
           {{ option.first_name }} {{ option.last_name }}
         </option>
@@ -82,7 +91,12 @@ const save = () => {
     </div>
     <div class="field-input">
       <label>¿Completado?</label>
-      <input v-model="activity.completed" type="checkbox" class="checkbox" />
+      <input
+        v-model="activity.completed"
+        type="checkbox"
+        class="checkbox"
+        @change="validateAuthorization()"
+      />
     </div>
     <div v-if="activity.completed" class="field-input">
       <label>Fecha Completado</label>
