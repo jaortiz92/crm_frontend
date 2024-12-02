@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/userStore.js'
+import { useSplashStore } from '@/stores/splash.js'
 import HomeView from '@/views/HomeView.vue'
 import LoginPage from '@/views/user/LoginView.vue'
 import CustomerView from '@/views/customer/CustomerView.vue'
@@ -136,6 +137,14 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
+  const splashStore = useSplashStore()
+
+  if (from.name === 'Login') {
+    splashStore.show()
+    setTimeout(() => {
+      splashStore.hide()
+    }, 1000)
+  }
 
   if (to.meta.requiresAuth && !userStore.token) {
     if (to.name != 'Login') {
@@ -146,7 +155,7 @@ router.beforeEach(async (to, from, next) => {
       await userStore.getUserDetails()
       next()
     } catch {
-      console.log('catch')
+      userStore.logout()
       next({ name: 'Login' })
     }
   } else {

@@ -38,4 +38,8 @@ const submitLogin = async () => {
 input {
   width: 95%;
 }
+
+form {
+  background-color: var(--background-light);
+}
 </style>
