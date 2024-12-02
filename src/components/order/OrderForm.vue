@@ -23,6 +23,7 @@ const props = defineProps({
 const { initialOrder, options, isEdit } = toRefs(props)
 
 const order = ref({ ...initialOrder.value })
+const details = ref(false)
 
 const emit = defineEmits(['save'])
 const save = () => {
@@ -84,11 +85,18 @@ const save = () => {
           <label>Valor Total</label>
           <input v-model="order.total_with_tax" required orderStore type="number" />
         </div>
+        <div class="field-input">
+          <label>¿Agregar detalles? </label
+          ><input v-model="details" type="checkbox" class="checkbox" />
+        </div>
+        <div v-if="details" class="field-input">
+          <label for="document">Documento:</label>
+          <input type="file" id="document" @change="handleFileUpload" required />
+        </div>
       </div>
     </div>
     <div class="button-group">
       <button type="submit">{{ isEdit ? `Actualizar Orden` : 'Crear Orden' }}</button>
-      <button>Agregar Detalles</button>
     </div>
   </form>
 </template>

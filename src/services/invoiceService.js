@@ -8,7 +8,7 @@ export const invoiceService = {
     return axiosInstance.get(`/invoice/customer_trip/${id_customer_trip}`)
   },
   getInvoiceByOrder: function (id_invoice) {
-    return axiosInstance.get(`/invoice/invoice/${id_invoice}`)
+    return axiosInstance.get(`/invoice/order/${id_invoice}`)
   },
   getInvoiceWithDetails: function (id_invoice) {
     return axiosInstance.get(`/invoice/${id_invoice}/details`)

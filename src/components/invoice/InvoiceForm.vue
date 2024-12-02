@@ -25,6 +25,7 @@ const props = defineProps({
 const { initialInvoice, isEdit } = toRefs(props)
 
 const invoice = ref({ ...initialInvoice.value })
+const details = ref(false)
 
 const emit = defineEmits(['save'])
 const save = () => {
@@ -70,11 +71,18 @@ const addDetail = () => {
           <label>ID order</label>
           <input v-model="invoice.id_order" required invoiceStore type="number" />
         </div>
+        <div class="field-input">
+          <label>¿Agregar detalles? </label
+          ><input v-model="details" type="checkbox" class="checkbox" />
+        </div>
+        <div v-if="details" class="field-input">
+          <label for="document">Documento:</label>
+          <input type="file" id="document" @change="handleFileUpload" required />
+        </div>
       </div>
     </div>
     <div class="button-group">
       <button type="submit">{{ isEdit ? `Actualizar Factura` : 'Crear Factura' }}</button>
-      <button @click="addDetail">Agregar Detalles</button>
     </div>
   </form>
 </template>
