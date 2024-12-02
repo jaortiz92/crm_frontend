@@ -7,10 +7,16 @@ export const invoiceService = {
   getInvoiceByCutomerTrip: function (id_customer_trip) {
     return axiosInstance.get(`/invoice/customer_trip/${id_customer_trip}`)
   },
-  getInvoiceByOrder: function (id_order) {
-    return axiosInstance.get(`/invoice/order/${id_order}`)
+  getInvoiceByOrder: function (id_invoice) {
+    return axiosInstance.get(`/invoice/invoice/${id_invoice}`)
   },
   getInvoiceWithDetails: function (id_invoice) {
     return axiosInstance.get(`/invoice/${id_invoice}/details`)
+  },
+  createInvoice: function (invoice) {
+    return axiosInstance.post(`/invoice/`, invoice)
+  },
+  updateInvoice: function (id_invoice, invoice) {
+    return axiosInstance.put(`/invoice/${id_invoice}`, invoice)
   }
 }

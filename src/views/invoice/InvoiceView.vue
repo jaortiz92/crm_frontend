@@ -1,6 +1,8 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/userStore.js'
+import { useInvoiceStore } from '@/stores/invoiceStore'
 
 import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
 import FilterForm from '@/components/FilterForm.vue'
@@ -16,6 +18,8 @@ const skip = 0
 const limit = 500
 const invoices = ref([])
 const filteredInvoices = ref([])
+const router = useRouter()
+const invoiceStore = useInvoiceStore()
 
 const addInvoices = async () => {
   try {
@@ -83,10 +87,18 @@ const filter = (filterValues) => {
   )
 }
 
+const create = () => {
+  invoiceStore.clearInvoice()
+  router.push('/invoiceForm')
+}
+
 addDataUser()
 </script>
 
 <template>
+  <div class="button-create">
+    <button @click="create">Crear</button>
+  </div>
   <main>
     <div>
       <h3>Facturas</h3>

@@ -19,5 +19,17 @@ export const formatters = {
       return match[1] + '-' + match[2] + '-' + match[3]
     }
     return value
+  },
+  validateFormatterInvoice: function (text) {
+    try {
+      text = text.toUpperCase()
+      if (/^(DMC|FVFE|NDCL|NDDL)[0-9]{1,5}$/.test(text)) {
+        return text
+      } else {
+        return false
+      }
+    } catch {
+      return false
+    }
   }
 }

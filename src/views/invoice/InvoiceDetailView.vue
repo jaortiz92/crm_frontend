@@ -1,15 +1,20 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+
+import { alertService } from '@/services/alertService'
 
 import { invoiceService } from '@/services/invoiceService'
 
 import InvoiceDetailTable from '@/components/invoice/InvoiceDetailTable.vue'
 import InvoiceInfo from '@/components/invoice/InvoiceInfo.vue'
+import { useInvoiceStore } from '@/stores/invoiceStore'
 
 const route = useRoute()
 const invoiceDetails = ref([])
 const invoice = ref(null)
+const invoiceStore = useInvoiceStore()
+const router = useRouter()
 
 onMounted(async () => {
   const idInvoice = route.params.id
@@ -19,6 +24,14 @@ onMounted(async () => {
     delete invoice.value.invoice_details
   }
 })
+
+const edit = async () => {
+  const responseUser = await alertService.editElement(invoice.value.id_invoice, 'Tarea')
+  if (responseUser.isConfirmed) {
+    invoiceStore.setInvoice(invoice.value)
+    router.push('/invoiceForm')
+  }
+}
 </script>
 
 <template>
@@ -30,6 +43,9 @@ onMounted(async () => {
       <div class="invoice-detail">
         <InvoiceDetailTable :invoiceDetails="invoiceDetails"></InvoiceDetailTable>
       </div>
+    </div>
+    <div class="button-edit">
+      <button @click="edit">Editar</button>
     </div>
   </div>
   <div v-else>

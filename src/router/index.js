@@ -18,6 +18,7 @@ import TaskDetailView from '@/views/task/TaskDetailView.vue'
 import TaskFormView from '@/views/task/TaskFormView.vue'
 import ActivityFormView from '@/views/activity/ActivityFormView.vue'
 import OrderFormView from '@/views/order/OrderFormView.vue'
+import InvoiceFormView from '@/views/invoice/InvoiceFormView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -122,7 +123,14 @@ const router = createRouter({
       name: 'OrderForm',
       component: OrderFormView,
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/invoiceForm',
+      name: 'InvoiceForm',
+      component: InvoiceFormView,
+      meta: { requiresAuth: true }
     }
+
     /*    {
       path: '/about',
       name: 'About',
