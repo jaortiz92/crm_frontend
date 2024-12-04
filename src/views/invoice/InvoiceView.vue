@@ -59,7 +59,7 @@ const filter = (filterValues) => {
           .toLowerCase()
           .includes(filterValues.companyName.toLowerCase())) &&
       (!filterValues.noInvoice ||
-        invoice.invoice_number.toLowerCase().includes(filterValues.noInvoice)) &&
+        invoice.invoice_number.toLowerCase().includes(filterValues.noInvoice.toLowerCase())) &&
       (!filterValues.idOrder || invoice.id_order === filterValues.idOrder) &&
       (!filterValues.dateFrom || invoice.invoice_date >= filterValues.dateFrom) &&
       (!filterValues.dateUntil || invoice.invoice_date <= filterValues.dateUntil) &&
@@ -71,19 +71,19 @@ const filter = (filterValues) => {
       (!filterValues.shortCollectionName ||
         invoice.order.customer_trip.collection.short_collection_name
           .toLowerCase()
-          .includes(filterValues.shortCollectionName)) &&
+          .includes(filterValues.shortCollectionName.toLowerCase())) &&
       (!filterValues.lineName ||
         invoice.order.customer_trip.collection.line.line_name
           .toLowerCase()
-          .includes(filterValues.lineName)) &&
+          .includes(filterValues.lineName.toLowerCase())) &&
       (!filterValues.city ||
         invoice.order.customer_trip.customer.city.city_name
           .toLowerCase()
-          .includes(filterValues.city)) &&
+          .includes(filterValues.city.toLowerCase())) &&
       (!filterValues.paymentMethod ||
         invoice.order.payment_method.payment_method_name
           .toLowerCase()
-          .includes(filterValues.paymentMethod))
+          .includes(filterValues.paymentMethod.toLowerCase()))
   )
 }
 

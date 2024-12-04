@@ -59,15 +59,19 @@ const filter = (filterValues) => {
       (!filterValues.shortCollectionName ||
         order.customer_trip.collection.short_collection_name
           .toLowerCase()
-          .includes(filterValues.shortCollectionName)) &&
+          .includes(filterValues.shortCollectionName.toLowerCase())) &&
       (!filterValues.lineName ||
         order.customer_trip.collection.line.line_name
           .toLowerCase()
-          .includes(filterValues.lineName)) &&
+          .includes(filterValues.lineName.toLowerCase())) &&
       (!filterValues.city ||
-        order.customer_trip.customer.city.city_name.toLowerCase().includes(filterValues.city)) &&
+        order.customer_trip.customer.city.city_name
+          .toLowerCase()
+          .includes(filterValues.city.toLowerCase())) &&
       (!filterValues.paymentMethod ||
-        order.payment_method.payment_method_name.toLowerCase().includes(filterValues.paymentMethod))
+        order.payment_method.payment_method_name
+          .toLowerCase()
+          .includes(filterValues.paymentMethod.toLowerCase()))
   )
 }
 

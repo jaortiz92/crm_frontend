@@ -54,9 +54,11 @@ const filter = (filterValues, checkboxTouched) => {
       (!filterValues.shortCollectionName ||
         customerTrip.collection.short_collection_name
           .toLowerCase()
-          .includes(filterValues.shortCollectionName)) &&
+          .includes(filterValues.shortCollectionName.toLowerCase())) &&
       (!filterValues.lineName ||
-        customerTrip.collection.line.line_name.toLowerCase().includes(filterValues.lineName)) &&
+        customerTrip.collection.line.line_name
+          .toLowerCase()
+          .includes(filterValues.lineName.toLowerCase())) &&
       (!filterValues.seller ||
         customerTrip.seller.last_name.toLowerCase().includes(filterValues.seller.toLowerCase()) ||
         customerTrip.seller.first_name.toLowerCase().includes(filterValues.seller.toLowerCase())) &&

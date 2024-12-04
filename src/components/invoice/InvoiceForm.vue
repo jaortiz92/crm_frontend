@@ -39,10 +39,6 @@ const save = () => {
     )
   }
 }
-
-const addDetail = () => {
-  alert(1)
-}
 </script>
 
 <template>

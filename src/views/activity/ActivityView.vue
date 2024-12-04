@@ -85,7 +85,9 @@ const filter = (filterValues, checkboxTouched) => {
           .toLowerCase()
           .includes(filterValues.activity.toLowerCase())) &&
       (!filterValues.city ||
-        activity.customer_trip.customer.city.city_name.toLowerCase().includes(filterValues.city)) &&
+        activity.customer_trip.customer.city.city_name
+          .toLowerCase()
+          .includes(filterValues.city.toLowerCase())) &&
       (!checkboxTouched.completed || activity.completed === filterValues.completed) &&
       (!filterValues.creationDateFrom || activity.creation_date >= filterValues.creationDateFrom) &&
       (!filterValues.creationDateUntil ||
