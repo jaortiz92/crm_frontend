@@ -41,6 +41,8 @@ onMounted(async () => {
 })
 
 const save = async (customer) => {
+  const validate = 'Validar numero de documento'
+  customer.phone = customer.phone.toString()
   if (!isEdit.value) {
     const responseUser = await alertService.createElement('Cliente')
     if (responseUser.isConfirmed) {
@@ -50,7 +52,7 @@ const save = async (customer) => {
         alertService.generalSucces(`El Cliente fue creado exitosamente con el ID ${id}`)
         router.push(`customer/${id}`)
       } catch {
-        alertService.generalError(`El Cliente no pudo ser creado.`)
+        alertService.generalError(`El Cliente no pudo ser creado. ${validate}`)
       }
     }
   } else {
@@ -64,7 +66,7 @@ const save = async (customer) => {
         router.push(`customer/${customer.id_customer}`)
       } catch {
         alertService.generalError(
-          `El Cliente con ID ${customer.id_customer}, no pudo ser actualizada`
+          `El Cliente con ID ${customer.id_customer}, no pudo ser actualizada. ${validate}`
         )
       }
     }

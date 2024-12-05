@@ -52,7 +52,7 @@ const save = () => {
         <div class="field-input">
           <label>Llave</label>
           <select v-model="invoice.key" required>
-            <option v-for="index in 10" :key="index" :value="index">
+            <option v-for="index in 3" :key="index" :value="index">
               {{ index }}
             </option>
           </select>

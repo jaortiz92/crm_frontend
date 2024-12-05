@@ -59,11 +59,17 @@ console.log(idDepartment.value)
       <div class="detail-column">
         <div class="field-input">
           <label>Nombre Compañia</label>
-          <input v-model="customer.company_name" type="text" required />
+          <input v-model="customer.company_name" type="text" minlength="5" required />
         </div>
         <div class="field-input">
           <label>Documento</label>
-          <input v-model="customer.document" type="text" required />
+          <input
+            v-model="customer.document"
+            type="number"
+            min="100000000"
+            max="3000000000"
+            required
+          />
         </div>
         <div class="field-input">
           <label>Correo</label>
@@ -71,7 +77,13 @@ console.log(idDepartment.value)
         </div>
         <div class="field-input">
           <label>Telefono</label>
-          <input v-model="customer.phone" type="text" required />
+          <input
+            v-model="customer.phone"
+            type="number"
+            min="1000000000"
+            max="10000000000"
+            required
+          />
         </div>
         <div class="field-input">
           <label>Tipo de tienda</label>
@@ -109,11 +121,11 @@ console.log(idDepartment.value)
       <div class="detail-column">
         <div class="field-input">
           <label>Numero de tiendas</label>
-          <input v-model="customer.stores" type="number" required />
+          <input v-model="customer.stores" type="number" min="1" max="1000" required />
         </div>
         <div class="field-input">
           <label>Dirección</label>
-          <input v-model="customer.address" type="text" required />
+          <input v-model="customer.address" type="text" minlength="10" required />
         </div>
         <div class="field-input">
           <label>Despartamento</label>
