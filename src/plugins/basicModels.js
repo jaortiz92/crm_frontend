@@ -31,5 +31,28 @@ export const basicModels = {
     total_without_tax: 0,
     total_with_tax: 0,
     delivery_date: null
+  },
+  customerTrip: {
+    id_customer: null,
+    id_seller: null,
+    id_collection: null,
+    budget: null,
+    ordered: false,
+    comment: null
+  },
+  customer: {
+    company_name: null,
+    document: null,
+    email: null,
+    phone: null,
+    id_store_type: null,
+    address: null,
+    id_brand: null,
+    id_seller: null,
+    stores: null,
+    id_city: null,
+    active: true,
+    credit_limit: null,
+    with_documents: false
   }
 }

@@ -1,6 +1,8 @@
 <script setup>
 import { ref } from 'vue'
 import { useUserStore } from '@/stores/userStore.js'
+import { useRouter } from 'vue-router'
+import { useCustomerTripStore } from '@/stores/customerTripStore'
 
 import CustomerTripTable from '@/components/customer/customerTrip/CustomerTripTable.vue'
 import FilterForm from '@/components/FilterForm.vue'
@@ -16,6 +18,8 @@ const skip = 0
 const limit = 500
 const customerTrips = ref([])
 const filteredCustomerTrips = ref([])
+const router = useRouter()
+const customerTripStore = useCustomerTripStore()
 
 const addCustomersTrips = async () => {
   try {
@@ -68,10 +72,18 @@ const filter = (filterValues, checkboxTouched) => {
   )
 }
 
+const create = () => {
+  customerTripStore.clearCustomerTrip()
+  router.push('/customerTripForm')
+}
+
 addDataUser()
 </script>
 
 <template>
+  <div class="button-create">
+    <button @click="create">Crear</button>
+  </div>
   <main>
     <div>
       <h3>Viajes De Clientes</h3>

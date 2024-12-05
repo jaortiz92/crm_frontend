@@ -9,5 +9,11 @@ export const customerTripService = {
   },
   getCustomerTripsByCustomer: function (id_customer) {
     return axiosInstance.get(`/customer_trip/full/customer/${id_customer}`)
+  },
+  createCustomerTrip: function (customer_trip) {
+    return axiosInstance.post(`/customer_trip/`, customer_trip)
+  },
+  updateCustomerTrip: function (id_customer_trip, customer_trip) {
+    return axiosInstance.put(`/customer_trip/${id_customer_trip}`, customer_trip)
   }
 }

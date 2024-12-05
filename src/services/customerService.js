@@ -12,5 +12,11 @@ export const customerService = {
   },
   getContactsById: function (id_contact) {
     return axiosInstance.get(`/contact/full/${id_contact}`)
+  },
+  createCustomer: function (customer) {
+    return axiosInstance.post(`/customer/`, customer)
+  },
+  updateCustomer: function (id_customer, customer) {
+    return axiosInstance.put(`/customer/${id_customer}`, customer)
   }
 }

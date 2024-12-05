@@ -37,6 +37,8 @@ const submitLogin = async () => {
 <style scoped>
 input {
   width: 95%;
+  min-width: none;
+  max-width: none;
 }
 
 form {

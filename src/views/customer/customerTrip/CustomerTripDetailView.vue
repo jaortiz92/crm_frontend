@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+
+import { alertService } from '@/services/alertService'
 
 import { customerTripService } from '@/services/customerTripService'
 import { activityService } from '@/services/activityService'
@@ -11,12 +13,15 @@ import CustomerTripInfo from '@/components/customer/customerTrip/CustomerTripInf
 import ActivityTable from '@/components/activity/ActivityTable.vue'
 import OrderTable from '@/components/order/OrderTable.vue'
 import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
+import { useCustomerTripStore } from '@/stores/customerTripStore'
 
 const route = useRoute()
 const customerTrip = ref(null)
 const activities = ref([])
 const orders = ref([])
 const invoices = ref([])
+const customerTripStore = useCustomerTripStore()
+const router = useRouter()
 
 onMounted(async () => {
   const idCustomerTrip = route.params.id
@@ -25,6 +30,14 @@ onMounted(async () => {
   orders.value = (await orderService.getOrdersByCutomerTrip(idCustomerTrip)).data
   invoices.value = (await invoiceService.getInvoiceByCutomerTrip(idCustomerTrip)).data
 })
+
+const edit = async () => {
+  const responseUser = await alertService.editElement(customerTrip.value.id_customer_trip, 'Tarea')
+  if (responseUser.isConfirmed) {
+    customerTripStore.setCustomerTrip(customerTrip.value)
+    router.push('/customerTripForm')
+  }
+}
 </script>
 
 <template>
@@ -50,6 +63,9 @@ onMounted(async () => {
     <div class="invoices">
       <h2>Facturas</h2>
       <InvoiceTable :invoices="invoices" :items-scale="3"></InvoiceTable>
+    </div>
+    <div class="button-edit">
+      <button @click="edit">Editar</button>
     </div>
   </div>
   <div v-else>

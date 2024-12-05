@@ -1,0 +1,146 @@
+<script setup>
+import { defineProps, defineEmits, toRefs, ref } from 'vue'
+import { basicModels } from '@/plugins/basicModels'
+
+const props = defineProps({
+  initialCustomerTrip: {
+    type: Object,
+    default: () => basicModels.customerTrip
+  },
+  options: {
+    type: Object,
+    default: () => ({
+      customers: [],
+      users: [],
+      collections: []
+    })
+  },
+  isEdit: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const { initialCustomerTrip, isEdit } = toRefs(props)
+
+const customerTrip = ref({ ...initialCustomerTrip.value })
+
+const emit = defineEmits(['save'])
+const save = () => {
+  emit('save', customerTrip.value)
+}
+</script>
+
+<template>
+  <form @submit.prevent="save" class="form-customerTrip">
+    <div class="fields">
+      <div class="detail-column">
+        <div class="field-input">
+          <label>Cliente</label>
+          <select v-model="customerTrip.id_customer" required>
+            <option
+              v-for="option in options.customers"
+              :key="option.id_customer"
+              :value="option.id_customer"
+            >
+              {{ option.company_name }}
+            </option>
+          </select>
+        </div>
+        <div class="field-input">
+          <label>Vendedor</label>
+          <select v-model="customerTrip.id_seller" required>
+            <option v-for="option in options.users" :key="option.id_user" :value="option.id_user">
+              {{ option.first_name }} {{ option.last_name }}
+            </option>
+          </select>
+        </div>
+        <div class="field-input">
+          <label>Colección</label>
+          <select v-model="customerTrip.id_collection" required>
+            <option
+              v-for="option in options.collections"
+              :key="option.id_collection"
+              :value="option.id_collection"
+            >
+              {{ option.short_collection_name }} - {{ option.collection_name }}
+            </option>
+          </select>
+        </div>
+      </div>
+      <div class="detail-column">
+        <div class="field-input">
+          <label>Presupuesto</label>
+          <input v-model="customerTrip.budget" type="number" required />
+        </div>
+        <div class="field-input">
+          <label>¿Ordenó? </label
+          ><input v-model="customerTrip.ordered" type="checkbox" class="checkbox" />
+        </div>
+        <div class="field-input">
+          <label>Comentario</label>
+          <textarea v-model="customerTrip.comment"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="button-group">
+      <button type="submit">
+        {{ isEdit ? `Actualizar Viaje del cliente` : 'Crear Viaje del cliente' }}
+      </button>
+    </div>
+  </form>
+</template>
+
+<style scoped>
+.form-customerTrip {
+  max-width: 800px;
+  margin: 0 auto;
+  border: 1px solid var(--gray-border);
+  border-radius: 8px;
+  background-color: var(--background-light);
+  box-shadow: 0 4px 8px var(--shadow);
+}
+
+.fields {
+  display: flex;
+}
+
+.detail-column {
+  flex: 1 1 45%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.checkbox {
+  width: auto;
+}
+
+.company-name {
+  text-align: left;
+  margin: 5px;
+  padding: 5px;
+  border: 1px solid var(--gray-border);
+  color: var(--gray-border);
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+}
+
+button {
+  min-width: 150px;
+}
+
+@media (max-width: 480px) {
+  .form-customerTrip {
+    padding: 10px;
+  }
+
+  button {
+    font-size: 14px;
+  }
+}
+</style>

@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+
+import { alertService } from '@/services/alertService'
 
 import { customerService } from '@/services/customerService'
 import { customerTripService } from '@/services/customerTripService'
@@ -9,12 +11,15 @@ import { ratingService } from '@/services/ratingService'
 import ContactTable from '@/components/customer/contact/ContactTable.vue'
 import CustomerInfo from '@/components/customer/CustomerInfo.vue'
 import CustomerTripTable from '@/components/customer/customerTrip/CustomerTripTable.vue'
+import { useCustomerStore } from '@/stores/customerStore'
 
 const route = useRoute()
 const customer = ref(null)
 const contacts = ref([])
 const customerTrips = ref([])
 const lastRating = ref(null)
+const customerStore = useCustomerStore()
+const router = useRouter()
 
 onMounted(async () => {
   const idCustomer = route.params.id
@@ -23,6 +28,14 @@ onMounted(async () => {
   contacts.value = (await customerService.getContactsByCustomer(idCustomer)).data
   customerTrips.value = (await customerTripService.getCustomerTripsByCustomer(idCustomer)).data
 })
+
+const edit = async () => {
+  const responseUser = await alertService.editElement(customer.value.id_customer, 'Tarea')
+  if (responseUser.isConfirmed) {
+    customerStore.setCustomer(customer.value)
+    router.push('/customerForm')
+  }
+}
 </script>
 
 <template>
@@ -43,6 +56,9 @@ onMounted(async () => {
   </div>
   <div v-else>
     <p>Cargando detalles...</p>
+  </div>
+  <div class="button-edit">
+    <button @click="edit">Editar</button>
   </div>
 </template>
 
