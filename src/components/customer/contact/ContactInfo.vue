@@ -23,7 +23,7 @@ const close = () => {
       <h3>{{ contact.first_name }} {{ contact.last_name }}</h3>
     </template>
     <template #body>
-      <p><strong>Cliente:</strong> {{ contact.document }}</p>
+      <p><strong>Documento:</strong> {{ contact.document }}</p>
       <p><strong>Correo:</strong> {{ contact.email }}</p>
       <p><strong>Fecha Nacimiento:</strong> {{ contact.birth_date }}</p>
       <p><strong>Genero:</strong> {{ formatters.formatterGender(contact.gender) }}</p>

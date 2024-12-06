@@ -21,6 +21,7 @@ import OrderFormView from '@/views/order/OrderFormView.vue'
 import InvoiceFormView from '@/views/invoice/InvoiceFormView.vue'
 import CustomerTripFormView from '@/views/customer/customerTrip/CustomerTripFormView.vue'
 import CustomerFormView from '@/views/customer/CustomerFormView.vue'
+import ContactFormView from '@/views/customer/contact/ContactFormView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -142,6 +143,12 @@ const router = createRouter({
       path: '/customerForm',
       name: 'CustomerForm',
       component: CustomerFormView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/contactForm',
+      name: 'ContactForm',
+      component: ContactFormView,
       meta: { requiresAuth: true }
     }
 

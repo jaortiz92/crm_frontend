@@ -54,5 +54,18 @@ export const basicModels = {
     active: true,
     credit_limit: null,
     with_documents: false
+  },
+  contact: {
+    id_customer: null,
+    first_name: null,
+    last_name: null,
+    document: null,
+    gender: null,
+    email: null,
+    phone: null,
+    id_role: null,
+    birth_date: null,
+    id_city: null,
+    active: true
   }
 }
