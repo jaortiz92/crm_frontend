@@ -1,11 +1,16 @@
 <script setup>
 import { ref, computed, defineProps, toRefs } from 'vue'
 import { formatters } from '@/plugins/formatters.js'
+import { useRouter } from 'vue-router'
 
+import { alertService } from '@/services/alertService'
+import { useContactStore } from '@/stores/contactStore'
 import { customerService } from '@/services/customerService'
 
 import ContactInfo from '@/components/customer/contact/ContactInfo.vue'
 
+const contactStore = useContactStore()
+const router = useRouter()
 const itemsScale = ref(20)
 const itemsToShow = ref(itemsScale.value)
 const props = defineProps({
@@ -31,6 +36,14 @@ const showContactDetails = async (idContact) => {
   contact.value = (await customerService.getContactsById(idContact)).data
 
   isModalContactVisible.value = true
+}
+
+const edit = async (contact) => {
+  const responseUser = await alertService.editElement(contact.value.id_contact, 'Contacto')
+  if (responseUser.isConfirmed) {
+    contactStore.setContact(contact.value)
+    router.push('/contactForm')
+  }
 }
 </script>
 
@@ -76,6 +89,7 @@ const showContactDetails = async (idContact) => {
           :contact="contact"
           :isModalContactVisible="isModalContactVisible"
           @close="isModalContactVisible = close"
+          @edit="edit"
         ></ContactInfo>
       </div>
     </div>

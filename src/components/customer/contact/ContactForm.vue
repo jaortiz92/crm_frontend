@@ -11,9 +11,8 @@ const props = defineProps({
   options: {
     type: Object,
     default: () => ({
-      users: [],
-      storeTypes: [],
-      brands: [],
+      id_customer: null,
+      roles: [],
       departments: [],
       cities: []
     })
@@ -21,13 +20,21 @@ const props = defineProps({
   isEdit: {
     type: Boolean,
     default: false
+  },
+  customer: {
+    type: Object,
+    default: () => basicModels.customer
   }
 })
 
-const { initialContact, options, isEdit } = toRefs(props)
+const { initialContact, options, isEdit, customer } = toRefs(props)
 
 const contact = ref({ ...initialContact.value })
 const idDepartment = ref(null)
+
+if (customer.value.id_customer) {
+  contact.value.id_customer = customer.value.id_customer
+}
 
 const emit = defineEmits(['save'])
 const save = () => {
@@ -76,6 +83,14 @@ console.log(idDepartment.value)
           />
         </div>
         <div class="field-input">
+          <label>Genero</label>
+          <select v-model="contact.gender" required>
+            <option value="0">Sin definir</option>
+            <option value="1">Masculino</option>
+            <option value="2">Femenino</option>
+          </select>
+        </div>
+        <div class="field-input">
           <label>Correo</label>
           <input v-model="contact.email" type="email" required />
         </div>
@@ -89,47 +104,19 @@ console.log(idDepartment.value)
             required
           />
         </div>
-        <div class="field-input">
-          <label>Tipo de tienda</label>
-          <select v-model="contact.id_store_type" required>
-            <option
-              v-for="option in options.storeTypes"
-              :key="option.id_store_type"
-              :value="option.id_store_type"
-            >
-              {{ option.store_type }}
-            </option>
-          </select>
-        </div>
-        <div class="field-input">
-          <label>Marca</label>
-          <select v-model="contact.id_brand" required>
-            <option
-              v-for="option in options.brands"
-              :key="option.id_brand"
-              :value="option.id_brand"
-            >
-              {{ option.brand_name }}
-            </option>
-          </select>
-        </div>
-        <div class="field-input">
-          <label>Vendedor</label>
-          <select v-model="contact.id_seller" required>
-            <option v-for="option in options.users" :key="option.id_user" :value="option.id_user">
-              {{ option.first_name }} {{ option.last_name }}
-            </option>
-          </select>
-        </div>
       </div>
       <div class="detail-column">
         <div class="field-input">
-          <label>Numero de tiendas</label>
-          <input v-model="contact.stores" type="number" min="1" max="1000" required />
+          <label>Fechas de nacimiento</label>
+          <input v-model="contact.birth_date" type="date" max="2010-01-01" required />
         </div>
         <div class="field-input">
-          <label>Dirección</label>
-          <input v-model="contact.address" type="text" minlength="10" required />
+          <label>Rol</label>
+          <select v-model="contact.id_role" required>
+            <option v-for="option in options.roles" :key="option.id_role" :value="option.id_role">
+              {{ option.role_name }}
+            </option>
+          </select>
         </div>
         <div class="field-input">
           <label>Despartamento</label>
@@ -154,14 +141,6 @@ console.log(idDepartment.value)
         <div class="field-input">
           <label>¿Activo? </label
           ><input v-model="contact.active" type="checkbox" class="checkbox" />
-        </div>
-        <div class="field-input">
-          <label>Limite de credito</label>
-          <input v-model="contact.credit_limit" type="number" required />
-        </div>
-        <div class="field-input">
-          <label>¿Con documentos? </label
-          ><input v-model="contact.with_documents" type="checkbox" class="checkbox" />
         </div>
       </div>
     </div>

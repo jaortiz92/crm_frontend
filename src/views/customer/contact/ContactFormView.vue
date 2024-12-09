@@ -2,8 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContactStore } from '@/stores/contactStore'
-import { useStoreTypeService } from '@/services/storeTypeService'
-import { useBrandService } from '@/services/brandService'
+import { useCustomerStore } from '@/stores/customerStore'
 
 import { basicModels } from '@/plugins/basicModels'
 import { alertService } from '@/services/alertService'
@@ -11,20 +10,20 @@ import { alertService } from '@/services/alertService'
 import ContactFrom from '@/components/customer/contact/ContactForm.vue'
 
 import { customerService } from '@/services/customerService'
-import { userService } from '@/services/userService'
 import { useDepartmentService } from '@/services/departmentService'
+import { useRoleService } from '@/services/roleService'
 
 const options = ref({
-  users: [],
-  storeTypes: [],
-  brands: [],
+  roles: [],
   departments: [],
   cities: []
 })
 const contact = ref({})
+const customer = ref({})
 const isEdit = ref(false)
 const router = useRouter()
 const contactStore = useContactStore()
+const customerStore = useCustomerStore()
 
 if (contactStore.isThereContact()) {
   contact.value = contactStore.getContact()
@@ -33,14 +32,29 @@ if (contactStore.isThereContact()) {
   contact.value = basicModels.contact
 }
 
+if (customerStore.isThereCustomer()) {
+  customer.value = customerStore.getCustomer()
+} else {
+  customer.value.id_customer = null
+}
+
 onMounted(async () => {
-  options.value.users = (await userService.getUsers(0, 1000)).data
-  options.value.storeTypes = (await useStoreTypeService.getStoreTypes()).data
-  options.value.brands = (await useBrandService.getBrands()).data
   options.value.departments = (await useDepartmentService.getDepartments()).data
+  options.value.roles = (await useRoleService.getRoles()).data
 })
 
 const save = async (contact) => {
+  if (!contact.id_customer) {
+    contact.id_customer = (
+      await alertService.generalInput(
+        'Inserta ID',
+        'Ingresa el ID de la compañia al cual desea agregar el contacto',
+        'number',
+        'Es obligatorio agregar el ID'
+      )
+    ).value
+  }
+
   const validate = 'Validar numero de documento'
   contact.phone = contact.phone.toString()
   if (!isEdit.value) {
@@ -50,7 +64,7 @@ const save = async (contact) => {
         const response = await customerService.createContact(contact)
         const id = response.data.id_contact
         alertService.generalSucces(`El Contacto fue creado exitosamente con el ID ${id}`)
-        router.push(`contact/${id}`)
+        router.push(`customer/${contact.id_customer}`)
       } catch {
         alertService.generalError(`El Contacto no pudo ser creado. ${validate}`)
       }
@@ -63,7 +77,7 @@ const save = async (contact) => {
         alertService.generalSucces(
           `El Contacto con ID ${contact.id_contact}, fue actualizada exitosamente`
         )
-        router.push(`contact/${contact.id_contact}`)
+        router.push(`customer/${contact.id_customer}`)
       } catch {
         alertService.generalError(
           `El Contacto con ID ${contact.id_contact}, no pudo ser actualizada. ${validate}`
@@ -79,10 +93,14 @@ const save = async (contact) => {
     <h2>
       {{ isEdit ? `Actualizar Contacto: ID ${contact.id_contact}` : 'Crear Contacto' }}
     </h2>
+    <h2 v-if="customer.id_customer">
+      {{ `A la compañia: ${customer.company_name}` }}
+    </h2>
     <ContactFrom
       :initialContact="contact"
       :options="options"
       :isEdit="isEdit"
+      :customer="customer"
       @save="save"
     ></ContactFrom>
   </div>

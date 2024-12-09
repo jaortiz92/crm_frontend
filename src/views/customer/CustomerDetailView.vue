@@ -27,13 +27,20 @@ onMounted(async () => {
   customer.value = (await customerService.getCustomerFull(idCustomer)).data
   contacts.value = (await customerService.getContactsByCustomer(idCustomer)).data
   customerTrips.value = (await customerTripService.getCustomerTripsByCustomer(idCustomer)).data
+  customerStore.setCustomer(customer.value)
 })
 
 const edit = async () => {
-  const responseUser = await alertService.editElement(customer.value.id_customer, 'Tarea')
+  const responseUser = await alertService.editElement(customer.value.id_customer, 'Cliente')
   if (responseUser.isConfirmed) {
-    customerStore.setCustomer(customer.value)
     router.push('/customerForm')
+  }
+}
+
+const createContact = async () => {
+  const responseUser = await alertService.createElement('Contacto')
+  if (responseUser.isConfirmed) {
+    router.push('/contactForm')
   }
 }
 </script>
@@ -59,6 +66,7 @@ const edit = async () => {
   </div>
   <div class="button-edit">
     <button @click="edit">Editar</button>
+    <button @click="createContact">Crear Contacto</button>
   </div>
 </template>
 
@@ -74,6 +82,10 @@ const edit = async () => {
   background-color: var(--light-border);
   border-radius: var(--border-radius-size);
   box-shadow: 0 2px 10px var(--shadow);
+}
+
+.button-edit button {
+  margin: 2px;
 }
 
 .customer_additional {

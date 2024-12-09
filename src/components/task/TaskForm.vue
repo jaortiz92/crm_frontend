@@ -97,6 +97,12 @@ const save = () => {
   width: auto;
 }
 
+input,
+select,
+textarea {
+  max-width: none;
+}
+
 .company-name {
   text-align: left;
   margin: 5px;

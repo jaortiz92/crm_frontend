@@ -124,6 +124,12 @@ const validateAuthorization = () => {
   box-shadow: 0 4px 8px var(--shadow);
 }
 
+input,
+select,
+textarea {
+  max-width: none;
+}
+
 .checkbox {
   width: auto;
 }

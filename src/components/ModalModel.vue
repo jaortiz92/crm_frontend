@@ -6,9 +6,13 @@ const props = defineProps({
 })
 const { isVisible } = toRefs(props)
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'edit'])
 const close = () => {
   emit('close')
+}
+
+const edit = () => {
+  emit('edit')
 }
 </script>
 
@@ -28,7 +32,8 @@ const close = () => {
 
         <div class="modal-footer">
           <slot name="footer"> </slot>
-          <button @click="close">Close</button>
+          <button @click="close">Cerrar</button>
+          <button @click="edit">Editar</button>
         </div>
       </div>
     </div>
@@ -55,9 +60,13 @@ const close = () => {
   padding: 20px;
   border-radius: 10px;
   max-width: 600px;
-  width: 90%; /* Responsivo para pantallas más pequeñas */
+  width: 90%;
   position: relative;
   animation: fadeIn 0.3s ease-in-out;
+}
+
+.modal-footer button {
+  margin: 2px;
 }
 
 /* Animación para mostrar el modal */

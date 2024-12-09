@@ -11,14 +11,18 @@ const props = defineProps({
 })
 
 const { contact, isModalContactVisible } = toRefs(props)
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'edit'])
 const close = () => {
   emit('close')
+}
+
+const edit = () => {
+  emit('edit', contact)
 }
 </script>
 
 <template>
-  <ModalModel :isVisible="isModalContactVisible" @close="close">
+  <ModalModel :isVisible="isModalContactVisible" @close="close" @edit="edit">
     <template #header>
       <h3>{{ contact.first_name }} {{ contact.last_name }}</h3>
     </template>

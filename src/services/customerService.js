@@ -18,5 +18,11 @@ export const customerService = {
   },
   updateCustomer: function (id_customer, customer) {
     return axiosInstance.put(`/customer/${id_customer}`, customer)
+  },
+  createContact: function (contact) {
+    return axiosInstance.post(`/contact/`, contact)
+  },
+  updateContact: function (id_contact, contact) {
+    return axiosInstance.put(`/contact/${id_contact}`, contact)
   }
 }

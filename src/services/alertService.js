@@ -53,6 +53,20 @@ export const alertService = {
     })
     return response
   },
+  async generalInput(textTitle, text, type, messageToDoesAnswer) {
+    const response = await Swal.fire({
+      title: textTitle,
+      html: text,
+      input: type,
+      icon: 'question',
+      inputValidator: (value) => {
+        if (!value) {
+          return messageToDoesAnswer
+        }
+      }
+    })
+    return response
+  },
   async editElement(id, element) {
     return await this.generalQuestion(
       `¿Quiere editar el/la ${element}?`,
