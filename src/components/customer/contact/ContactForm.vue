@@ -146,7 +146,7 @@ console.log(idDepartment.value)
     </div>
     <div class="button-group">
       <button type="submit">
-        {{ isEdit ? `Actualizar Viaje del cliente` : 'Crear Viaje del cliente' }}
+        {{ isEdit ? `Actualizar Contacto` : 'Crear Contacto' }}
       </button>
     </div>
   </form>

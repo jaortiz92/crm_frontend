@@ -9,14 +9,17 @@ const props = defineProps({
 })
 
 const { rating, isModalRatingVisible } = toRefs(props)
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'edit'])
 const close = () => {
   emit('close')
+}
+const edit = () => {
+  emit('edit')
 }
 </script>
 
 <template>
-  <ModalModel :isVisible="isModalRatingVisible" @close="close">
+  <ModalModel :isVisible="isModalRatingVisible" @close="close" @edit="edit">
     <template #header>
       <h3>{{ rating.customer.company_name }}</h3>
     </template>

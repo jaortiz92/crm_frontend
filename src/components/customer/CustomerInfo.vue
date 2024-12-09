@@ -1,19 +1,25 @@
 <script setup>
 import { toRefs, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { formatters } from '@/plugins/formatters.js'
 
-import RatingInfo from './RatingInfo.vue'
+import RatingInfo from './rating/RatingInfo.vue'
 
 const props = defineProps({
   customer: Object,
   lastRating: Object
 })
 const { customer } = toRefs(props)
+const router = useRouter()
 
 const isModalRatingVisible = ref(false)
 
 const showRatingDetails = async () => {
   isModalRatingVisible.value = true
+}
+
+const editRating = async () => {
+  router.push(`/rating/${customer.value.id_customer}`)
 }
 </script>
 
@@ -88,6 +94,7 @@ const showRatingDetails = async () => {
       :rating="lastRating"
       :isModalRatingVisible="isModalRatingVisible"
       @close="isModalRatingVisible = close"
+      @edit="editRating"
     ></RatingInfo>
   </div>
 </template>

@@ -22,6 +22,8 @@ import InvoiceFormView from '@/views/invoice/InvoiceFormView.vue'
 import CustomerTripFormView from '@/views/customer/customerTrip/CustomerTripFormView.vue'
 import CustomerFormView from '@/views/customer/CustomerFormView.vue'
 import ContactFormView from '@/views/customer/contact/ContactFormView.vue'
+import RatingView from '@/views/customer/rating/RatingView.vue'
+import RatingFormView from '@/views/customer/rating/RatingFormView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -149,6 +151,18 @@ const router = createRouter({
       path: '/contactForm',
       name: 'ContactForm',
       component: ContactFormView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/rating/:id',
+      name: 'Ratings',
+      component: RatingView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/ratingForm',
+      name: 'RatingForm',
+      component: RatingFormView,
       meta: { requiresAuth: true }
     }
 

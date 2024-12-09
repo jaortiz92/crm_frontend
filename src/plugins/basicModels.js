@@ -67,5 +67,11 @@ export const basicModels = {
     birth_date: null,
     id_city: null,
     active: true
+  },
+  rating: {
+    id_customer: null,
+    id_rating_category: null,
+    date_updated: null,
+    comments: null
   }
 }

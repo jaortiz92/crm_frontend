@@ -12,6 +12,7 @@ import ContactTable from '@/components/customer/contact/ContactTable.vue'
 import CustomerInfo from '@/components/customer/CustomerInfo.vue'
 import CustomerTripTable from '@/components/customer/customerTrip/CustomerTripTable.vue'
 import { useCustomerStore } from '@/stores/customerStore'
+import { useContactStore } from '@/stores/contactStore'
 
 const route = useRoute()
 const customer = ref(null)
@@ -19,6 +20,7 @@ const contacts = ref([])
 const customerTrips = ref([])
 const lastRating = ref(null)
 const customerStore = useCustomerStore()
+const contactStore = useContactStore()
 const router = useRouter()
 
 onMounted(async () => {
@@ -40,6 +42,7 @@ const edit = async () => {
 const createContact = async () => {
   const responseUser = await alertService.createElement('Contacto')
   if (responseUser.isConfirmed) {
+    contactStore.clearContact()
     router.push('/contactForm')
   }
 }
