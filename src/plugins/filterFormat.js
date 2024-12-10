@@ -52,6 +52,18 @@ export const filterFormat = {
     type: 'text',
     placeholder: 'Filtrar por Responsable'
   },
+  creatorUser: {
+    key: 'creatorUser',
+    label: 'Creador',
+    type: 'text',
+    placeholder: 'Filtrar por Creador'
+  },
+  task: {
+    key: 'task',
+    label: 'Tarea',
+    type: 'text',
+    placeholder: 'Filtrar por tarea'
+  },
   activity: {
     key: 'activity',
     label: 'Actividad',
@@ -99,6 +111,18 @@ export const filterFormat = {
     label: 'Hasta fecha para ejecución',
     type: 'date',
     placeholder: 'Filtrar por fecha para ejecución'
+  },
+  completedDateFrom: {
+    key: 'completedDateFrom',
+    label: 'Desde fecha de completado',
+    type: 'date',
+    placeholder: 'Filtrar por fecha de completado'
+  },
+  completedDateUntil: {
+    key: 'completedDateUntil',
+    label: 'Hasta fecha de completado',
+    type: 'date',
+    placeholder: 'Filtrar por fecha de completado'
   },
   completed: {
     key: 'completed',

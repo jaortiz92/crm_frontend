@@ -21,7 +21,7 @@ const activityStore = useActivityStore()
 
 const addActivities = async () => {
   try {
-    const response = await activityService.getActivities(id_user.value)
+    const response = await activityService.getActivities()
     activities.value = response.data
     filteredActivities.value = [...activities.value]
   } catch (error) {

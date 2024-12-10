@@ -35,7 +35,7 @@ const showLess = () => {
           <th>Cliente</th>
           <th>Nivel</th>
           <th>Nombre Categoria</th>
-          <th>Creador</th>
+          <th>Creador o Modificador</th>
           <th>Comentarios</th>
           <th>Editar</th>
         </tr>

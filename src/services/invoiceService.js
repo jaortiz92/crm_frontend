@@ -2,7 +2,7 @@ import axiosInstance from '@/plugins/axios'
 
 export const invoiceService = {
   getInvoices: function () {
-    return axiosInstance.get(`/invoice/full/`)
+    return axiosInstance.get(`/invoice/full/?skip=0&limit=100`)
   },
   getInvoiceByCutomerTrip: function (id_customer_trip) {
     return axiosInstance.get(`/invoice/customer_trip/${id_customer_trip}`)
