@@ -23,6 +23,7 @@ onMounted(async () => {
     customer.value = customerStore.getCustomer()
   } else {
     customer.value = (await customerService.getCustomerFull(idCustomer)).data
+    customerStore.setCustomer(customer)
   }
   ratings.value = (await ratingService.getRatingsByCustomer(idCustomer)).data
 })
@@ -46,7 +47,12 @@ const createRating = async () => {
 
 <template>
   <div class="ratings" v-if="ratings && customer">
-    <h2>Evaluaciones del cliente {{ customer.company_name }}</h2>
+    <h2>
+      Evaluaciones del cliente
+      <router-link :to="{ name: 'CustomerDetail', params: { id: customer.id_customer } }">{{
+        customer.company_name
+      }}</router-link>
+    </h2>
     <p>{{ customer.document }}</p>
     <div class="ratings-detail">
       <RatingTable :ratings="ratings" @edit="edit"></RatingTable>

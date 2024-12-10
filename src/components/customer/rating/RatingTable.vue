@@ -33,8 +33,9 @@ const showLess = () => {
           <th>ID Categoria</th>
           <th>Fecha Actualizacion</th>
           <th>Cliente</th>
-          <th>Nombre Categoria</th>
           <th>Nivel</th>
+          <th>Nombre Categoria</th>
+          <th>Creador</th>
           <th>Comentarios</th>
           <th>Editar</th>
         </tr>
@@ -44,8 +45,9 @@ const showLess = () => {
           <td>{{ item.id_rating }}</td>
           <td>{{ item.date_updated }}</td>
           <td>{{ item.customer.company_name }}</td>
-          <td>{{ item.rating_category.rating_category }}</td>
           <td>{{ item.rating_category.level }}</td>
+          <td>{{ item.rating_category.rating_category }}</td>
+          <td>{{ item.creator.first_name }} {{ item.creator.last_name }}</td>
           <td>{{ item.comments }}</td>
           <td>
             <div class="link" @click="edit(item)">Editar</div>
