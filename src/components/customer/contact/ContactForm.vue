@@ -77,7 +77,7 @@ console.log(idDepartment.value)
           <input
             v-model="contact.document"
             type="number"
-            min="100000000"
+            min="10000000"
             max="3000000000"
             required
           />

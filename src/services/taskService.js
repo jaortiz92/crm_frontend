@@ -24,5 +24,8 @@ export const taskService = {
   },
   updateTask: function (id_task, task) {
     return axiosInstance.put(`/task/${id_task}`, task)
+  },
+  getTasksByCustomer: function (id_customer) {
+    return axiosInstance.get(`/task/query/?id_customer=${id_customer}`)
   }
 }
