@@ -42,6 +42,7 @@ const addAllTasks = async () => {
   try {
     const response = await taskService.getAllTasks()
     tasksAll.value = response.data
+    filteredTasksAll.value = [...tasksAll.value]
   } catch (error) {
     alertService.generalError('Las tareas no se pudieron cargar')
   }
@@ -78,42 +79,31 @@ const filter = (filterValues, checkboxTouched) => {
   filteredTasksAll.value = tasksAll.value.filter(
     (task) =>
       (!filterValues.companyName ||
-        task.customer_trip.customer.company_name
+        task.customer.company_name
           .toLowerCase()
           .includes(filterValues.companyName.toLowerCase())) &&
-      (!filterValues.lineName ||
-        task.customer_trip.collection.line.line_name
+      (!filterValues.creatorUser ||
+        task.creator_tasks.last_name
           .toLowerCase()
-          .includes(filterValues.lineName.toLowerCase())) &&
-      (!filterValues.seller ||
-        task.customer_trip.seller.last_name
+          .includes(filterValues.creatorUser.toLowerCase()) ||
+        task.creator_tasks.first_name
           .toLowerCase()
-          .includes(filterValues.seller.toLowerCase()) ||
-        task.customer_trip.seller.first_name
-          .toLowerCase()
-          .includes(filterValues.seller.toLowerCase())) &&
-      (!filterValues.shortCollectionName ||
-        task.customer_trip.collection.short_collection_name
-          .toLowerCase()
-          .includes(filterValues.shortCollectionName.toLowerCase())) &&
+          .includes(filterValues.creatorUser.toLowerCase())) &&
+      (!filterValues.task || task.task.toLowerCase().includes(filterValues.task.toLowerCase())) &&
+      (!filterValues.city ||
+        task.customer.city.city_name.toLowerCase().includes(filterValues.city.toLowerCase())) &&
       (!filterValues.responsibleUser ||
-        task.user_activities.last_name
+        task.responsible_task.last_name
           .toLowerCase()
           .includes(filterValues.responsibleUser.toLowerCase()) ||
-        task.user_activities.first_name
+        task.responsible_task.first_name
           .toLowerCase()
           .includes(filterValues.responsibleUser.toLowerCase())) &&
-      (!filterValues.task ||
-        task.task_type.task.toLowerCase().includes(filterValues.task.toLowerCase())) &&
-      (!filterValues.city ||
-        task.customer_trip.customer.city.city_name
-          .toLowerCase()
-          .includes(filterValues.city.toLowerCase())) &&
       (!checkboxTouched.completed || task.completed === filterValues.completed) &&
       (!filterValues.creationDateFrom || task.creation_date >= filterValues.creationDateFrom) &&
       (!filterValues.creationDateUntil || task.creation_date <= filterValues.creationDateUntil) &&
-      (!filterValues.estimatedDateFrom || task.estimated_date >= filterValues.estimatedDateFrom) &&
-      (!filterValues.estimatedDateUntil || task.estimated_date <= filterValues.estimatedDateUntil)
+      (!filterValues.completedDateFrom || task.execution_date >= filterValues.completedDateFrom) &&
+      (!filterValues.completedDateUntil || task.execution_date <= filterValues.completedDateUntil)
   )
 }
 
@@ -139,7 +129,5 @@ addDataUser()
       <FilterForm :filterFields="taskFilterFields" @filter="filter" />
       <TaskTable :tasks="filteredTasksAll" :additionalInfo="true"></TaskTable>
     </div>
-    {{ filteredTasksAll }}
-    {{ tasksAll }}
   </main>
 </template>
