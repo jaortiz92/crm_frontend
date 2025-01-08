@@ -74,6 +74,10 @@ const save = () => {
           <input v-model="customerTrip.budget" type="number" required />
         </div>
         <div class="field-input">
+          <label>Presupuesto Cantidades</label>
+          <input v-model="customerTrip.budget_quantities" type="number" required />
+        </div>
+        <div class="field-input">
           <label>¿Ordenó? </label
           ><input v-model="customerTrip.ordered" type="checkbox" class="checkbox" />
         </div>

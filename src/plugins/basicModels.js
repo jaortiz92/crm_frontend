@@ -37,6 +37,7 @@ export const basicModels = {
     id_seller: null,
     id_collection: null,
     budget: null,
+    budget_quantities: null,
     ordered: false,
     comment: null
   },

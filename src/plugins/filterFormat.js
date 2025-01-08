@@ -40,6 +40,18 @@ export const filterFormat = {
     type: 'number',
     placeholder: 'Filtrar por presupuesto hasta'
   },
+  budgetQuantitiesFrom: {
+    key: 'budgetQuantitiesFrom',
+    label: 'Presupuesto cantidades desde',
+    type: 'number',
+    placeholder: 'Filtrar por presupuesto cantidades desde'
+  },
+  budgetQuantitiesUntil: {
+    key: 'budgetQuantitiesUntil',
+    label: 'Presupuesto cantidades hasta',
+    type: 'number',
+    placeholder: 'Filtrar por presupuesto cantidades hasta'
+  },
   ordered: {
     key: 'ordered',
     label: 'Ordenó',

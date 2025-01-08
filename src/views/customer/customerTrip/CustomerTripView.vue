@@ -45,6 +45,8 @@ const customerFilterFields = [
   filterFormat.seller,
   filterFormat.budgetFrom,
   filterFormat.budgetUntil,
+  filterFormat.budgetQuantitiesFrom,
+  filterFormat.budgetQuantitiesUntil,
   filterFormat.ordered
 ]
 
@@ -68,6 +70,10 @@ const filter = (filterValues, checkboxTouched) => {
         customerTrip.seller.first_name.toLowerCase().includes(filterValues.seller.toLowerCase())) &&
       (!filterValues.budgetFrom || customerTrip.budget >= filterValues.budgetFrom) &&
       (!filterValues.budgetUntil || customerTrip.budget <= filterValues.budgetUntil) &&
+      (!filterValues.budgetQuantitiesFrom ||
+        customerTrip.budget_quantities >= filterValues.budgetQuantitiesFrom) &&
+      (!filterValues.budgetQuantitiesUntil ||
+        customerTrip.budget_quantities <= filterValues.budgetQuantitiesUntil) &&
       (!checkboxTouched.ordered || customerTrip.ordered === filterValues.ordered)
   )
 }

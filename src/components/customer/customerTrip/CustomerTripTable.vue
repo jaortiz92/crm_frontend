@@ -41,6 +41,7 @@ const showAll = () => {
           <th>Colección</th>
           <th>Fecha Temporada</th>
           <th>Presupuesto</th>
+          <th>Presupuesto Cantidades</th>
           <th>Linea</th>
           <th>Asesor</th>
           <th>Ordenó</th>
@@ -54,6 +55,7 @@ const showAll = () => {
           <td>{{ item.collection.short_collection_name }}</td>
           <td>{{ item.collection.year }} Q{{ item.collection.quarter }}</td>
           <td>{{ formatters.formatterGeneralNumber(item.budget) }}</td>
+          <td>{{ formatters.formatterGeneralNumber(item.budget_quantities) }}</td>
           <td>{{ item.collection.line.line_name }}</td>
           <td>{{ item.seller.first_name }} {{ item.seller.last_name }}</td>
           <td :class="{ checkbox: true, checked: item.ordered }"></td>
