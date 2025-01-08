@@ -28,6 +28,9 @@ const showMore = () => {
 const showLess = () => {
   itemsToShow.value -= itemsScale.value
 }
+const showAll = () => {
+  itemsToShow.value = contacts.value.length
+}
 
 const contact = ref(null)
 const isModalContactVisible = ref(false)
@@ -76,6 +79,9 @@ const edit = async (contact) => {
       </tbody>
     </table>
     <div class="buttons-to-show">
+      <button class="button-all" v-if="itemsToShow < contacts.length" @click="showAll">
+        Mostrar Todo
+      </button>
       <button class="button-less" v-if="itemsToShow > itemsScale" @click="showLess">
         Mostrar menos
       </button>

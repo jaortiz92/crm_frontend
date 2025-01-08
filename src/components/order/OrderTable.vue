@@ -29,6 +29,9 @@ const showMore = () => {
 const showLess = () => {
   itemsToShow.value -= itemsScale.value
 }
+const showAll = () => {
+  itemsToShow.value = orders.value.length
+}
 </script>
 
 <template>
@@ -72,6 +75,9 @@ const showLess = () => {
       </tbody>
     </table>
     <div class="buttons-to-show">
+      <button class="button-all" v-if="itemsToShow < orders.length" @click="showAll">
+        Mostrar Todo
+      </button>
       <button class="button-less" v-if="itemsToShow > itemsScale" @click="showLess">
         Mostrar menos
       </button>
