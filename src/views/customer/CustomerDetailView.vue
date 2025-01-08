@@ -15,6 +15,7 @@ import CustomerInfo from '@/components/customer/CustomerInfo.vue'
 import CustomerTripTable from '@/components/customer/customerTrip/CustomerTripTable.vue'
 import ActivityTable from '@/components/activity/ActivityTable.vue'
 import TaskTable from '@/components/task/TaskTable.vue'
+import CustomerSummaryTable from '@/components/customer/CustomerSummaryTable.vue'
 import { useCustomerStore } from '@/stores/customerStore'
 import { useContactStore } from '@/stores/contactStore'
 
@@ -23,6 +24,7 @@ const idCustomer = route.params.id
 const customer = ref(null)
 const contacts = ref([])
 const customerTrips = ref([])
+const customerSummary = ref([])
 const lastRating = ref(null)
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
@@ -37,6 +39,7 @@ onMounted(async () => {
   contacts.value = (await customerService.getContactsByCustomer(idCustomer)).data
   customerTrips.value = (await customerTripService.getCustomerTripsByCustomer(idCustomer)).data
   customerStore.setCustomer(customer.value)
+  customerSummary.value = (await customerService.getCustomerSummary(idCustomer)).data
 })
 
 const edit = async () => {
@@ -79,6 +82,10 @@ const activateShowAll = async () => {
   </div>
   <div v-else>
     <p>Cargando detalles...</p>
+  </div>
+  <div class="customer_summary">
+    <h2>Resumen</h2>
+    <CustomerSummaryTable :customerSummary="customerSummary"></CustomerSummaryTable>
   </div>
   <div class="button-edit">
     <button v-if="!showAll" @click="activateShowAll">Mostrar MasInformación</button>

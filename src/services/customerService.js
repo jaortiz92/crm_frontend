@@ -24,5 +24,8 @@ export const customerService = {
   },
   updateContact: function (id_contact, contact) {
     return axiosInstance.put(`/contact/${id_contact}`, contact)
+  },
+  getCustomerSummary: function (id_customer) {
+    return axiosInstance.get(`/query/customer_summary/${id_customer}`)
   }
 }
