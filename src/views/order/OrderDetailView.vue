@@ -6,16 +6,19 @@ import { alertService } from '@/services/alertService'
 
 import { orderService } from '@/services/orderService'
 import { invoiceService } from '@/services/invoiceService'
+import { advanceService } from '@/services/advanceService'
 
 import OrderDetailTable from '@/components/order/OrderDetailTable.vue'
 import OrderInfo from '@/components/order/OrderInfo.vue'
 import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
+import AdvanceTable from '@/components/advance/AdvanceTable.vue'
 import { useOrderStore } from '@/stores/orderStore'
 
 const route = useRoute()
 const orderDetails = ref([])
 const order = ref(null)
 const invoices = ref([])
+const advances = ref([])
 const orderStore = useOrderStore()
 const router = useRouter()
 
@@ -27,13 +30,22 @@ onMounted(async () => {
     delete order.value.order_details
   }
   invoices.value = (await invoiceService.getInvoiceByOrder(idOrder)).data
+  advances.value = (await advanceService.getAdvanceByIdOrder(idOrder)).data
 })
 
 const edit = async () => {
-  const responseUser = await alertService.editElement(order.value.id_order, 'Tarea')
+  const responseUser = await alertService.editElement(order.value.id_order, 'Orden')
   if (responseUser.isConfirmed) {
     orderStore.setOrder(order.value)
     router.push('/orderForm')
+  }
+}
+
+const createAdvance = async () => {
+  const responseUser = await alertService.createElement('Anticipo')
+  if (responseUser.isConfirmed) {
+    orderStore.setOrder(order.value)
+    router.push(`/advanceForm/${orderDetails.value.id_order}`)
   }
 }
 </script>
@@ -43,6 +55,13 @@ const edit = async () => {
     <div class="order">
       <div class="order-header">
         <OrderInfo :order="order"></OrderInfo>
+      </div>
+      <div>
+        <h2>Anticipos</h2>
+        <AdvanceTable :advances="advances"></AdvanceTable>
+        <div class="button-edit">
+          <button @click="createAdvance">Crear Anticipo</button>
+        </div>
       </div>
       <div>
         <h2>Facturas</h2>

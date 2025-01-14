@@ -75,6 +75,10 @@ const { order } = toRefs(props)
           <p><strong>Fecha de Entrega acordada:</strong></p>
           <p>{{ order.delivery_date }}</p>
         </div>
+        <div class="detail-row">
+          <p><strong>Forma de pago acordada:</strong></p>
+          <p>{{ order.payment_method.payment_method_name }}</p>
+        </div>
       </div>
     </div>
   </div>

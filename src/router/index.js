@@ -24,6 +24,7 @@ import CustomerFormView from '@/views/customer/CustomerFormView.vue'
 import ContactFormView from '@/views/customer/contact/ContactFormView.vue'
 import RatingView from '@/views/customer/rating/RatingView.vue'
 import RatingFormView from '@/views/customer/rating/RatingFormView.vue'
+import AdvanceFormView from '@/views/advance/AdvanceFormView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -163,6 +164,12 @@ const router = createRouter({
       path: '/ratingForm',
       name: 'RatingForm',
       component: RatingFormView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/advanceForm/:idOrder/:id?',
+      name: 'AdvanceForm',
+      component: AdvanceFormView,
       meta: { requiresAuth: true }
     }
 

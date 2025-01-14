@@ -26,7 +26,7 @@ onMounted(async () => {
 })
 
 const edit = async () => {
-  const responseUser = await alertService.editElement(invoice.value.id_invoice, 'Tarea')
+  const responseUser = await alertService.editElement(invoice.value.id_invoice, 'Factura')
   if (responseUser.isConfirmed) {
     invoiceStore.setInvoice(invoice.value)
     router.push('/invoiceForm')

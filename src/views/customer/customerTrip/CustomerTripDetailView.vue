@@ -32,7 +32,10 @@ onMounted(async () => {
 })
 
 const edit = async () => {
-  const responseUser = await alertService.editElement(customerTrip.value.id_customer_trip, 'Tarea')
+  const responseUser = await alertService.editElement(
+    customerTrip.value.id_customer_trip,
+    'Viaje del Cliente'
+  )
   if (responseUser.isConfirmed) {
     customerTripStore.setCustomerTrip(customerTrip.value)
     router.push('/customerTripForm')

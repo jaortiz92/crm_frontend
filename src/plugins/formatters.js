@@ -20,6 +20,9 @@ export const formatters = {
     }
     return value
   },
+  formattedPercentage: function (value) {
+    return value != null ? `${value * 100}%` : ''
+  },
   validateFormatterInvoice: function (text) {
     try {
       text = text.toUpperCase()

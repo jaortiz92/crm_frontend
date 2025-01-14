@@ -74,5 +74,15 @@ export const basicModels = {
     id_rating_category: null,
     date_updated: null,
     comments: null
+  },
+  advance: {
+    id_order: null,
+    payment_date: null,
+    advance_type: 0,
+    amount: 0,
+    payment: 0,
+    balance: null,
+    paid: null,
+    last_payment_date: null
   }
 }

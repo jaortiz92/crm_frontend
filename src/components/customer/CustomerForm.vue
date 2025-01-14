@@ -50,7 +50,6 @@ onMounted(async () => {
   idDepartment.value = await generateDepartment()
   updateCity()
 })
-console.log(idDepartment.value)
 </script>
 
 <template>
