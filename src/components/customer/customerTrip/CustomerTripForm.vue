@@ -1,6 +1,7 @@
 <script setup>
 import { defineProps, defineEmits, toRefs, ref } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
+import { formatters } from '@/plugins/formatters'
 
 const props = defineProps({
   initialCustomerTrip: {
@@ -71,11 +72,17 @@ const save = () => {
       <div class="detail-column">
         <div class="field-input">
           <label>Presupuesto</label>
-          <input v-model="customerTrip.budget" type="number" required />
+          <div class="input-number">
+            <input v-model="customerTrip.budget" type="number" required />
+            <p>{{ formatters.formatterGeneralNumber(customerTrip.budget) }}</p>
+          </div>
         </div>
         <div class="field-input">
           <label>Presupuesto Cantidades</label>
-          <input v-model="customerTrip.budget_quantities" type="number" required />
+          <div class="input-number">
+            <input v-model="customerTrip.budget_quantities" type="number" required />
+            <p>{{ formatters.formatterGeneralNumber(customerTrip.budget_quantities) }}</p>
+          </div>
         </div>
         <div class="field-input">
           <label>¿Ordenó? </label

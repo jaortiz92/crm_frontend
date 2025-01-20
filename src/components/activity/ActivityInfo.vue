@@ -85,7 +85,7 @@ const { activity } = toRefs(props)
       <div class="detail-column">
         <div class="detail-row">
           <p>
-            <strong>Presupuesto:</strong>
+            <strong>Presupuesto de Gasto:</strong>
           </p>
           <p>{{ formatters.formatterGeneralNumber(activity.budget) }}</p>
         </div>

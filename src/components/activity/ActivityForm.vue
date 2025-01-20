@@ -86,7 +86,7 @@ const validateAuthorization = () => {
       <input v-model="activity.estimated_date" type="date" required />
     </div>
     <div class="field-input">
-      <label>Presupuesto</label>
+      <label>Presupuesto de Gasto</label>
       <input v-model="activity.budget" type="number" required />
     </div>
     <div class="field-input">

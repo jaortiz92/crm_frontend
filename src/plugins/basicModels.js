@@ -54,7 +54,8 @@ export const basicModels = {
     id_city: null,
     active: true,
     credit_limit: null,
-    with_documents: false
+    with_documents: false,
+    relevant_details: null
   },
   contact: {
     id_customer: null,

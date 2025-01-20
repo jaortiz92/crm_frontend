@@ -94,7 +94,7 @@ onMounted(async () => {
           <input v-model="contact.email" type="email" required />
         </div>
         <div class="field-input">
-          <label>Telefono</label>
+          <label>Celular(Telefono)</label>
           <input
             v-model="contact.phone"
             type="number"
@@ -118,7 +118,7 @@ onMounted(async () => {
           </select>
         </div>
         <div class="field-input">
-          <label>Despartamento</label>
+          <label>Departamento</label>
           <select @change="updateCity" v-model="idDepartment" required>
             <option
               v-for="option in options.departments"

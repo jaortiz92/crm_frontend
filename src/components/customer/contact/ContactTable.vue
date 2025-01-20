@@ -58,7 +58,7 @@ const edit = async (contact) => {
           <th>ID Contacto</th>
           <th>Nombre Cliente</th>
           <th>Documento</th>
-          <th>Telefono</th>
+          <th>Celular(Telefono)</th>
           <th>Cargo</th>
           <th>Detalles</th>
         </tr>

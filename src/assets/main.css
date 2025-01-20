@@ -196,3 +196,13 @@ tbody tr:hover {
   flex-direction: column;
   margin-bottom: 15px;
 }
+
+.input-number {
+  display: flex;
+}
+
+.input-number p {
+  margin: 5px;
+  padding: 5px;
+  min-width: 100px;
+}

@@ -32,7 +32,7 @@ const showAll = () => {
           <th>ID Cliente</th>
           <th>Nombre Cliente</th>
           <th>Documento</th>
-          <th>Telefono</th>
+          <th>Celular(Telefono)</th>
           <th>Activo</th>
           <th>Detalles</th>
         </tr>

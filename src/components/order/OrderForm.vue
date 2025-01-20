@@ -1,6 +1,7 @@
 <script setup>
 import { defineProps, defineEmits, toRefs, ref } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
+import { formatters } from '@/plugins/formatters'
 
 const props = defineProps({
   initialOrder: {
@@ -28,6 +29,14 @@ const details = ref(false)
 const emit = defineEmits(['save'])
 const save = () => {
   emit('save', order.value)
+}
+
+const updateTotalValue = () => {
+  order.value.total_with_tax = Math.round(order.value.total_without_tax * 1.19, 0)
+}
+
+const updateWithoutTaxValue = () => {
+  order.value.total_without_tax = Math.round(order.value.total_with_tax / 1.19, 0)
 }
 </script>
 
@@ -71,19 +80,43 @@ const save = () => {
       <div class="detail-column">
         <div class="field-input">
           <label>Cantidad de prendas</label>
-          <input v-model="order.total_quantities" required orderStore type="number" />
+          <div class="input-number">
+            <input v-model="order.total_quantities" required orderStore type="number" />
+            <p>{{ formatters.formatterGeneralNumber(order.total_quantities) }}</p>
+          </div>
         </div>
         <div class="field-input">
           <label>Cantidades en sistema</label>
-          <input v-model="order.system_quantities" required orderStore type="number" />
+          <div class="input-number">
+            <input v-model="order.system_quantities" required orderStore type="number" />
+            <p>{{ formatters.formatterGeneralNumber(order.system_quantities) }}</p>
+          </div>
         </div>
         <div class="field-input">
           <label>Valor sin IVA</label>
-          <input v-model="order.total_without_tax" required orderStore type="number" />
+          <div class="input-number">
+            <input
+              @change="updateTotalValue"
+              v-model="order.total_without_tax"
+              required
+              orderStore
+              type="number"
+            />
+            <p>{{ formatters.formatterGeneralNumber(order.total_without_tax) }}</p>
+          </div>
         </div>
         <div class="field-input">
           <label>Valor Total</label>
-          <input v-model="order.total_with_tax" required orderStore type="number" />
+          <div class="input-number">
+            <input
+              @change="updateWithoutTaxValue"
+              v-model="order.total_with_tax"
+              required
+              orderStore
+              type="number"
+            />
+            <p>{{ formatters.formatterGeneralNumber(order.total_with_tax) }}</p>
+          </div>
         </div>
         <div class="field-input">
           <label>¿Agregar detalles? </label

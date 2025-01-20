@@ -34,7 +34,7 @@ const editRating = async () => {
     <p>{{ customer.email }}</p>
   </div>
   <div class="detail-row">
-    <p><strong>Telefono:</strong></p>
+    <p><strong>Celular(Telefono):</strong></p>
     <p>{{ formatters.formatterPhoneNumber(customer.phone) }}</p>
   </div>
   <div class="detail-row">
@@ -89,6 +89,15 @@ const editRating = async () => {
       <span :class="{ checkbox: true, checked: customer.active }"></span>
     </p>
   </div>
+  <div class="detail-column">
+    <p>
+      <strong>Detalles relevantes:</strong>
+    </p>
+    <p class="space-for-text" v-if="customer.relevant_details">
+      {{ customer.relevant_details }}
+    </p>
+    <p class="space-for-text" v-else>Sin Detalles</p>
+  </div>
   <div>
     <RatingInfo
       :rating="lastRating"
@@ -135,5 +144,17 @@ const editRating = async () => {
 
 .rating-detail:hover {
   cursor: pointer;
+}
+
+.space-for-text {
+  text-align: justify;
+  white-space: pre-wrap;
+}
+
+.detail-column {
+  flex: 1 1 45%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 </style>

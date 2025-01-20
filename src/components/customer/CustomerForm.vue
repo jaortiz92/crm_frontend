@@ -75,7 +75,7 @@ onMounted(async () => {
           <input v-model="customer.email" type="email" required />
         </div>
         <div class="field-input">
-          <label>Telefono</label>
+          <label>Celular(Celular(Telefono))</label>
           <input
             v-model="customer.phone"
             type="number"
@@ -116,6 +116,10 @@ onMounted(async () => {
             </option>
           </select>
         </div>
+        <div class="field-input">
+          <label>Detalles relevantes</label>
+          <textarea v-model="customer.relevant_details"></textarea>
+        </div>
       </div>
       <div class="detail-column">
         <div class="field-input">
@@ -127,7 +131,7 @@ onMounted(async () => {
           <input v-model="customer.address" type="text" minlength="10" required />
         </div>
         <div class="field-input">
-          <label>Despartamento</label>
+          <label>Departamento</label>
           <select @change="updateCity" v-model="idDepartment" required>
             <option
               v-for="option in options.departments"
