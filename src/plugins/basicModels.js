@@ -48,7 +48,7 @@ export const basicModels = {
     phone: null,
     id_store_type: null,
     address: null,
-    id_brand: null,
+    brand_ids: [],
     id_seller: null,
     stores: null,
     id_city: null,

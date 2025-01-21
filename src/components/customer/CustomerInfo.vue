@@ -50,14 +50,6 @@ const editRating = async () => {
     <p>{{ customer.store_type.store_type }}</p>
   </div>
   <div class="detail-row">
-    <p><strong>Marca:</strong></p>
-    <p>{{ customer.brand.brand_name }}</p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Linea:</strong></p>
-    <p>{{ customer.brand.line.line_name }}</p>
-  </div>
-  <div class="detail-row">
     <p>
       <strong>Asesor:</strong>
     </p>
@@ -88,6 +80,18 @@ const editRating = async () => {
     <p>
       <span :class="{ checkbox: true, checked: customer.active }"></span>
     </p>
+  </div>
+  <div class="detail-column">
+    <p><strong>Marcas:</strong></p>
+
+    <div v-if="customer.brands.length == 0">
+      <p class="space-for-text">Sin Marcas</p>
+    </div>
+    <div v-else>
+      <p class="space-for-text" v-for="brand in customer.brands" :key="brand.brand_name">
+        - {{ brand.brand_name }}: {{ brand.line.line_name }}
+      </p>
+    </div>
   </div>
   <div class="detail-column">
     <p>
@@ -149,6 +153,7 @@ const editRating = async () => {
 .space-for-text {
   text-align: justify;
   white-space: pre-wrap;
+  margin: 1px;
 }
 
 .detail-column {

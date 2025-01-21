@@ -27,6 +27,9 @@ const props = defineProps({
 const { initialCustomer, options, isEdit } = toRefs(props)
 
 const customer = ref({ ...initialCustomer.value })
+
+customer.value.brand_ids = customer.value.brands.map((brand) => brand.id_brand)
+
 const idDepartment = ref(null)
 
 const emit = defineEmits(['save'])
@@ -97,18 +100,6 @@ onMounted(async () => {
           </select>
         </div>
         <div class="field-input">
-          <label>Marca</label>
-          <select v-model="customer.id_brand" required>
-            <option
-              v-for="option in options.brands"
-              :key="option.id_brand"
-              :value="option.id_brand"
-            >
-              {{ option.brand_name }}
-            </option>
-          </select>
-        </div>
-        <div class="field-input">
           <label>Vendedor</label>
           <select v-model="customer.id_seller" required>
             <option v-for="option in options.users" :key="option.id_user" :value="option.id_user">
@@ -162,6 +153,19 @@ onMounted(async () => {
           <label>¿Con documentos? </label
           ><input v-model="customer.with_documents" type="checkbox" class="checkbox" />
         </div>
+        <div class="field-input">
+          <label>Marca</label>
+          <select multiple v-model="customer.brand_ids" required>
+            <option
+              v-for="option in options.brands"
+              :key="option.id_brand"
+              :value="option.id_brand"
+            >
+              {{ option.brand_name }}
+            </option>
+          </select>
+        </div>
+        <div class="field-input"></div>
       </div>
     </div>
     <div class="button-group">
