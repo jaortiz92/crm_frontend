@@ -2,6 +2,7 @@
 import { defineProps, defineEmits, toRefs, ref } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
 import { alertService } from '@/services/alertService'
+import { formatters } from '@/plugins/formatters'
 
 const props = defineProps({
   initialActivity: {
@@ -40,15 +41,29 @@ const alertByAuthorization = () => {
   )
 }
 
+const alertByBudgetAuthorization = () => {
+  alertService.generalWarning(
+    'Actividad con gasto mayor',
+    'Recuerde que solo debe gastar el valor autorizado.'
+  )
+}
+
 const validateAuthorization = () => {
   if (
-    (activity.value.completed & (activity.value.budget > 0)) |
-    (activity.value.completed & (activity.value.execution_value > 0))
+    ((activity.value.completed & (activity.value.budget > 0)) |
+      (activity.value.completed & (activity.value.execution_value > 0))) &
+    !activity.value.authorized
   ) {
     activity.value.completed = false
     activity.value.execution_value = 0
 
     alertByAuthorization()
+    return false
+  } else if (
+    activity.value.completed &
+    (activity.value.execution_value > activity.value.budget_authorized)
+  ) {
+    alertByBudgetAuthorization()
     return false
   }
   return true
@@ -85,9 +100,12 @@ const validateAuthorization = () => {
       <label>Fecha Estimada</label>
       <input v-model="activity.estimated_date" type="date" required />
     </div>
-    <div class="field-input">
+    <div class="field-number">
       <label>Presupuesto de Gasto</label>
-      <input v-model="activity.budget" type="number" required />
+      <div class="input-number">
+        <input v-model="activity.budget" type="number" required />
+        <p>{{ formatters.formatterGeneralNumber(activity.budget) }}</p>
+      </div>
     </div>
     <div class="field-input">
       <label>¿Completado?</label>
@@ -104,7 +122,10 @@ const validateAuthorization = () => {
     </div>
     <div v-if="activity.completed" class="field-input">
       <label>Valor Ejecutado</label>
-      <input v-model="activity.execution_value" type="number" required />
+      <div class="input-number">
+        <input v-model="activity.execution_value" type="number" required />
+        <p>{{ formatters.formatterGeneralNumber(activity.execution_value) }}</p>
+      </div>
     </div>
     <div class="field-input">
       <label>Comentario</label>

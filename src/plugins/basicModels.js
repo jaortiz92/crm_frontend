@@ -19,7 +19,10 @@ export const basicModels = {
     completed: false,
     execution_value: 0,
     comment: null,
-    creation_date: null
+    creation_date: null,
+    authorizer: null,
+    authorized: false,
+    budget_authorized: null
   },
   order: {
     id_customer_trip: null,

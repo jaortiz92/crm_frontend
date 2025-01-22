@@ -1,7 +1,7 @@
 <script setup>
 import { defineProps, defineEmits, toRefs, ref, onMounted } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
-import { useCityService } from '@/services/cityService'
+import { cityService } from '@/services/cityService'
 
 const props = defineProps({
   initialContact: {
@@ -42,12 +42,12 @@ const save = () => {
 }
 
 const updateCity = async () => {
-  options.value.cities = (await useCityService.getCitiesByDepartment(idDepartment.value)).data
+  options.value.cities = (await cityService.getCitiesByDepartment(idDepartment.value)).data
 }
 
 const generateDepartment = async () => {
   if (isEdit.value) {
-    return (await useCityService.getCityById(initialContact.value.id_city)).data.id_department
+    return (await cityService.getCityById(initialContact.value.id_city)).data.id_department
   } else {
     return null
   }

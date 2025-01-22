@@ -110,7 +110,7 @@ const { activity } = toRefs(props)
           </p>
         </div>
         <div class="detail-row">
-          <p><strong>Autorizado:</strong></p>
+          <p><strong>Autorizadó:</strong></p>
           <p>
             <span :class="{ checkbox: true, checked: activity.authorized }"></span>
           </p>
@@ -124,8 +124,15 @@ const { activity } = toRefs(props)
           <p v-else>{{ activity.budget > 0 ? 'Sin autorizar' : 'No necesario' }}</p>
         </div>
         <div class="detail-row">
+          <p><strong>Fecha Autorizadó:</strong></p>
+          <p v-if="activity.authorizer_activities">
+            {{ activity.date_authorized }}
+          </p>
+          <p v-else>{{ activity.budget > 0 ? 'Sin autorizar' : 'No necesario' }}</p>
+        </div>
+        <div class="detail-row">
           <p>
-            <strong>Valor Autorizado:</strong>
+            <strong>Valor Autorizadó:</strong>
           </p>
           <p>{{ formatters.formatterGeneralNumber(activity.budget_authorized) }}</p>
         </div>

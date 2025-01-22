@@ -24,5 +24,8 @@ export const activityService = {
   },
   getActivitiesByCustomer: function (id_customer) {
     return axiosInstance.get(`/activity/query/?id_customer=${id_customer}`)
+  },
+  authorizeActivity: function (id_activity, activityAutho) {
+    return axiosInstance.put(`/activity/authorize/${id_activity}`, activityAutho)
   }
 }

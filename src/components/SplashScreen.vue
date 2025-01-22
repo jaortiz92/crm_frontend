@@ -31,7 +31,7 @@ h1 span {
   left: 0;
   width: 100%;
   height: 100%;
-  background: var(--background-light);
+  background: var(--text-white);
   color: var(--text-black);
   display: flex;
   justify-content: center;

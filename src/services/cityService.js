@@ -1,6 +1,6 @@
 import axiosInstance from '@/plugins/axios'
 
-export const useCityService = {
+export const cityService = {
   getCities: function () {
     return axiosInstance.get(`/city/?skip=0&limit=10000`)
   },

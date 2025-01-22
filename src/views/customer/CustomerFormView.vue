@@ -2,8 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCustomerStore } from '@/stores/customerStore'
-import { useStoreTypeService } from '@/services/storeTypeService'
-import { useBrandService } from '@/services/brandService'
+import { storeTypeService } from '@/services/storeTypeService'
+import { brandService } from '@/services/brandService'
 
 import { basicModels } from '@/plugins/basicModels'
 import { alertService } from '@/services/alertService'
@@ -12,7 +12,7 @@ import CustomerFrom from '@/components/customer/CustomerForm.vue'
 
 import { customerService } from '@/services/customerService'
 import { userService } from '@/services/userService'
-import { useDepartmentService } from '@/services/departmentService'
+import { departmentService } from '@/services/departmentService'
 
 const options = ref({
   users: [],
@@ -35,9 +35,9 @@ if (customerStore.isThereCustomer()) {
 
 onMounted(async () => {
   options.value.users = (await userService.getUsers(0, 1000)).data
-  options.value.storeTypes = (await useStoreTypeService.getStoreTypes()).data
-  options.value.brands = (await useBrandService.getBrands()).data
-  options.value.departments = (await useDepartmentService.getDepartments()).data
+  options.value.storeTypes = (await storeTypeService.getStoreTypes()).data
+  options.value.brands = (await brandService.getBrands()).data
+  options.value.departments = (await departmentService.getDepartments()).data
 })
 
 const save = async (customer) => {

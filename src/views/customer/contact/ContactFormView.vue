@@ -10,8 +10,8 @@ import { alertService } from '@/services/alertService'
 import ContactFrom from '@/components/customer/contact/ContactForm.vue'
 
 import { customerService } from '@/services/customerService'
-import { useDepartmentService } from '@/services/departmentService'
-import { useRoleService } from '@/services/roleService'
+import { departmentService } from '@/services/departmentService'
+import { roleService } from '@/services/roleService'
 
 const options = ref({
   roles: [],
@@ -39,8 +39,8 @@ if (customerStore.isThereCustomer()) {
 }
 
 onMounted(async () => {
-  options.value.departments = (await useDepartmentService.getDepartments()).data
-  options.value.roles = (await useRoleService.getRoles()).data
+  options.value.departments = (await departmentService.getDepartments()).data
+  options.value.roles = (await roleService.getRoles()).data
 })
 
 const save = async (contact) => {
