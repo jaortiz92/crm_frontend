@@ -11,6 +11,7 @@ import { invoiceService } from '@/services/invoiceService'
 
 import CustomerTripInfo from '@/components/customer/customerTrip/CustomerTripInfo.vue'
 import ActivityTable from '@/components/activity/ActivityTable.vue'
+import CustomerTripSummaryTable from '@/components/customer/customerTrip/CustomerTripSummaryTable.vue'
 import OrderTable from '@/components/order/OrderTable.vue'
 import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
 import { useCustomerTripStore } from '@/stores/customerTripStore'
@@ -22,6 +23,7 @@ const orders = ref([])
 const invoices = ref([])
 const customerTripStore = useCustomerTripStore()
 const router = useRouter()
+const customerTripSummary = ref([])
 
 onMounted(async () => {
   const idCustomerTrip = route.params.id
@@ -29,6 +31,9 @@ onMounted(async () => {
   activities.value = (await activityService.getActivitiesByCutomerTrip(idCustomerTrip)).data
   orders.value = (await orderService.getOrdersByCutomerTrip(idCustomerTrip)).data
   invoices.value = (await invoiceService.getInvoiceByCutomerTrip(idCustomerTrip)).data
+  customerTripSummary.value = (
+    await customerTripService.getCustomerTripSummary(idCustomerTrip)
+  ).data
 })
 
 const edit = async () => {
@@ -53,6 +58,11 @@ const edit = async () => {
         <CustomerTripInfo :customerTrip="customerTrip"></CustomerTripInfo>
       </div>
       <div class="customer-trip-additional">
+        <div class="customer_trip_summary">
+          <CustomerTripSummaryTable
+            :customerTripSummary="customerTripSummary"
+          ></CustomerTripSummaryTable>
+        </div>
         <div class="activities">
           <h2>Actividades</h2>
           <ActivityTable :activities="activities" :itemsScale="3"></ActivityTable>
