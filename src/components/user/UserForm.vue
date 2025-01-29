@@ -3,51 +3,41 @@ import { defineProps, defineEmits, toRefs, ref, onMounted } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
 import { cityService } from '@/services/cityService'
 
+// Props
 const props = defineProps({
-  initialContact: {
+  initialUser: {
     type: Object,
-    default: () => basicModels.contact
+    default: () => basicModels.user
   },
   options: {
     type: Object,
     default: () => ({
-      id_customer: null,
-      roles: [],
-      departments: [],
       cities: []
     })
   },
   isEdit: {
     type: Boolean,
     default: false
-  },
-  customer: {
-    type: Object,
-    default: () => basicModels.customer
   }
 })
 
-const { initialContact, options, isEdit, customer } = toRefs(props)
+const { initialUser, options, isEdit } = toRefs(props)
 
-const contact = ref({ ...initialContact.value })
-const idDepartment = ref(null)
-
-if (customer.value.id_customer) {
-  contact.value.id_customer = customer.value.id_customer
-}
+const user = ref({ ...initialUser.value })
 
 const emit = defineEmits(['save'])
 const save = () => {
-  emit('save', contact.value)
+  emit('save', user.value)
 }
 
+const idDepartment = ref(null)
 const updateCity = async () => {
   options.value.cities = (await cityService.getCitiesByDepartment(idDepartment.value)).data
 }
 
 const generateDepartment = async () => {
   if (isEdit.value) {
-    return (await cityService.getCityById(initialContact.value.id_city)).data.id_department
+    return (await cityService.getCityById(initialUser.value.id_city)).data.id_department
   } else {
     return null
   }
@@ -62,62 +52,50 @@ onMounted(async () => {
 </script>
 
 <template>
-  <form @submit.prevent="save" class="form-contact">
+  <form @submit.prevent="save" class="form-user">
     <div class="fields">
       <div class="detail-column">
+        <div v-if="!isEdit" class="field-input">
+          <label>Username</label>
+          <input v-model="user.username" type="text" minlength="3" required />
+        </div>
+        <div v-if="!isEdit" class="field-input">
+          <label>Clave</label>
+          <input v-model="user.password" type="password" minlength="6" required />
+        </div>
         <div class="field-input">
           <label>Nombres</label>
-          <input v-model="contact.first_name" type="text" minlength="5" required />
+          <input v-model="user.first_name" type="text" minlength="2" required />
         </div>
         <div class="field-input">
           <label>Apellidos</label>
-          <input v-model="contact.last_name" type="text" minlength="5" required />
+          <input v-model="user.last_name" type="text" minlength="2" required />
         </div>
         <div class="field-input">
           <label>Documento</label>
-          <input
-            v-model="contact.document"
-            type="number"
-            min="10000000"
-            max="3000000000"
-            required
-          />
+          <input v-model="user.document" type="number" min="10000000" max="3000000000" required />
         </div>
         <div class="field-input">
+          <label>Fecha de nacimiento</label>
+          <input v-model="user.birth_date" type="date" required />
+        </div>
+      </div>
+      <div class="detail-column">
+        <div class="field-input">
           <label>Genero</label>
-          <select v-model="contact.gender" required>
+          <select v-model="user.gender" required>
             <option value="0">Sin definir</option>
             <option value="1">Masculino</option>
             <option value="2">Femenino</option>
           </select>
         </div>
         <div class="field-input">
-          <label>Correo</label>
-          <input v-model="contact.email" type="email" required />
+          <label>Email</label>
+          <input v-model="user.email" type="email" required />
         </div>
         <div class="field-input">
-          <label>Celular(Telefono)</label>
-          <input
-            v-model="contact.phone"
-            type="number"
-            min="1000000000"
-            max="10000000000"
-            required
-          />
-        </div>
-      </div>
-      <div class="detail-column">
-        <div class="field-input">
-          <label>Fechas de nacimiento</label>
-          <input v-model="contact.birth_date" type="date" max="2010-01-01" required />
-        </div>
-        <div class="field-input">
-          <label>Rol</label>
-          <select v-model="contact.id_role" required>
-            <option v-for="option in options.roles" :key="option.id_role" :value="option.id_role">
-              {{ option.role_name }}
-            </option>
-          </select>
+          <label>Celular</label>
+          <input v-model="user.phone" type="text" minlength="10" maxlength="15" required />
         </div>
         <div class="field-input">
           <label>Departamento</label>
@@ -133,28 +111,24 @@ onMounted(async () => {
         </div>
         <div class="field-input">
           <label>Ciudad</label>
-          <select v-model="contact.id_city" required>
+          <select v-model="user.id_city" required>
             <option v-for="option in options.cities" :key="option.id_city" :value="option.id_city">
               {{ option.city_name }}
             </option>
           </select>
         </div>
-        <div class="field-input">
-          <label>¿Activo? </label
-          ><input v-model="contact.active" type="checkbox" class="checkbox" />
-        </div>
       </div>
     </div>
     <div class="button-group">
       <button type="submit">
-        {{ isEdit ? `Actualizar Contacto` : 'Crear Contacto' }}
+        {{ isEdit ? 'Actualizar Usuario' : 'Crear Usuario' }}
       </button>
     </div>
   </form>
 </template>
 
 <style scoped>
-.form-contact {
+.form-user {
   max-width: 800px;
   margin: 0 auto;
   border: 1px solid var(--gray-border);
@@ -177,14 +151,6 @@ onMounted(async () => {
   width: auto;
 }
 
-.company-name {
-  text-align: left;
-  margin: 5px;
-  padding: 5px;
-  border: 1px solid var(--gray-border);
-  color: var(--gray-border);
-}
-
 .button-group {
   display: flex;
   gap: 10px;
@@ -197,7 +163,7 @@ button {
 }
 
 @media (max-width: 480px) {
-  .form-contact {
+  .form-customer {
     padding: 10px;
   }
 

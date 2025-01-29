@@ -88,5 +88,17 @@ export const basicModels = {
     balance: null,
     paid: null,
     last_payment_date: null
+  },
+  user: {
+    first_name: null,
+    last_name: null,
+    document: null,
+    gender: null,
+    username: null,
+    email: null,
+    phone: null,
+    id_city: null,
+    birth_date: null,
+    password: null
   }
 }

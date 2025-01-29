@@ -25,6 +25,7 @@ import ContactFormView from '@/views/customer/contact/ContactFormView.vue'
 import RatingView from '@/views/customer/rating/RatingView.vue'
 import RatingFormView from '@/views/customer/rating/RatingFormView.vue'
 import AdvanceFormView from '@/views/advance/AdvanceFormView.vue'
+import UserFormView from '@/views/user/UserFormView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -171,6 +172,20 @@ const router = createRouter({
       name: 'AdvanceForm',
       component: AdvanceFormView,
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/userForm/edit-create/:status',
+      name: 'UserForm',
+      component: UserFormView,
+      meta: { requiresAuth: true },
+      beforeEnter: (to, from, next) => {
+        const validStatuses = ['create', 'me']
+        if (validStatuses.includes(to.params.status)) {
+          next()
+        } else {
+          next('/')
+        }
+      }
     }
 
     /*    {

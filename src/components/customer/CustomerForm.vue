@@ -51,7 +51,9 @@ const generateDepartment = async () => {
 
 onMounted(async () => {
   idDepartment.value = await generateDepartment()
-  updateCity()
+  if (idDepartment.value) {
+    updateCity()
+  }
 })
 </script>
 

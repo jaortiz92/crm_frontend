@@ -75,12 +75,12 @@ const save = async (contact) => {
       try {
         await customerService.updateContact(contact.id_contact, contact)
         alertService.generalSucces(
-          `El Contacto con ID ${contact.id_contact}, fue actualizada exitosamente`
+          `El Contacto con ID ${contact.id_contact}, fue actualizado exitosamente`
         )
         router.push(`customer/${contact.id_customer}`)
       } catch {
         alertService.generalError(
-          `El Contacto con ID ${contact.id_contact}, no pudo ser actualizada. ${validate}`
+          `El Contacto con ID ${contact.id_contact}, no pudo ser actualizado. ${validate}`
         )
       }
     }

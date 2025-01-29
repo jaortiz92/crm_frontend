@@ -9,5 +9,11 @@ export const userService = {
   },
   getUsers: function (skip, limit) {
     return axiosInstance.get(`/user/?skip=${skip}&limit=${limit}`)
+  },
+  createUser: function (user) {
+    return axiosInstance.post(`/user/`, user)
+  },
+  updateUser: function (id_user, user) {
+    return axiosInstance.put(`/user/${id_user}`, user)
   }
 }
