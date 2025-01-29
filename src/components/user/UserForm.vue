@@ -3,7 +3,6 @@ import { defineProps, defineEmits, toRefs, ref, onMounted } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
 import { cityService } from '@/services/cityService'
 
-// Props
 const props = defineProps({
   initialUser: {
     type: Object,
@@ -12,6 +11,7 @@ const props = defineProps({
   options: {
     type: Object,
     default: () => ({
+      departments: [],
       cities: []
     })
   },

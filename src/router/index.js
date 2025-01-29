@@ -26,6 +26,7 @@ import RatingView from '@/views/customer/rating/RatingView.vue'
 import RatingFormView from '@/views/customer/rating/RatingFormView.vue'
 import AdvanceFormView from '@/views/advance/AdvanceFormView.vue'
 import UserFormView from '@/views/user/UserFormView.vue'
+import UserDetailView from '@/views/user/UserDetailView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -186,6 +187,12 @@ const router = createRouter({
           next('/')
         }
       }
+    },
+    {
+      path: '/user/me',
+      name: 'UserDetail',
+      component: UserDetailView,
+      meta: { requiresAuth: true }
     }
 
     /*    {

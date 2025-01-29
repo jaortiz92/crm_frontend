@@ -15,5 +15,8 @@ export const userService = {
   },
   updateUser: function (id_user, user) {
     return axiosInstance.put(`/user/${id_user}`, user)
+  },
+  getUser: function (id_user) {
+    return axiosInstance.get(`/user/full/${id_user}`)
   }
 }

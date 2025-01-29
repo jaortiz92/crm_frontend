@@ -35,7 +35,10 @@ watch(
   <div class="header">
     <div :class="{ 'logo-logged': hasToken, 'logo-login': !hasToken }">
       <img src="@/assets/logo.svg" alt="Logo" />
-      <h4 v-if="hasToken">Bienvenido {{ first_name }} {{ last_name }}</h4>
+      <h4 v-if="hasToken" class="welcome">
+        Bienvenido
+        <router-link :to="{ name: 'UserDetail' }"> {{ first_name }} {{ last_name }} </router-link>
+      </h4>
     </div>
     <nav v-show="hasToken" class="nav">
       <div>
@@ -133,5 +136,13 @@ a:hover {
 .button-nav.router-link-active,
 a.router-link-active {
   font-weight: bold;
+}
+
+.welcome a {
+  color: var(--text-black);
+}
+
+.welcome a:hover {
+  color: var(--text-white);
 }
 </style>

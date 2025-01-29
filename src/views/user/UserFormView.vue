@@ -12,6 +12,7 @@ import UserForm from '@/components/user/UserForm.vue'
 import { departmentService } from '@/services/departmentService'
 
 const options = ref({
+  departments: [],
   cities: []
 })
 const user = ref({})
@@ -40,8 +41,8 @@ const save = async (userData) => {
       try {
         const response = await userService.createUser(userData)
         const id = response.data.id_user
-        alertService.generalSuccess(`El Usuario fue creado exitosamente con el ID ${id}`)
-        router.push(`user/${id}`)
+        alertService.generalSucces(`El Usuario fue creado exitosamente con el ID ${id}`)
+        router.push(`/user/me`)
       } catch {
         alertService.generalError(`El Usuario no pudo ser creado. ${validate}`)
       }
@@ -51,10 +52,10 @@ const save = async (userData) => {
     if (responseUser.isConfirmed) {
       try {
         await userService.updateUser(userData.id_user, userData)
-        alertService.generalSuccess(
+        alertService.generalSucces(
           `El Contacto con ID ${userData.id_user}, fue actualizado exitosamente`
         )
-        router.push(`user/${userData.id_user}`)
+        router.push(`/user/me`)
       } catch {
         alertService.generalError(
           `El Contacto con ID  ${userData.id_user}, no pudo ser actualizado. ${validate}`
