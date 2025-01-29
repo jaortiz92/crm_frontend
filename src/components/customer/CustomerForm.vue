@@ -2,6 +2,7 @@
 import { defineProps, defineEmits, toRefs, ref, onMounted } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
 import { cityService } from '@/services/cityService'
+import { formatters } from '@/plugins/formatters'
 
 const props = defineProps({
   initialCustomer: {
@@ -27,8 +28,9 @@ const props = defineProps({
 const { initialCustomer, options, isEdit } = toRefs(props)
 
 const customer = ref({ ...initialCustomer.value })
-
-customer.value.brand_ids = customer.value.brands.map((brand) => brand.id_brand)
+if (customer.value.brands) {
+  customer.value.brand_ids = customer.value.brands.map((brand) => brand.id_brand)
+}
 
 const idDepartment = ref(null)
 
@@ -80,14 +82,17 @@ onMounted(async () => {
           <input v-model="customer.email" type="email" required />
         </div>
         <div class="field-input">
-          <label>Celular(Celular(Telefono))</label>
-          <input
-            v-model="customer.phone"
-            type="number"
-            min="1000000000"
-            max="10000000000"
-            required
-          />
+          <label>Celular(Telefono)</label>
+          <div class="input-number">
+            <input
+              v-model="customer.phone"
+              type="number"
+              min="1000000000"
+              max="10000000000"
+              required
+            />
+            <p>{{ formatters.formatterPhoneNumber(customer.phone) }}</p>
+          </div>
         </div>
         <div class="field-input">
           <label>Tipo de tienda</label>
@@ -149,7 +154,10 @@ onMounted(async () => {
         </div>
         <div class="field-input">
           <label>Limite de credito</label>
-          <input v-model="customer.credit_limit" type="number" required />
+          <div class="input-number">
+            <input v-model="customer.credit_limit" type="number" required />
+            <p>{{ formatters.formatterGeneralNumber(customer.credit_limit) }}</p>
+          </div>
         </div>
         <div class="field-input">
           <label>¿Con documentos? </label

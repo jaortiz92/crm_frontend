@@ -15,10 +15,17 @@ export const formatters = {
   formatterPhoneNumber: function (value) {
     const cleaned = ('' + value).replace(/\D/g, '')
     const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/)
+
     if (match) {
-      return match[1] + '-' + match[2] + '-' + match[3]
+      return `${match[1]}-${match[2]}-${match[3]}`
     }
-    return value
+
+    const chunks = []
+    for (let i = 0; i < cleaned.length; i += 3) {
+      chunks.push(cleaned.slice(i, i + 3))
+    }
+
+    return chunks.join('-')
   },
   formattedPercentage: function (value) {
     return value != null ? `${value * 100}%` : ''
