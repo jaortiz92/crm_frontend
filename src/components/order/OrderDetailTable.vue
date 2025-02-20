@@ -37,6 +37,7 @@ const showAll = () => {
         <tr>
           <th>Item</th>
           <th>Producto</th>
+          <th>Descripción</th>
           <th>Marca</th>
           <th>Color</th>
           <th>Talla</th>
@@ -51,6 +52,7 @@ const showAll = () => {
         <tr v-for="(item, index) in limitedItems" :key="item.id_order_detail">
           <td>{{ index + 1 }}</td>
           <td>{{ item.product }}</td>
+          <td>{{ item.description }}</td>
           <td>{{ item.brand.brand_name }}</td>
           <td>{{ item.color }}</td>
           <td>{{ item.size }}</td>
