@@ -9,7 +9,7 @@ const colors = {
 }
 
 export const alertService = {
-  generalError(text) {
+  async generalError(text) {
     Swal.fire({
       icon: 'error',
       title: 'Oops...',
@@ -17,7 +17,7 @@ export const alertService = {
       confirmButtonColor: colors.errorColor
     })
   },
-  generalSucces(text) {
+  async generalSucces(text) {
     Swal.fire({
       icon: 'success',
       title: 'Completado Exitosamente',
@@ -25,7 +25,7 @@ export const alertService = {
       confirmButtonColor: colors.succesColor
     })
   },
-  generalInformation(textTitle, text) {
+  async generalInformation(textTitle, text) {
     Swal.fire({
       icon: 'info',
       title: textTitle,
@@ -33,7 +33,7 @@ export const alertService = {
       confirmButtonColor: colors.succesColor
     })
   },
-  generalWarning(textTitle, text) {
+  async generalWarning(textTitle, text) {
     Swal.fire({
       icon: 'warning',
       title: textTitle,

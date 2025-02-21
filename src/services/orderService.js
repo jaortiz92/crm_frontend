@@ -18,5 +18,12 @@ export const orderService = {
   },
   updateOrder: function (id_order, order) {
     return axiosInstance.put(`/order/${id_order}`, order)
+  },
+  createOrderDetails: function (id_order, details) {
+    return axiosInstance.post(`/order_detail/file/${id_order}`, details, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
   }
 }

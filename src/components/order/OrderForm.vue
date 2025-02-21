@@ -3,6 +3,8 @@ import { defineProps, defineEmits, toRefs, ref } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
 import { formatters } from '@/plugins/formatters'
 
+import { alertService } from '@/services/alertService'
+
 const props = defineProps({
   initialOrder: {
     type: Object,
@@ -25,10 +27,11 @@ const { initialOrder, options, isEdit } = toRefs(props)
 
 const order = ref({ ...initialOrder.value })
 const details = ref(false)
+const file = ref(null)
 
 const emit = defineEmits(['save'])
 const save = () => {
-  emit('save', order.value)
+  emit('save', order.value, file.value)
 }
 
 const updateTotalValue = () => {
@@ -37,6 +40,18 @@ const updateTotalValue = () => {
 
 const updateWithoutTaxValue = () => {
   order.value.total_without_tax = Math.round(order.value.total_with_tax / 1.19, 0)
+}
+
+const handleFileUpload = (event) => {
+  file.value = event.target.files[0]
+
+  const validTypes = ['xlsx', 'xlsm']
+  const extension = file.value.name.split('.').pop().toLowerCase()
+
+  if (!validTypes.includes(extension)) {
+    alertService.generalError('Solo se permiten archivos xlsx o xlsm')
+    file.value = null
+  }
 }
 </script>
 
@@ -124,7 +139,13 @@ const updateWithoutTaxValue = () => {
         </div>
         <div v-if="details" class="field-input">
           <label for="document">Documento:</label>
-          <input type="file" id="document" @change="handleFileUpload" required />
+          <input
+            type="file"
+            id="document"
+            @change="handleFileUpload"
+            accept=".xlsx,.xlsm"
+            required
+          />
         </div>
       </div>
     </div>
