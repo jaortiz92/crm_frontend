@@ -45,19 +45,18 @@ const save = async (order, file) => {
     order.execution_date = null
   }
 
+  let id
+  let flag = 0
+
   if (!isEdit.value) {
     const responseUser = await alertService.createElement('Orden')
     if (responseUser.isConfirmed) {
       isLoading.value = true
       try {
         const response = await orderService.createOrder(order)
-        const id = response.data.id_order
-        if (file) {
-          await saveFile(id, file)
-        }
-
+        id = response.data.id_order
         alertService.generalSucces(`La Orden fue creadá exitosamente con el ID ${id}`)
-        router.push(`order/${id}`)
+        flag = 1
       } catch {
         alertService.generalError(`La Orden no pudo ser creada.`)
       }
@@ -68,17 +67,30 @@ const save = async (order, file) => {
       isLoading.value = true
       try {
         await orderService.updateOrder(order.id_order, order)
-        if (file) {
-          await saveFile(order.id_order, file)
-        }
+        id = order.id_order
         alertService.generalSucces(
           `La Orden con ID ${order.id_order}, fue actualizada exitosamente`
         )
-        router.push(`order/${order.id_order}`)
+        flag = 1
       } catch {
         alertService.generalError(`La Orden con ID ${order.id_order}, no pudo ser actualizada`)
       }
     }
+  }
+
+  if (file) {
+    try {
+      await saveFile(id, file)
+      alertService.generalSucces(
+        `Los Detalles para la orden con ID ${id}, fueron cargados exitosamente`
+      )
+    } catch {
+      alertService.generalError(`Los Detalles para la orden con ID ${id}, no pudieron ser cargados`)
+    }
+  }
+
+  if (flag === 1) {
+    router.push(`order/${id}`)
   }
 
   isLoading.value = false
