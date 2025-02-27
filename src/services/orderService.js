@@ -19,11 +19,14 @@ export const orderService = {
   updateOrder: function (id_order, order) {
     return axiosInstance.put(`/order/${id_order}`, order)
   },
-  createOrderDetails: function (id_order, details) {
-    return axiosInstance.post(`/order_detail/file/${id_order}`, details, {
+  createOrderDetails: function (id_order, details, type_format) {
+    return axiosInstance.post(`/order_detail/file/${id_order}/${type_format}`, details, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
     })
+  },
+  getOrderDetailsByBrandAndIdOrder: function (id_order) {
+    return axiosInstance.get(`/order_detail/by_brand/${id_order}`)
   }
 }

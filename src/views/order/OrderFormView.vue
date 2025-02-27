@@ -34,10 +34,10 @@ onMounted(async () => {
   options.value.paymentMethods = (await paymentMethodService.getPaymentMethodService()).data
 })
 
-const saveFile = async (id_order, file) => {
+const saveFile = async (id_order, file, type_format) => {
   const formData = new FormData()
   formData.append('details', file)
-  return await orderService.createOrderDetails(id_order, formData)
+  return await orderService.createOrderDetails(id_order, formData, type_format)
 }
 
 const save = async (order, file) => {
@@ -80,7 +80,7 @@ const save = async (order, file) => {
 
   if (file) {
     try {
-      await saveFile(id, file)
+      await saveFile(id, file, order.type_format)
       alertService.generalSucces(
         `Los Detalles para la orden con ID ${id}, fueron cargados exitosamente`
       )

@@ -41,15 +41,19 @@ const { order } = toRefs(props)
           </p>
           <p>{{ order.seller.first_name }} {{ order.seller.last_name }}</p>
         </div>
-      </div>
-      <div class="detail-column">
         <div class="detail-row">
           <p><strong>Colección:</strong></p>
           <p>{{ order.customer_trip.collection.short_collection_name }}</p>
         </div>
+      </div>
+      <div class="detail-column">
         <div class="detail-row">
           <p><strong>Prendas:</strong></p>
           <p>{{ order.total_quantities }}</p>
+        </div>
+        <div class="detail-row">
+          <p><strong>Prendas Cargadas:</strong></p>
+          <p>{{ order.system_quantities }}</p>
         </div>
         <div class="detail-row">
           <p>

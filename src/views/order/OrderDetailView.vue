@@ -13,9 +13,11 @@ import OrderInfo from '@/components/order/OrderInfo.vue'
 import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
 import AdvanceTable from '@/components/advance/AdvanceTable.vue'
 import { useOrderStore } from '@/stores/orderStore'
+import OrderDetailByBrandTable from '@/components/order/OrderDetailByBrandTable.vue'
 
 const route = useRoute()
 const orderDetails = ref([])
+const orderDetailsByBrand = ref([])
 const order = ref(null)
 const invoices = ref([])
 const advances = ref([])
@@ -28,6 +30,7 @@ onMounted(async () => {
   if (order.value) {
     orderDetails.value = order.value.order_details
     delete order.value.order_details
+    orderDetailsByBrand.value = (await orderService.getOrderDetailsByBrandAndIdOrder(idOrder)).data
   }
   invoices.value = (await invoiceService.getInvoiceByOrder(idOrder)).data
   advances.value = (await advanceService.getAdvanceByIdOrder(idOrder)).data
@@ -68,6 +71,10 @@ const createAdvance = async () => {
         <InvoiceTable :invoices="invoices"></InvoiceTable>
       </div>
       <div class="order-detail">
+        <h2>Resumen Detalle Orden</h2>
+        <OrderDetailByBrandTable
+          :orderDetailsByBrand="orderDetailsByBrand"
+        ></OrderDetailByBrandTable>
         <h2>Detalle Orden</h2>
         <OrderDetailTable :orderDetails="orderDetails"></OrderDetailTable>
       </div>
