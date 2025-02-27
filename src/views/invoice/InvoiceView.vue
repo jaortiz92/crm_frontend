@@ -27,7 +27,7 @@ const addInvoices = async () => {
     invoices.value = response.data
     filteredInvoices.value = [...invoices.value]
   } catch (error) {
-    alertService.generalError('Las ordenes pudieron cargar')
+    alertService.generalError('Las facturas no se pudieron cargar')
   }
 }
 

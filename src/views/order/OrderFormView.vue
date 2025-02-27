@@ -11,10 +11,12 @@ import OrderFrom from '@/components/order/OrderForm.vue'
 import { userService } from '@/services/userService'
 import { orderService } from '@/services/orderService'
 import { paymentMethodService } from '@/services/paymentMethodService'
+import { customerService } from '@/services/customerService'
 
 const options = ref({
   users: [],
-  paymentMethods: []
+  paymentMethods: [],
+  customers: []
 })
 const order = ref({})
 const isEdit = ref(false)
@@ -32,6 +34,7 @@ if (orderStore.isThereOrder()) {
 onMounted(async () => {
   options.value.users = (await userService.getUsers(0, 1000)).data
   options.value.paymentMethods = (await paymentMethodService.getPaymentMethodService()).data
+  options.value.customers = (await customerService.getCustomers(0, 1000)).data
 })
 
 const saveFile = async (id_order, file, type_format) => {

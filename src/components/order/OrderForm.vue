@@ -2,7 +2,7 @@
 import { defineProps, defineEmits, toRefs, ref } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
 import { formatters } from '@/plugins/formatters'
-
+import { customerTripService } from '@/services/customerTripService'
 import { alertService } from '@/services/alertService'
 
 const props = defineProps({
@@ -14,16 +14,25 @@ const props = defineProps({
     type: Object,
     default: () => ({
       customers: [],
-      users: []
+      users: [],
+      paymentMethods: [],
+      customersTrips: []
     })
   },
   isEdit: {
     type: Boolean,
     default: false
+  },
+  new_values: {
+    type: Object,
+    default: () => ({
+      id_customer_trip: null,
+      id_customer: null
+    })
   }
 })
 
-const { initialOrder, options, isEdit } = toRefs(props)
+const { initialOrder, options, isEdit, new_values } = toRefs(props)
 
 const order = ref({ ...initialOrder.value })
 const details = ref(false)
@@ -40,6 +49,16 @@ const updateTotalValue = () => {
 
 const updateWithoutTaxValue = () => {
   order.value.total_without_tax = Math.round(order.value.total_with_tax / 1.19, 0)
+}
+
+const updateCustomerTrip = async () => {
+  options.value.customersTrips = (
+    await customerTripService.getCustomerTripsByCustomer(new_values.value.id_customer)
+  ).data
+}
+
+const updateCustomerTripId = () => {
+  order.value.id_customer_trip = new_values.value.id_customer_trip
 }
 
 const handleFileUpload = (event) => {
@@ -59,6 +78,34 @@ const handleFileUpload = (event) => {
   <form @submit.prevent="save" class="form-order">
     <div class="fields">
       <div class="detail-column">
+        <div v-if="!isEdit" class="field-input">
+          <label>Cliente</label>
+          <select @change="updateCustomerTrip" v-model="new_values.id_customer" required>
+            <option
+              v-for="option in options.customers"
+              :key="option.id_customer"
+              :value="option.id_customer"
+            >
+              {{ option.company_name }}
+            </option>
+          </select>
+        </div>
+        <div v-if="!isEdit" class="field-input">
+          <label>Viaje del Cliente</label>
+          <select @change="updateCustomerTripId" v-model="new_values.id_customer_trip" required>
+            <option
+              v-for="option in options.customersTrips"
+              :key="option.id_customer_trip"
+              :value="option.id_customer_trip"
+            >
+              {{ option.collection.line.line_name }}-{{
+                option.collection.short_collection_name
+              }}
+              -> ID={{ option.id_customer_trip }}
+            </option>
+          </select>
+        </div>
+
         <div class="field-input">
           <label>ID Viaje del Cliente</label>
           <input v-model="order.id_customer_trip" required orderStore type="number" />
