@@ -8,12 +8,15 @@ import ActivityTable from '@/components/activity/ActivityTable.vue'
 import { activityService } from '@/services/activityService'
 import { alertService } from '@/services/alertService'
 import { taskService } from '@/services/taskService'
+import { collectionService } from '@/services/collectionService'
+import CollectionSummary from '@/components/collection/CollectionSummary.vue'
 
 const userStore = useUserStore()
 const id_user = ref('')
 const pendingActivities = ref([])
 const pendingTasks = ref([])
 const pendingAssignedTasks = ref([])
+const collectionSummary = ref([])
 
 const addPendingActivities = async () => {
   try {
@@ -52,12 +55,17 @@ const addDataUser = async () => {
 }
 
 onMounted(async () => {
+  collectionSummary.value = (await collectionService.getCollectionSummary()).data
   addDataUser()
 })
 </script>
 
 <template>
   <main>
+    <div>
+      <h3>Resumen Colecciones</h3>
+      <CollectionSummary :collectionSummary="collectionSummary"> </CollectionSummary>
+    </div>
     <div>
       <h3>Actividades Pendientes</h3>
       <ActivityTable :activities="pendingActivities" :additionalInfo="true"></ActivityTable>
