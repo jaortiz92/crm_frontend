@@ -12,8 +12,8 @@ import { invoiceService } from '@/services/invoiceService'
 import CustomerTripInfo from '@/components/customer/customerTrip/CustomerTripInfo.vue'
 import ActivityTable from '@/components/activity/ActivityTable.vue'
 import CustomerTripSummaryTable from '@/components/customer/customerTrip/CustomerTripSummaryTable.vue'
-import OrderTable from '@/components/order/OrderTable.vue'
-import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
+import OrderTable from '@/components/order/table/OrderTable.vue'
+import InvoiceTable from '@/components/invoice/table/InvoiceTable.vue'
 import { useCustomerTripStore } from '@/stores/customerTripStore'
 
 const route = useRoute()

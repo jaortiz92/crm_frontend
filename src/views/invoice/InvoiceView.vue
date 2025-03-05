@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/userStore.js'
 import { useInvoiceStore } from '@/stores/invoiceStore'
 
-import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
+import InvoiceTable from '@/components/invoice/table/InvoiceTable.vue'
 import FilterForm from '@/components/FilterForm.vue'
 
 import { alertService } from '@/services/alertService'

@@ -107,12 +107,6 @@ const save = async (order, file) => {
   </div>
   <div>
     <h2>{{ isEdit ? `Actualizar Orden: ID ${order.id_order}` : 'Crear Orden' }}</h2>
-    <OrderFrom
-      :initialOrder="order"
-      :options="options"
-      :isEdit="isEdit"
-      @save="save"
-      @saveFile="saveFile"
-    ></OrderFrom>
+    <OrderFrom :initialOrder="order" :options="options" :isEdit="isEdit" @save="save"></OrderFrom>
   </div>
 </template>

@@ -28,5 +28,11 @@ export const orderService = {
   },
   getOrderDetailsByBrandAndIdOrder: function (id_order) {
     return axiosInstance.get(`/order_detail/by_brand/${id_order}`)
+  },
+  getOrderDetailsByDescriptionAndIdOrder: function (id_order) {
+    return axiosInstance.get(`/order_detail/by_description/${id_order}`)
+  },
+  getOrderDetailsBySizeAndIdOrder: function (id_order) {
+    return axiosInstance.get(`/order_detail/by_size/${id_order}`)
   }
 }

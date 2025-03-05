@@ -26,17 +26,30 @@ const { initialInvoice, isEdit } = toRefs(props)
 
 const invoice = ref({ ...initialInvoice.value })
 const details = ref(false)
+const file = ref(null)
 
 const emit = defineEmits(['save'])
 const save = () => {
   const validationNumber = formatters.validateFormatterInvoice(invoice.value.invoice_number)
   if (validationNumber) {
     invoice.value.invoice_number = validationNumber
-    emit('save', invoice.value)
+    emit('save', invoice.value, file.value)
   } else {
     alertService.generalError(
       'Error al ingresar el numero de factura: Formatos validos "FVFE99-DCM99-NDCL99-NDDL99"'
     )
+  }
+}
+
+const handleFileUpload = (event) => {
+  file.value = event.target.files[0]
+
+  const validTypes = ['xlsx', 'xlsm']
+  const extension = file.value.name.split('.').pop().toLowerCase()
+
+  if (!validTypes.includes(extension)) {
+    alertService.generalError('Solo se permiten archivos xlsx o xlsm')
+    file.value = null
   }
 }
 </script>
@@ -73,7 +86,13 @@ const save = () => {
         </div>
         <div v-if="details" class="field-input">
           <label for="document">Documento:</label>
-          <input type="file" id="document" @change="handleFileUpload" required />
+          <input
+            type="file"
+            id="document"
+            @change="handleFileUpload"
+            accept=".xlsx,.xlsm"
+            required
+          />
         </div>
       </div>
     </div>

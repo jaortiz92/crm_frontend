@@ -18,5 +18,21 @@ export const invoiceService = {
   },
   updateInvoice: function (id_invoice, invoice) {
     return axiosInstance.put(`/invoice/${id_invoice}`, invoice)
+  },
+  createInvoiceDetails: function (id_invoice, details) {
+    return axiosInstance.post(`/invoice_detail/file/${id_invoice}`, details, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+  },
+  getInvoiceDetailsByBrandAndIdInvoice: function (id_invoice) {
+    return axiosInstance.get(`/invoice_detail/by_brand/${id_invoice}`)
+  },
+  getInvoiceDetailsByDescriptionAndIdInvoice: function (id_invoice) {
+    return axiosInstance.get(`/invoice_detail/by_description/${id_invoice}`)
+  },
+  getInvoiceDetailsBySizeAndIdInvoice: function (id_invoice) {
+    return axiosInstance.get(`/invoice_detail/by_size/${id_invoice}`)
   }
 }

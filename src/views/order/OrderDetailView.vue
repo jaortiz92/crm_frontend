@@ -8,16 +8,20 @@ import { orderService } from '@/services/orderService'
 import { invoiceService } from '@/services/invoiceService'
 import { advanceService } from '@/services/advanceService'
 
-import OrderDetailTable from '@/components/order/OrderDetailTable.vue'
+import OrderDetailTable from '@/components/order/table/OrderDetailTable.vue'
 import OrderInfo from '@/components/order/OrderInfo.vue'
-import InvoiceTable from '@/components/invoice/InvoiceTable.vue'
+import InvoiceTable from '@/components/invoice/table/InvoiceTable.vue'
 import AdvanceTable from '@/components/advance/AdvanceTable.vue'
 import { useOrderStore } from '@/stores/orderStore'
-import OrderDetailByBrandTable from '@/components/order/OrderDetailByBrandTable.vue'
+import OrderDetailByBrandTable from '@/components/order/table/OrderDetailByBrandTable.vue'
+import OrderDetailByDescriptionTable from '@/components/order/table/OrderDetailByDescriptionTable.vue'
+import OrderDetailBySizeTable from '@/components/order/table/OrderDetailBySizeTable.vue'
 
 const route = useRoute()
 const orderDetails = ref([])
 const orderDetailsByBrand = ref([])
+const orderDetailsByDescription = ref([])
+const orderDetailsBySize = ref([])
 const order = ref(null)
 const invoices = ref([])
 const advances = ref([])
@@ -31,6 +35,10 @@ onMounted(async () => {
     orderDetails.value = order.value.order_details
     delete order.value.order_details
     orderDetailsByBrand.value = (await orderService.getOrderDetailsByBrandAndIdOrder(idOrder)).data
+    orderDetailsByDescription.value = (
+      await orderService.getOrderDetailsByDescriptionAndIdOrder(idOrder)
+    ).data
+    orderDetailsBySize.value = (await orderService.getOrderDetailsBySizeAndIdOrder(idOrder)).data
   }
   invoices.value = (await invoiceService.getInvoiceByOrder(idOrder)).data
   advances.value = (await advanceService.getAdvanceByIdOrder(idOrder)).data
@@ -72,9 +80,19 @@ const createAdvance = async () => {
       </div>
       <div class="order-detail">
         <h2>Resumen Detalle Orden</h2>
-        <OrderDetailByBrandTable
-          :orderDetailsByBrand="orderDetailsByBrand"
-        ></OrderDetailByBrandTable>
+        <div class="tables-datail-summary">
+          <OrderDetailByBrandTable
+            :orderDetailsByBrand="orderDetailsByBrand"
+          ></OrderDetailByBrandTable>
+          <div class="small-tables">
+            <OrderDetailBySizeTable
+              :orderDetailsBySize="orderDetailsBySize"
+            ></OrderDetailBySizeTable>
+            <OrderDetailByDescriptionTable
+              :orderDetailsByDescription="orderDetailsByDescription"
+            ></OrderDetailByDescriptionTable>
+          </div>
+        </div>
         <h2>Detalle Orden</h2>
         <OrderDetailTable :orderDetails="orderDetails"></OrderDetailTable>
       </div>
@@ -97,5 +115,18 @@ const createAdvance = async () => {
   background-color: var(--light-border);
   border-radius: var(--border-radius-size);
   box-shadow: 0 2px 10px var(--shadow);
+}
+
+.tables-datail-summary {
+  padding: 20px;
+}
+
+.small-tables {
+  display: flex;
+  justify-content: center;
+}
+
+.tables-datail-summary div {
+  padding: 10px;
 }
 </style>
