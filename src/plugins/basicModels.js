@@ -100,5 +100,9 @@ export const basicModels = {
     id_city: null,
     birth_date: null,
     password: null
+  },
+  photo: {
+    id_customer: null,
+    url_photo: null
   }
 }

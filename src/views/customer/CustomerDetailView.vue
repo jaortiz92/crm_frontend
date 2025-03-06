@@ -9,6 +9,7 @@ import { customerTripService } from '@/services/customerTripService'
 import { ratingService } from '@/services/ratingService'
 import { activityService } from '@/services/activityService'
 import { taskService } from '@/services/taskService'
+import { photoService } from '@/services/photoService'
 
 import ContactTable from '@/components/customer/contact/ContactTable.vue'
 import CustomerInfo from '@/components/customer/CustomerInfo.vue'
@@ -18,6 +19,8 @@ import TaskTable from '@/components/task/TaskTable.vue'
 import CustomerSummaryTable from '@/components/customer/CustomerSummaryTable.vue'
 import { useCustomerStore } from '@/stores/customerStore'
 import { useContactStore } from '@/stores/contactStore'
+import { usePhotoStore } from '@/stores/photoStore'
+import CustomerPhotos from '@/components/customer/photo/CustomerPhotos.vue'
 
 const route = useRoute()
 const idCustomer = route.params.id
@@ -28,10 +31,12 @@ const customerSummary = ref([])
 const lastRating = ref(null)
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
+const photoStore = usePhotoStore()
 const router = useRouter()
 const showAll = ref(false)
 const activities = ref([])
 const tasks = ref([])
+const photos = ref([])
 
 onMounted(async () => {
   lastRating.value = (await ratingService.getLastRatingByCustomer(idCustomer)).data
@@ -49,6 +54,22 @@ const edit = async () => {
   }
 }
 
+const editPhoto = async (photo) => {
+  const responseUser = await alertService.editElement(photo.id_photo, 'Foto')
+  if (responseUser.isConfirmed) {
+    photoStore.setPhoto(photo)
+    router.push('/photoForm')
+  }
+}
+
+const createPhoto = async () => {
+  const responseUser = await alertService.createElement('Foto')
+  if (responseUser.isConfirmed) {
+    photoStore.clearPhoto()
+    router.push('/photoForm')
+  }
+}
+
 const createContact = async () => {
   const responseUser = await alertService.createElement('Contacto')
   if (responseUser.isConfirmed) {
@@ -60,6 +81,7 @@ const createContact = async () => {
 const activateShowAll = async () => {
   activities.value = (await activityService.getActivitiesByCustomer(idCustomer)).data
   tasks.value = (await taskService.getTasksByCustomer(idCustomer)).data
+  photos.value = (await photoService.getPhotoByIdCustomer(idCustomer)).data
   showAll.value = true
 }
 </script>
@@ -73,6 +95,10 @@ const activateShowAll = async () => {
       <div class="contacts">
         <h2>Contactos</h2>
         <ContactTable :contacts="contacts"></ContactTable>
+      </div>
+      <div class="button-edit">
+        <button @click="edit">Editar</button>
+        <button @click="createContact">Crear Contacto</button>
       </div>
       <div class="customer_trips">
         <h2>Viajes del cliente</h2>
@@ -89,10 +115,14 @@ const activateShowAll = async () => {
   </div>
   <div class="button-edit">
     <button v-if="!showAll" @click="activateShowAll">Mostrar MasInformación</button>
-    <button @click="edit">Editar</button>
-    <button @click="createContact">Crear Contacto</button>
   </div>
   <div class="more-information" v-if="showAll">
+    <h2>Fotos</h2>
+    <CustomerPhotos
+      :photos="photos"
+      @editPhoto="editPhoto"
+      @createPhoto="createPhoto"
+    ></CustomerPhotos>
     <h2>Actividades</h2>
     <ActivityTable :activities="activities" :additionalInfo="true" :itemsScale="10"></ActivityTable>
     <h2>Tareas</h2>

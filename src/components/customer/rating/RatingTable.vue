@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, defineProps, toRefs } from 'vue'
+import { ref, computed, defineProps, toRefs, defineEmits } from 'vue'
 
 const itemsScale = ref(20)
 const itemsToShow = ref(itemsScale.value)

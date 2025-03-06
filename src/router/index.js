@@ -27,6 +27,7 @@ import RatingFormView from '@/views/customer/rating/RatingFormView.vue'
 import AdvanceFormView from '@/views/advance/AdvanceFormView.vue'
 import UserFormView from '@/views/user/UserFormView.vue'
 import UserDetailView from '@/views/user/UserDetailView.vue'
+import PhotoFormView from '@/views/customer/photo/PhotoFormView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -166,6 +167,12 @@ const router = createRouter({
       path: '/ratingForm',
       name: 'RatingForm',
       component: RatingFormView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/photoForm',
+      name: 'PhotoForm',
+      component: PhotoFormView,
       meta: { requiresAuth: true }
     },
     {
