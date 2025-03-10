@@ -95,6 +95,15 @@ const editRating = async () => {
   </div>
   <div class="detail-column">
     <p>
+      <strong>Redes Sociales:</strong>
+    </p>
+    <p class="space-for-text" v-if="customer.social_media">
+      {{ customer.social_media }}
+    </p>
+    <p class="space-for-text" v-else>Sin Redes</p>
+  </div>
+  <div class="detail-column">
+    <p>
       <strong>Detalles relevantes:</strong>
     </p>
     <p class="space-for-text" v-if="customer.relevant_details">

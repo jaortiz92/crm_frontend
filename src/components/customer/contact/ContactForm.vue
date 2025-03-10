@@ -140,6 +140,10 @@ onMounted(async () => {
           </select>
         </div>
         <div class="field-input">
+          <label>Detalles relevantes</label>
+          <textarea v-model="contact.relevant_details"></textarea>
+        </div>
+        <div class="field-input">
           <label>¿Activo? </label
           ><input v-model="contact.active" type="checkbox" class="checkbox" />
         </div>

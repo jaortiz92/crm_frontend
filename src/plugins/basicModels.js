@@ -58,6 +58,7 @@ export const basicModels = {
     active: true,
     credit_limit: null,
     with_documents: false,
+    social_media: null,
     relevant_details: null
   },
   contact: {
@@ -71,6 +72,7 @@ export const basicModels = {
     id_role: null,
     birth_date: null,
     id_city: null,
+    relevant_details: null,
     active: true
   },
   rating: {

@@ -115,6 +115,10 @@ onMounted(async () => {
           </select>
         </div>
         <div class="field-input">
+          <label>Redes Sociales</label>
+          <textarea v-model="customer.social_media"></textarea>
+        </div>
+        <div class="field-input">
           <label>Detalles relevantes</label>
           <textarea v-model="customer.relevant_details"></textarea>
         </div>
@@ -148,10 +152,7 @@ onMounted(async () => {
             </option>
           </select>
         </div>
-        <div class="field-input">
-          <label>¿Activo? </label
-          ><input v-model="customer.active" type="checkbox" class="checkbox" />
-        </div>
+
         <div class="field-input">
           <label>Limite de credito</label>
           <div class="input-number">
@@ -159,10 +160,7 @@ onMounted(async () => {
             <p>{{ formatters.formatterGeneralNumber(customer.credit_limit) }}</p>
           </div>
         </div>
-        <div class="field-input">
-          <label>¿Con documentos? </label
-          ><input v-model="customer.with_documents" type="checkbox" class="checkbox" />
-        </div>
+
         <div class="field-input">
           <label>Marca</label>
           <select multiple v-model="customer.brand_ids" required>
@@ -175,12 +173,19 @@ onMounted(async () => {
             </option>
           </select>
         </div>
-        <div class="field-input"></div>
+        <div class="field-input">
+          <label>¿Con documentos? </label
+          ><input v-model="customer.with_documents" type="checkbox" class="checkbox" />
+        </div>
+        <div class="field-input">
+          <label>¿Activo? </label
+          ><input v-model="customer.active" type="checkbox" class="checkbox" />
+        </div>
       </div>
     </div>
     <div class="button-group">
       <button type="submit">
-        {{ isEdit ? `Actualizar Viaje del cliente` : 'Crear Viaje del cliente' }}
+        {{ isEdit ? `Actualizar Cliente` : 'Crear Cliente' }}
       </button>
     </div>
   </form>

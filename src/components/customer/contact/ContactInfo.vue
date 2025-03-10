@@ -34,6 +34,7 @@ const edit = () => {
       <p><strong>Cliente:</strong> {{ contact.customer.company_name }}</p>
       <p><strong>Ciudad:</strong> {{ contact.city.city_name }}</p>
       <p><strong>Departamento:</strong> {{ contact.city.department.department_name }}</p>
+      <p><strong>Detalles relevantes:</strong> {{ contact.relevant_details }}</p>
       <strong>Activo:</strong> <span :class="{ checkbox: true, checked: contact.active }"></span>
     </template>
   </ModalModel>

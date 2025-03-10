@@ -97,7 +97,7 @@ const activateShowAll = async () => {
         <ContactTable :contacts="contacts"></ContactTable>
       </div>
       <div class="button-edit">
-        <button @click="edit">Editar</button>
+        <button @click="edit">Editar Cliente</button>
         <button @click="createContact">Crear Contacto</button>
       </div>
       <div class="customer_trips">
