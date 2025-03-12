@@ -32,6 +32,7 @@ const submitLogin = async () => {
       <button type="submit">Iniciar sesión</button>
     </form>
   </div>
+  <router-link :to="{ name: 'RestorePassword' }">Olvide mi contraseña</router-link>
 </template>
 
 <style scoped>

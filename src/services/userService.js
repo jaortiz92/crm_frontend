@@ -7,6 +7,12 @@ export const userService = {
   me: function () {
     return axiosInstance.get(`/login/me/`)
   },
+  requestPasswordReset: function (email) {
+    return axiosInstance.post(`/user/request_password_reset/`, email)
+  },
+  resetPassword: function (data) {
+    return axiosInstance.post(`/user/reset_password/`, data)
+  },
   getUsers: function (skip, limit) {
     return axiosInstance.get(`/user/?skip=${skip}&limit=${limit}`)
   },

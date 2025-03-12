@@ -2,11 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/userStore.js'
 import { useSplashStore } from '@/stores/splash.js'
 import HomeView from '@/views/HomeView.vue'
-import LoginPage from '@/views/user/LoginView.vue'
+import LoginView from '@/views/user/login/LoginView.vue'
 import CustomerView from '@/views/customer/CustomerView.vue'
-import CustomerDetail from '@/views/customer/CustomerDetailView.vue'
+import CustomerDetailView from '@/views/customer/CustomerDetailView.vue'
 import CustomerTripView from '@/views/customer/customerTrip/CustomerTripView.vue'
-import CustomerTripDetail from '@/views/customer/customerTrip/CustomerTripDetailView.vue'
+import CustomerTripDetailView from '@/views/customer/customerTrip/CustomerTripDetailView.vue'
 import OrderView from '@/views/order/OrderView.vue'
 import InvoiceView from '@/views/invoice/InvoiceView.vue'
 import ActivityView from '@/views/activity/ActivityView.vue'
@@ -28,6 +28,8 @@ import AdvanceFormView from '@/views/advance/AdvanceFormView.vue'
 import UserFormView from '@/views/user/UserFormView.vue'
 import UserDetailView from '@/views/user/UserDetailView.vue'
 import PhotoFormView from '@/views/customer/photo/PhotoFormView.vue'
+import RestorePasswordView from '@/views/user/login/RestorePasswordView.vue'
+import ResetPasswordView from '@/views/user/login/ResetPasswordView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -35,7 +37,17 @@ const router = createRouter({
     {
       path: '/login',
       name: 'Login',
-      component: LoginPage
+      component: LoginView
+    },
+    {
+      path: '/restorePassword',
+      name: 'RestorePassword',
+      component: RestorePasswordView
+    },
+    {
+      path: '/resetPassword/:token',
+      name: 'ResetPassword',
+      component: ResetPasswordView
     },
     {
       path: '/',
@@ -52,7 +64,7 @@ const router = createRouter({
     {
       path: '/customer/:id',
       name: 'CustomerDetail',
-      component: CustomerDetail,
+      component: CustomerDetailView,
       meta: { requiresAuth: true }
     },
     {
@@ -64,7 +76,7 @@ const router = createRouter({
     {
       path: '/customerTrip/:id',
       name: 'CustomerTripDetail',
-      component: CustomerTripDetail,
+      component: CustomerTripDetailView,
       meta: { requiresAuth: true }
     },
     {
