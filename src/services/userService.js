@@ -1,8 +1,8 @@
 import axiosInstance from '@/plugins/axios'
 
 export const userService = {
-  login: function (username, password) {
-    return axiosInstance.post(`/login/?username=${username}&password=${password}`)
+  login: function (loingdata) {
+    return axiosInstance.post(`/login/`, loingdata)
   },
   me: function () {
     return axiosInstance.get(`/login/me/`)
@@ -12,6 +12,9 @@ export const userService = {
   },
   resetPassword: function (data) {
     return axiosInstance.post(`/user/reset_password/`, data)
+  },
+  updatePassword: function (data) {
+    return axiosInstance.put(`/user/update_password/`, data)
   },
   getUsers: function (skip, limit) {
     return axiosInstance.get(`/user/?skip=${skip}&limit=${limit}`)

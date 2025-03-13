@@ -70,7 +70,13 @@ export const alertService = {
   async editElement(id, element) {
     return await this.generalQuestion(
       `¿Quiere editar el/la ${element}?`,
-      `Editará el/la ${element} con ID:<strong>${id}</strong>`
+      `Editará el/la ${element} con ID: <strong>${id}</strong>`
+    )
+  },
+  async editElementCustomized(value, typeElement, element) {
+    return await this.generalQuestion(
+      `¿Quiere editar el/la ${element}?`,
+      `Editará el/la ${element} con ${typeElement}: <strong>${value}</strong>`
     )
   },
   async createElement(element) {

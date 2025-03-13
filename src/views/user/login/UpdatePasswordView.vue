@@ -1,14 +1,13 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { alertService } from '@/services/alertService'
 import { userService } from '@/services/userService'
 import { validatePassword } from '@/plugins/validatePassword'
 
-const route = useRoute()
 const router = useRouter()
 const data = ref({
-  token: route.params.token,
+  current_password: null,
   new_password: null,
   new_password_try: null
 })
@@ -19,16 +18,16 @@ const statusPassword = computed(() =>
     : { isValid: false, errors: [] }
 )
 
-const submitResetPassword = async () => {
+const submitUpdatePassword = async () => {
   if (data.value.new_password !== data.value.new_password_try) {
     alertService.generalError('Contraseñas no coinsiden')
   } else if (!statusPassword.value.isValid) {
     alertService.generalError('Contraseña no cumple con los requisitos minimos')
   } else {
     try {
-      await userService.resetPassword(data.value)
-      alertService.generalSucces('Contraseña actualizada')
-      router.push({ name: 'Login' })
+      await userService.updatePassword(data.value)
+      alertService.generalSucces('Contraseñas actualizada')
+      router.push({ name: 'UserDetail' })
     } catch (error) {
       alertService.generalError('Contraseña no se pudo cambiar')
     }
@@ -39,7 +38,9 @@ const submitResetPassword = async () => {
 <template>
   <div class="login-container">
     <h3>Inserte los datos para rescuperar la contraseña</h3>
-    <form @submit.prevent="submitResetPassword">
+    <form @submit.prevent="submitUpdatePassword">
+      <label>Contraseña Actual:</label>
+      <input type="password" v-model="data.current_password" required />
       <label>Nueva Contraseña:</label>
       <input type="password" v-model="data.new_password" required />
       <ul class="password-requirements">
@@ -47,7 +48,7 @@ const submitResetPassword = async () => {
       </ul>
       <label>Confirmar Contraseña:</label>
       <input type="password" v-model="data.new_password_try" required />
-      <button type="submit">Crear Contraseña</button>
+      <button type="submit">Cambiar Contraseña</button>
     </form>
   </div>
 </template>

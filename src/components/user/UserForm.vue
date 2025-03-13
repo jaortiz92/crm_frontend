@@ -1,7 +1,8 @@
 <script setup>
-import { defineProps, defineEmits, toRefs, ref, onMounted } from 'vue'
+import { defineProps, defineEmits, toRefs, ref, onMounted, computed } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
 import { cityService } from '@/services/cityService'
+import { validatePassword } from '@/plugins/validatePassword'
 
 const props = defineProps({
   initialUser: {
@@ -43,6 +44,12 @@ const generateDepartment = async () => {
   }
 }
 
+const statusPassword = computed(() =>
+  user.value.password
+    ? validatePassword.validatePassword(user.value.password)
+    : { isValid: false, errors: [] }
+)
+
 onMounted(async () => {
   idDepartment.value = await generateDepartment()
   if (idDepartment.value) {
@@ -60,8 +67,11 @@ onMounted(async () => {
           <input v-model="user.username" type="text" minlength="3" required />
         </div>
         <div v-if="!isEdit" class="field-input">
-          <label>Clave</label>
+          <label>Contraseña</label>
           <input v-model="user.password" type="password" minlength="6" required />
+          <ul if v-if="!statusPassword.isValid" class="password-requirements">
+            <li v-for="error in statusPassword.errors" :key="error" class="error">{{ error }}</li>
+          </ul>
         </div>
         <div class="field-input">
           <label>Nombres</label>
@@ -170,5 +180,15 @@ button {
   button {
     font-size: 14px;
   }
+}
+
+.password-requirements {
+  font-size: 80%;
+  color: var(--red-color);
+  margin: 10px;
+}
+
+.password-requirements li {
+  text-align: left;
 }
 </style>

@@ -16,6 +16,7 @@
   --light-color-opposite-two: #7385e8;
   --dark-color-opposite-one: #499a67;
   --dark-color-opposite-two: #0a2098;
+  --red-color: #c21a1a;
   --shadow: var(--dark-color-opposite-two);
   --border-radius-size: 8px;
 }

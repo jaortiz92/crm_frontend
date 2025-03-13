@@ -19,7 +19,11 @@ onMounted(async () => {
 })
 
 const edit = async () => {
-  const responseUser = await alertService.editElement(user.value.id_user, 'Usuario')
+  const responseUser = await alertService.editElementCustomized(
+    user.value.username,
+    'Username',
+    'Usuario'
+  )
   if (responseUser.isConfirmed) {
     router.push('/userForm/edit-create/me')
   }
@@ -29,6 +33,15 @@ const createUser = async () => {
   const responseUser = await alertService.createElement('Usuario')
   if (responseUser.isConfirmed) {
     router.push('/userForm/edit-create/create')
+  }
+}
+
+const updatePassword = async () => {
+  const responseUser = await alertService.generalQuestion(
+    `¿Quiere cambiar la contraseña del usuario ${user.value.username}?`
+  )
+  if (responseUser.isConfirmed) {
+    router.push('/updatePassword')
   }
 }
 </script>
@@ -46,6 +59,7 @@ const createUser = async () => {
   <div class="button-edit">
     <button @click="edit">Editar</button>
     <button @click="createUser">Crear Usuario</button>
+    <button @click="updatePassword">Cambiar contraseña</button>
   </div>
 </template>
 

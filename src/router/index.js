@@ -30,6 +30,7 @@ import UserDetailView from '@/views/user/UserDetailView.vue'
 import PhotoFormView from '@/views/customer/photo/PhotoFormView.vue'
 import RestorePasswordView from '@/views/user/login/RestorePasswordView.vue'
 import ResetPasswordView from '@/views/user/login/ResetPasswordView.vue'
+import UpdatePasswordView from '@/views/user/login/UpdatePasswordView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -48,6 +49,12 @@ const router = createRouter({
       path: '/resetPassword/:token',
       name: 'ResetPassword',
       component: ResetPasswordView
+    },
+    {
+      path: '/updatePassword',
+      name: 'UpdatePassword',
+      component: UpdatePasswordView,
+      meta: { requiresAuth: true }
     },
     {
       path: '/',
