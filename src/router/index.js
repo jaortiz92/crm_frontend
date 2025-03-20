@@ -31,6 +31,7 @@ import PhotoFormView from '@/views/customer/photo/PhotoFormView.vue'
 import RestorePasswordView from '@/views/user/login/RestorePasswordView.vue'
 import ResetPasswordView from '@/views/user/login/ResetPasswordView.vue'
 import UpdatePasswordView from '@/views/user/login/UpdatePasswordView.vue'
+import ShipmentView from '@/views/shipment/ShipmentView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -108,6 +109,12 @@ const router = createRouter({
       path: '/task',
       name: 'Task',
       component: TaskView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/shipment',
+      name: 'Shipment',
+      component: ShipmentView,
       meta: { requiresAuth: true }
     },
     {
@@ -200,6 +207,7 @@ const router = createRouter({
       component: AdvanceFormView,
       meta: { requiresAuth: true }
     },
+
     {
       path: '/userForm/edit-create/:status',
       name: 'UserForm',
