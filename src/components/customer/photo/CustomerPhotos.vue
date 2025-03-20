@@ -36,9 +36,9 @@ function prevPhoto() {
 
 <template>
   <div v-if="photos.length > 0">
-    <div class="slider">
-      <div class="image-container">
-        <img :src="currentPhoto.url_photo" :alt="'Photo_' + currentPhoto.id_photo" />
+    <div class="slider-iframe">
+      <div class="iframe-container">
+        <iframe :src="currentPhoto.url_photo" :alt="'Photo_' + currentPhoto.id_photo"></iframe>
       </div>
       <div class="controls">
         <button @click="prevPhoto" :disabled="currentIndex === 0">Anterior</button>
@@ -60,13 +60,13 @@ function prevPhoto() {
 </template>
 
 <style scoped>
-.slider {
+.slider-iframe {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-.image-container {
+.iframe-container {
   width: 100%;
   max-width: 1066px;
   height: 600px;
@@ -78,9 +78,10 @@ function prevPhoto() {
   margin-bottom: 1rem;
 }
 
-.image-container img {
-  max-width: 100%;
-  max-height: 100%;
+.iframe-container iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
   object-fit: cover;
 }
 
