@@ -171,16 +171,6 @@ onMounted(async () => {
   display: flex;
 }
 
-.detail-column {
-  flex: 1 1 45%;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.checkbox {
-  width: auto;
-}
-
 .company-name {
   text-align: left;
   margin: 5px;

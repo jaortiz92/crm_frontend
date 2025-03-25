@@ -71,14 +71,14 @@ const save = () => {
       </div>
       <div class="detail-column">
         <div class="field-input">
-          <label>Presupuesto</label>
+          <label>Presupuesto Valor</label>
           <div class="input-number">
             <input v-model="customerTrip.budget" type="number" required />
             <p>{{ formatters.formatterGeneralNumber(customerTrip.budget) }}</p>
           </div>
         </div>
         <div class="field-input">
-          <label>Presupuesto Cantidades</label>
+          <label>Presupuesto Prendas</label>
           <div class="input-number">
             <input v-model="customerTrip.budget_quantities" type="number" required />
             <p>{{ formatters.formatterGeneralNumber(customerTrip.budget_quantities) }}</p>
@@ -110,20 +110,6 @@ const save = () => {
   border-radius: 8px;
   background-color: var(--background-light);
   box-shadow: 0 4px 8px var(--shadow);
-}
-
-.fields {
-  display: flex;
-}
-
-.detail-column {
-  flex: 1 1 45%;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.checkbox {
-  width: auto;
 }
 
 .company-name {

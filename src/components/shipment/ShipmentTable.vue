@@ -44,7 +44,7 @@ const showAll = () => {
           <th>Factura</th>
           <th>Fecha Envio</th>
           <th>Transportadora</th>
-          <th>No Guia</th>
+          <th>N° Guia</th>
           <th>Costo</th>
           <th v-if="additionalInfo">Fecha Estimada de Entrega</th>
           <th>Recibido</th>

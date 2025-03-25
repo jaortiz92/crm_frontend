@@ -84,6 +84,23 @@ label {
   min-width: 80px;
 }
 
+/*Froms*/
+.fields {
+  display: flex;
+}
+
+.field-input label {
+  padding-left: 2%;
+  text-align: left;
+}
+
+.detail-column {
+  flex: 1 1 45%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
 .title {
   font-size: 200%;
   font-weight: bold;

@@ -151,10 +151,6 @@ textarea {
   max-width: none;
 }
 
-.checkbox {
-  width: auto;
-}
-
 .company-name {
   text-align: left;
   margin: 5px;

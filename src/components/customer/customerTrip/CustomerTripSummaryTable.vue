@@ -29,15 +29,15 @@ const showAll = () => {
     <table class="table-customer-summary">
       <thead>
         <tr>
-          <th>Presupuesto Cantidades</th>
-          <th>Presupuesto</th>
-          <th>Ordenes</th>
-          <th>Cantidad Ordenes</th>
+          <th>Presupuesto Prendas</th>
+          <th>Presupuesto Valor</th>
+          <th>N° Ordenes</th>
+          <th>Prendas Ordenadas</th>
           <th>Valor Ordenes</th>
-          <th>Facturas</th>
-          <th>Cantidad Facturas</th>
-          <th>Valor Facturas</th>
-          <th>Descuentos Facturas</th>
+          <th>N° Facturas</th>
+          <th>Prendas Facturadas</th>
+          <th>Valor Facturado</th>
+          <th>Descuento Facturado</th>
         </tr>
       </thead>
       <tbody>

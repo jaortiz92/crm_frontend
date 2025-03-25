@@ -61,10 +61,6 @@ const save = () => {
   box-shadow: 0 4px 8px var(--shadow);
 }
 
-.checkbox {
-  width: auto;
-}
-
 input,
 select,
 textarea {

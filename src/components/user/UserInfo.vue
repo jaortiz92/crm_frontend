@@ -103,11 +103,4 @@ const { user } = toRefs(props)
   white-space: pre-wrap;
   margin: 1px;
 }
-
-.detail-column {
-  flex: 1 1 45%;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
 </style>

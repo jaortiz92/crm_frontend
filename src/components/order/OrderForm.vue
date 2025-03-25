@@ -141,14 +141,14 @@ const handleFileUpload = (event) => {
       </div>
       <div class="detail-column">
         <div class="field-input">
-          <label>Cantidad de prendas</label>
+          <label>Numero de prendas</label>
           <div class="input-number">
             <input v-model="order.total_quantities" required orderStore type="number" />
             <p>{{ formatters.formatterGeneralNumber(order.total_quantities) }}</p>
           </div>
         </div>
         <div class="field-input">
-          <label>Cantidades en sistema</label>
+          <label>Numero de prendas Cargadas</label>
           <div class="input-number">
             <input v-model="order.system_quantities" required orderStore type="number" />
             <p>{{ formatters.formatterGeneralNumber(order.system_quantities) }}</p>
@@ -215,20 +215,6 @@ const handleFileUpload = (event) => {
   border-radius: 8px;
   background-color: var(--background-light);
   box-shadow: 0 4px 8px var(--shadow);
-}
-
-.fields {
-  display: flex;
-}
-
-.detail-column {
-  flex: 1 1 45%;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.checkbox {
-  width: auto;
 }
 
 .company-name {

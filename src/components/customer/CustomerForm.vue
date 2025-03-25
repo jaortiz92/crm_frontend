@@ -201,20 +201,6 @@ onMounted(async () => {
   box-shadow: 0 4px 8px var(--shadow);
 }
 
-.fields {
-  display: flex;
-}
-
-.detail-column {
-  flex: 1 1 45%;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.checkbox {
-  width: auto;
-}
-
 .company-name {
   text-align: left;
   margin: 5px;

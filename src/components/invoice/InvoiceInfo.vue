@@ -54,7 +54,7 @@ const { invoice } = toRefs(props)
           <p>{{ invoice.order.customer_trip.collection.short_collection_name }}</p>
         </div>
         <div class="detail-row">
-          <p><strong>Prendas:</strong></p>
+          <p><strong>N° Prendas:</strong></p>
           <p>{{ invoice.total_quantities }}</p>
         </div>
         <div class="detail-row">
@@ -111,13 +111,6 @@ const { invoice } = toRefs(props)
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-}
-
-.detail-column {
-  flex: 1 1 45%;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
 }
 
 .detail-column:first-child {

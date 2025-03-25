@@ -42,15 +42,15 @@ export const filterFormat = {
   },
   budgetQuantitiesFrom: {
     key: 'budgetQuantitiesFrom',
-    label: 'Presupuesto cantidades desde',
+    label: 'Presupuesto Prendas desde',
     type: 'number',
-    placeholder: 'Filtrar por presupuesto cantidades desde'
+    placeholder: 'Filtrar por presupuesto prendas desde'
   },
   budgetQuantitiesUntil: {
     key: 'budgetQuantitiesUntil',
-    label: 'Presupuesto cantidades hasta',
+    label: 'Presupuesto Prendas hasta',
     type: 'number',
-    placeholder: 'Filtrar por presupuesto cantidades hasta'
+    placeholder: 'Filtrar por presupuesto prendas hasta'
   },
   ordered: {
     key: 'ordered',

@@ -48,11 +48,11 @@ const { order } = toRefs(props)
       </div>
       <div class="detail-column">
         <div class="detail-row">
-          <p><strong>Prendas:</strong></p>
+          <p><strong>N° Prendas:</strong></p>
           <p>{{ order.total_quantities }}</p>
         </div>
         <div class="detail-row">
-          <p><strong>Prendas Cargadas:</strong></p>
+          <p><strong>N° Prendas Cargadas:</strong></p>
           <p>{{ order.system_quantities }}</p>
         </div>
         <div class="detail-row">
@@ -103,13 +103,6 @@ const { order } = toRefs(props)
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-}
-
-.detail-column {
-  flex: 1 1 45%;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
 }
 
 .detail-column:first-child {

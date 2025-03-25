@@ -170,13 +170,6 @@ const { activity } = toRefs(props)
   flex-wrap: wrap;
 }
 
-.detail-column {
-  flex: 1 1 45%;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
 .detail-column:first-child {
   border-right: 1px solid var(--gray-border);
   padding-right: 15px;

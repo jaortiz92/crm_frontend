@@ -40,8 +40,8 @@ const showAll = () => {
           <th v-if="additionalInfo">Cliente</th>
           <th>Colección</th>
           <th>Fecha Temporada</th>
-          <th>Presupuesto</th>
-          <th>Presupuesto Cantidades</th>
+          <th>Presupuesto Prendas</th>
+          <th>Presupuesto Valor</th>
           <th>Linea</th>
           <th>Asesor</th>
           <th>Ordenó</th>

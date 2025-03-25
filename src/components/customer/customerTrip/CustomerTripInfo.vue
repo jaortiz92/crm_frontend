@@ -28,11 +28,11 @@ const { customerTrip } = toRefs(props)
     </p>
   </div>
   <div class="detail-row">
-    <p><strong>Presupuesto:</strong></p>
+    <p><strong>Presupuesto Valor:</strong></p>
     <p>{{ formatters.formatterGeneralNumber(customerTrip.budget) }}</p>
   </div>
   <div class="detail-row">
-    <p><strong>Presupuesto Cantidades:</strong></p>
+    <p><strong>Presupuesto Prendas:</strong></p>
     <p>{{ formatters.formatterGeneralNumber(customerTrip.budget_quantities) }}</p>
   </div>
   <div class="detail-row">
