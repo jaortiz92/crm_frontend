@@ -41,7 +41,7 @@ export const basicModels = {
     id_collection: null,
     budget: null,
     budget_quantities: null,
-    ordered: false,
+    closed: false,
     comment: null
   },
   customer: {

@@ -73,20 +73,32 @@ const save = () => {
         <div class="field-input">
           <label>Presupuesto Valor</label>
           <div class="input-number">
-            <input v-model="customerTrip.budget" type="number" required />
+            <input
+              v-model="customerTrip.budget"
+              type="number"
+              min="500000"
+              max="500000000"
+              required
+            />
             <p>{{ formatters.formatterGeneralNumber(customerTrip.budget) }}</p>
           </div>
         </div>
         <div class="field-input">
           <label>Presupuesto Prendas</label>
           <div class="input-number">
-            <input v-model="customerTrip.budget_quantities" type="number" required />
+            <input
+              v-model="customerTrip.budget_quantities"
+              type="number"
+              min="1"
+              max="500000"
+              required
+            />
             <p>{{ formatters.formatterGeneralNumber(customerTrip.budget_quantities) }}</p>
           </div>
         </div>
         <div class="field-input">
-          <label>¿Ordenó? </label
-          ><input v-model="customerTrip.ordered" type="checkbox" class="checkbox" />
+          <label>¿Viaje Cerrado? </label
+          ><input v-model="customerTrip.closed" type="checkbox" class="checkbox" />
         </div>
         <div class="field-input">
           <label>Comentario</label>

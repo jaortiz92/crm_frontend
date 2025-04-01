@@ -40,11 +40,11 @@ export const filterFormat = {
     type: 'number',
     placeholder: 'Filtrar por presupuesto hasta'
   },
-  ordered: {
-    key: 'ordered',
-    label: 'Ordenó',
+  closed: {
+    key: 'closed',
+    label: 'Viaje Cerrado',
     type: 'checkbox',
-    placeholder: 'Filtrar si ordenó'
+    placeholder: 'Filtrar si el viaje esta cerrado'
   },
   responsibleUser: {
     key: 'responsibleUser',

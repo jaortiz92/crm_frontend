@@ -58,7 +58,7 @@ const showAll = () => {
           <td>{{ formatters.formatterGeneralNumber(item.budget_quantities) }}</td>
           <td>{{ item.collection.line.line_name }}</td>
           <td>{{ item.seller.first_name }} {{ item.seller.last_name }}</td>
-          <td :class="{ checkbox: true, checked: item.ordered }"></td>
+          <td :class="{ checkbox: true, checked: item.closed }"></td>
           <td>
             <router-link
               :to="{ name: 'CustomerTripDetail', params: { id: item.id_customer_trip } }"

@@ -47,7 +47,7 @@ const customerFilterFields = [
   filterFormat.budgetUntil,
   filterFormat.budgetQuantitiesFrom,
   filterFormat.budgetQuantitiesUntil,
-  filterFormat.ordered
+  filterFormat.closed
 ]
 
 const filter = (filterValues, checkboxTouched) => {
@@ -74,7 +74,7 @@ const filter = (filterValues, checkboxTouched) => {
         customerTrip.budget_quantities >= filterValues.budgetQuantitiesFrom) &&
       (!filterValues.budgetQuantitiesUntil ||
         customerTrip.budget_quantities <= filterValues.budgetQuantitiesUntil) &&
-      (!checkboxTouched.ordered || customerTrip.ordered === filterValues.ordered)
+      (!checkboxTouched.closed || customerTrip.closed === filterValues.closed)
   )
 }
 

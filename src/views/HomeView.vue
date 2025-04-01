@@ -10,6 +10,7 @@ import { alertService } from '@/services/alertService'
 import { taskService } from '@/services/taskService'
 import { collectionService } from '@/services/collectionService'
 import CollectionSummary from '@/components/collection/CollectionSummary.vue'
+import ActivityKamba from '@/components/activity/ActivityKamba.vue'
 
 const userStore = useUserStore()
 const id_user = ref('')
@@ -17,6 +18,7 @@ const pendingActivities = ref([])
 const pendingTasks = ref([])
 const pendingAssignedTasks = ref([])
 const collectionSummary = ref([])
+const activityTypes = ref([])
 
 const addPendingActivities = async () => {
   try {
@@ -45,10 +47,20 @@ const addPendingAssignedTasks = async () => {
   }
 }
 
+const addActivityTypes = async () => {
+  try {
+    const response = await activityService.getActivityTypesMandatory()
+    activityTypes.value = response.data
+  } catch (error) {
+    alertService.generalError('Los tipos de actividades no se pudieron cargar')
+  }
+}
+
 const addDataUser = async () => {
   id_user.value = await userStore.user.id_user
   if (id_user.value) {
     addPendingActivities()
+    addActivityTypes()
     addPendingTasks()
     addPendingAssignedTasks()
   }
@@ -66,6 +78,11 @@ onMounted(async () => {
       <h3>Resumen Colecciones</h3>
       <CollectionSummary :collectionSummary="collectionSummary"> </CollectionSummary>
     </div>
+    <div>
+      <ActivityKamba :pendingActivities="pendingActivities" :activityTypes="activityTypes">
+      </ActivityKamba>
+    </div>
+
     <div>
       <h3>Actividades Pendientes</h3>
       <ActivityTable :activities="pendingActivities" :additionalInfo="true"></ActivityTable>

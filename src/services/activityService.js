@@ -22,6 +22,9 @@ export const activityService = {
   getActivityTypes: function () {
     return axiosInstance.get(`/activity_type/?skip=0&limit=100`)
   },
+  getActivityTypesMandatory: function () {
+    return axiosInstance.get(`/activity_type/mandatory/`)
+  },
   getActivitiesByCustomer: function (id_customer) {
     return axiosInstance.get(`/activity/query/?id_customer=${id_customer}`)
   },
