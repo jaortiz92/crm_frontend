@@ -54,7 +54,7 @@ const { customerTrip } = toRefs(props)
   </div>
   <div class="detail-row">
     <p>
-      <strong>Ordenó:</strong>
+      <strong>Cerrado:</strong>
     </p>
     <p>
       <span :class="{ checkbox: true, checked: customerTrip.closed }"></span>

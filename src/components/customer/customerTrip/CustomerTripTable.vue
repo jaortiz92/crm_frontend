@@ -44,7 +44,7 @@ const showAll = () => {
           <th>Presupuesto Valor</th>
           <th>Linea</th>
           <th>Asesor</th>
-          <th>Ordenó</th>
+          <th>Cerrado</th>
           <th>Detalles</th>
         </tr>
       </thead>

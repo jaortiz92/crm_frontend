@@ -15,6 +15,7 @@ import ActivityKamba from '@/components/activity/ActivityKamba.vue'
 const userStore = useUserStore()
 const id_user = ref('')
 const pendingActivities = ref([])
+const pendingActivitiesMe = ref([])
 const pendingTasks = ref([])
 const pendingAssignedTasks = ref([])
 const collectionSummary = ref([])
@@ -22,7 +23,9 @@ const activityTypes = ref([])
 
 const addPendingActivities = async () => {
   try {
-    const response = await activityService.pendingActivities(id_user.value)
+    let response = await activityService.pendingActivitiesMe(id_user.value)
+    pendingActivitiesMe.value = response.data
+    response = await activityService.pendingActivities()
     pendingActivities.value = response.data
   } catch (error) {
     alertService.generalError('Las actividades no se pudieron cargar')
@@ -85,7 +88,7 @@ onMounted(async () => {
 
     <div>
       <h3>Actividades Pendientes</h3>
-      <ActivityTable :activities="pendingActivities" :additionalInfo="true"></ActivityTable>
+      <ActivityTable :activities="pendingActivitiesMe" :additionalInfo="true"></ActivityTable>
     </div>
     <div>
       <h3>Tareas Pendientes</h3>
