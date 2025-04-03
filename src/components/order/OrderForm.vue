@@ -143,14 +143,28 @@ const handleFileUpload = (event) => {
         <div class="field-input">
           <label>Numero de prendas</label>
           <div class="input-number">
-            <input v-model="order.total_quantities" required orderStore type="number" />
+            <input
+              v-model="order.total_quantities"
+              orderStore
+              type="number"
+              min="1"
+              max="500000"
+              required
+            />
             <p>{{ formatters.formatterGeneralNumber(order.total_quantities) }}</p>
           </div>
         </div>
         <div class="field-input">
           <label>Numero de prendas Cargadas</label>
           <div class="input-number">
-            <input v-model="order.system_quantities" required orderStore type="number" />
+            <input
+              v-model="order.system_quantities"
+              orderStore
+              type="number"
+              min="1"
+              max="500000"
+              required
+            />
             <p>{{ formatters.formatterGeneralNumber(order.system_quantities) }}</p>
           </div>
         </div>
@@ -173,9 +187,11 @@ const handleFileUpload = (event) => {
             <input
               @change="updateWithoutTaxValue"
               v-model="order.total_with_tax"
-              required
               orderStore
               type="number"
+              min="500000"
+              max="500000000"
+              required
             />
             <p>{{ formatters.formatterGeneralNumber(order.total_with_tax) }}</p>
           </div>
