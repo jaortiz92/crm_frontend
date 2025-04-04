@@ -64,8 +64,8 @@ const syncScroll = (e) => {
 
     <div class="kanban-board-scroll" ref="mainScroll">
       <div class="kanban-board">
-        <div v-for="column in activityTypes" :key="column.activity" class="kanban-column">
-          <h3>{{ column.activity }}</h3>
+        <div v-for="(column, index) in activityTypes" :key="column.activity" class="kanban-column">
+          <h3>{{ index + 1 }}. {{ column.activity }}</h3>
           <h4>
             Clientes:
             {{
