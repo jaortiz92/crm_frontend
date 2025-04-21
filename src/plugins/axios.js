@@ -2,7 +2,7 @@ import axios from 'axios'
 import { useUserStore } from '@/stores/userStore'
 
 const axiosInstance = axios.create({
-  baseURL: 'http://127.0.0.1:8000',
+  baseURL: 'http://127.0.0.1:8003',
   timeout: 10000, // 10 seconds
   headers: {
     'Content-Type': 'application/json'
