@@ -1,5 +1,5 @@
 <script setup>
-import { defineProps, toRefs, onMounted, ref } from 'vue'
+import { defineProps, toRefs, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useActivityStore } from '@/stores/activityStore'
@@ -21,7 +21,9 @@ const router = useRouter()
 const activityStore = useActivityStore()
 const topScroll = ref(null)
 const mainScroll = ref(null)
-
+const categoryActivityTypeFilter = ref('Todas')
+const activityTypesFiltered = ref([])
+const categoryActivityTypes = ref([])
 const { pendingActivities, activityTypes } = toRefs(props)
 
 const edit = async (activity) => {
@@ -40,12 +42,15 @@ const goToCustomerTrip = async (id_customer_trip) => {
   router.push({ name: 'CustomerTripDetail', params: { id: id_customer_trip } })
 }
 
-onMounted(() => {
-  if (topScroll.value && mainScroll.value) {
-    topScroll.value.addEventListener('scroll', syncScroll)
-    mainScroll.value.addEventListener('scroll', syncScroll)
+const updateKambaCategory = () => {
+  if (categoryActivityTypeFilter.value === 'Todas') {
+    activityTypesFiltered.value = activityTypes.value
+  } else {
+    activityTypesFiltered.value = activityTypes.value.filter(
+      (item) => item.category === categoryActivityTypeFilter.value
+    )
   }
-})
+}
 
 const syncScroll = (e) => {
   if (e.target === topScroll.value) {
@@ -54,9 +59,32 @@ const syncScroll = (e) => {
     topScroll.value.scrollLeft = mainScroll.value.scrollLeft
   }
 }
+
+onMounted(() => {
+  if (topScroll.value && mainScroll.value) {
+    topScroll.value.addEventListener('scroll', syncScroll)
+    mainScroll.value.addEventListener('scroll', syncScroll)
+  }
+})
+
+watch(activityTypes, () => {
+  categoryActivityTypes.value = [
+    ...new Set(activityTypes.value.map((item) => item.category))
+  ].sort()
+  updateKambaCategory()
+})
 </script>
 
 <template>
+  <div class="field-input">
+    <label>Categoria</label>
+    <select v-model="categoryActivityTypeFilter" @change="updateKambaCategory">
+      <option>Todas</option>
+      <option v-for="option in categoryActivityTypes" :key="option" :value="option">
+        {{ option }}
+      </option>
+    </select>
+  </div>
   <div class="kanban-board-wrapper">
     <div class="kanban-board-scroll" ref="topScroll">
       <div class="kanban-board"><p></p></div>
@@ -64,8 +92,13 @@ const syncScroll = (e) => {
 
     <div class="kanban-board-scroll" ref="mainScroll">
       <div class="kanban-board">
-        <div v-for="(column, index) in activityTypes" :key="column.activity" class="kanban-column">
-          <h3>{{ index + 1 }}. {{ column.activity }}</h3>
+        <div
+          v-for="(column, index) in activityTypesFiltered"
+          :key="column.activity"
+          class="kanban-column"
+        >
+          <h3>{{ column.category }}</h3>
+          <h3>{{ index + 1 }}) {{ column.activity_order }}.{{ column.activity }}</h3>
           <h4>
             Clientes:
             {{
@@ -158,5 +191,34 @@ const syncScroll = (e) => {
 .kanban-board-scroll {
   overflow-x: auto;
   white-space: nowrap;
+}
+
+.field-input {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+}
+
+.field-input label {
+  font-size: 100%;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: var(--text-gray);
+}
+
+.field-input select {
+  padding: 10px 12px;
+  font-size: 90%;
+  border: 1px solid var(--gray-border);
+  border-radius: 6px;
+  background-color: var(--background-white);
+  color: var(--text-gray);
+  outline: none;
+}
+
+.field-input select:focus {
+  border-color: var(--light-color);
+  background-color: var(--background-white);
+  box-shadow: 0 0 5px var(--shadow);
 }
 </style>
