@@ -10,7 +10,7 @@ import { alertService } from '@/services/alertService'
 import { taskService } from '@/services/taskService'
 import { collectionService } from '@/services/collectionService'
 import CollectionSummary from '@/components/collection/CollectionSummary.vue'
-import ActivityKamba from '@/components/activity/ActivityKamba.vue'
+import ActivityKanban from '@/components/activity/ActivityKanban.vue'
 
 const userStore = useUserStore()
 const id_user = ref('')
@@ -82,8 +82,8 @@ onMounted(async () => {
       <CollectionSummary :collectionSummary="collectionSummary"> </CollectionSummary>
     </div>
     <div>
-      <ActivityKamba :pendingActivities="pendingActivities" :activityTypes="activityTypes">
-      </ActivityKamba>
+      <ActivityKanban :pendingActivities="pendingActivities" :activityTypes="activityTypes">
+      </ActivityKanban>
     </div>
 
     <div>
