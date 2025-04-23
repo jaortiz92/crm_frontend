@@ -5,7 +5,8 @@ const colors = {
   errorColor: '#EA4C89',
   succesColor: '#2EA44F',
   cancelColor: '#AAAAAA',
-  confirmColor: '#141E28'
+  confirmColor: '#141E28',
+  infoColor: '#4BA6EC'
 }
 
 export const alertService = {
@@ -50,6 +51,20 @@ export const alertService = {
       confirmButtonColor: colors.confirmColor,
       cancelButtonColor: colors.cancelColor,
       confirmButtonText: 'Si'
+    })
+    return response
+  },
+  async generalQuestionThree(textTitle, text) {
+    const response = await Swal.fire({
+      title: textTitle,
+      html: text,
+      icon: 'question',
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonColor: colors.confirmColor,
+      cancelButtonColor: colors.infoColor,
+      confirmButtonText: 'Si',
+      cancelButtonText: 'Cancelar y completar actividad'
     })
     return response
   },

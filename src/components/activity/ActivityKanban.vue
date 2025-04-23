@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { useActivityStore } from '@/stores/activityStore'
 
 import { alertService } from '@/services/alertService'
+import { activityService } from '@/services/activityService'
 
 const props = defineProps({
   pendingActivities: {
@@ -26,12 +27,11 @@ const activityTypesFiltered = ref([])
 const categoryActivityTypes = ref([])
 const { pendingActivities, activityTypes } = toRefs(props)
 
+const draggedActivity = ref(null)
+
 const edit = async (activity) => {
-  const responseUser = await alertService.editElement(activity.id_activity, 'Actividad')
-  if (responseUser.isConfirmed) {
-    activityStore.setActivity(activity)
-    router.push('/activityForm')
-  }
+  activityStore.setActivity(activity)
+  router.push('/activityForm')
 }
 
 const goToCustomer = async (id_customer) => {
@@ -52,12 +52,51 @@ const updateKambaCategory = () => {
   }
 }
 
+const saveUpdate = async (activity) => {
+  await activityService.updateActivity(activity.id_activity, activity)
+  alertService.generalSucces(
+    `La Actividad con ID ${activity.id_activity}, fue actualizada exitosamente`
+  )
+}
+
 const syncScroll = (e) => {
   if (e.target === topScroll.value) {
     mainScroll.value.scrollLeft = topScroll.value.scrollLeft
   } else if (e.target === mainScroll.value) {
     topScroll.value.scrollLeft = mainScroll.value.scrollLeft
   }
+}
+
+const handleDragStart = (activity) => {
+  draggedActivity.value = activity
+}
+
+const handleDrop = async (targetType) => {
+  if (!draggedActivity.value) return
+
+  const responseUser = await alertService.generalQuestionThree(
+    'Cambiar Tarea',
+    `¿Esta seguro que quiere cambiar actividad con ID ${draggedActivity.value.id_activity}, sin completar la tarea?`
+  )
+
+  if (responseUser.isConfirmed) {
+    const original_id_activity_type = draggedActivity.value.id_activity_type
+    try {
+      draggedActivity.value.id_activity_type = targetType.id_activity_type
+      saveUpdate(draggedActivity.value)
+      draggedActivity.value.activity_type = targetType
+    } catch {
+      draggedActivity.value.id_activity_type = original_id_activity_type
+    }
+  } else if (responseUser.isDismissed) {
+    edit(draggedActivity.value)
+  }
+
+  draggedActivity.value = null
+}
+
+const allowDrop = (event) => {
+  event.preventDefault()
 }
 
 onMounted(() => {
@@ -85,6 +124,7 @@ watch(activityTypes, () => {
       </option>
     </select>
   </div>
+
   <div class="kanban-board-wrapper">
     <div class="kanban-board-scroll" ref="topScroll">
       <div class="kanban-board"><p></p></div>
@@ -96,6 +136,8 @@ watch(activityTypes, () => {
           v-for="(column, index) in activityTypesFiltered"
           :key="column.activity"
           class="kanban-column"
+          @dragover="allowDrop"
+          @drop="handleDrop(column)"
         >
           <h3>{{ column.category }}</h3>
           <h3>{{ index + 1 }}) {{ column.activity_order }}.{{ column.activity }}</h3>
@@ -107,13 +149,19 @@ watch(activityTypes, () => {
               ).length
             }}
           </h4>
+
           <div
             v-for="activity in pendingActivities.filter(
               (activity) => activity.activity_type.activity_order === column.activity_order
             )"
             :key="activity.id_activity"
             class="kanban-card"
+            draggable="true"
+            @dragstart="handleDragStart(activity)"
           >
+            <div class="kanban-card-item">
+              <p>...</p>
+            </div>
             <div @click="goToCustomer(activity.customer_trip.id_customer)" class="kanban-card-item">
               <h3>{{ activity.customer_trip.customer.company_name }}</h3>
             </div>
