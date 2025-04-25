@@ -73,6 +73,7 @@ const handleDragStart = (activity) => {
 
 const handleDrop = async (targetType) => {
   if (!draggedActivity.value) return
+  if (draggedActivity.value.id_activity_type === targetType.id_activity_type) return
 
   const responseUser = await alertService.generalQuestionThree(
     'Cambiar Tarea',
