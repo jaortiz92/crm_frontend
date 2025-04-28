@@ -56,7 +56,10 @@ const save = async (contact) => {
   }
 
   const validate = 'Validar numero de documento'
-  contact.phone = contact.phone.toString()
+  if (contact.phone) {
+    contact.phone = contact.phone.toString()
+  }
+
   if (!isEdit.value) {
     const responseUser = await alertService.createElement('Contacto')
     if (responseUser.isConfirmed) {

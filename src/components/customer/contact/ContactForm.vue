@@ -93,23 +93,17 @@ onMounted(async () => {
         </div>
         <div class="field-input">
           <label>Correo</label>
-          <input v-model="contact.email" type="email" required />
+          <input v-model="contact.email" type="email" />
         </div>
         <div class="field-input">
           <label>Celular(Telefono)</label>
-          <input
-            v-model="contact.phone"
-            type="number"
-            min="1000000000"
-            max="10000000000"
-            required
-          />
+          <input v-model="contact.phone" type="number" min="1000000000" max="10000000000" />
         </div>
       </div>
       <div class="detail-column">
         <div class="field-input">
           <label>Fechas de nacimiento</label>
-          <input v-model="contact.birth_date" type="date" max="2010-01-01" required />
+          <input v-model="contact.birth_date" type="date" max="2015-01-01" />
         </div>
         <div class="field-input">
           <label>Rol</label>
