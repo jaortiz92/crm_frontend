@@ -62,7 +62,7 @@ const { customerTrip } = toRefs(props)
   </div>
   <div class="detail-row">
     <p><strong>Comentarios:</strong></p>
-    <p v-if="customerTrip.comment">{{ customerTrip.comment }}</p>
+    <p class="comment" v-if="customerTrip.comment">{{ customerTrip.comment }}</p>
     <p v-else>Sin Comentarios</p>
   </div>
 </template>
@@ -83,6 +83,10 @@ const { customerTrip } = toRefs(props)
 
 .detail-row:last-child {
   border-bottom: none;
+}
+
+.comment {
+  text-align: justify;
 }
 
 @media (max-width: 600px) {

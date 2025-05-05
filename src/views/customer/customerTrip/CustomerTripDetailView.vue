@@ -11,6 +11,7 @@ import { invoiceService } from '@/services/invoiceService'
 
 import CustomerTripInfo from '@/components/customer/customerTrip/CustomerTripInfo.vue'
 import ActivityTable from '@/components/activity/ActivityTable.vue'
+import ActivityComments from '@/components/activity/ActivityComments.vue'
 import CustomerTripSummaryTable from '@/components/customer/customerTrip/CustomerTripSummaryTable.vue'
 import OrderTable from '@/components/order/table/OrderTable.vue'
 import InvoiceTable from '@/components/invoice/table/InvoiceTable.vue'
@@ -77,8 +78,12 @@ const edit = async () => {
       <h2>Facturas</h2>
       <InvoiceTable :invoices="invoices" :items-scale="3"></InvoiceTable>
     </div>
+    <div>
+      <h2>Comentarios en Actividades</h2>
+      <ActivityComments :activities="activities"></ActivityComments>
+    </div>
     <div class="button-edit">
-      <button @click="edit">Editar</button>
+      <button @click="edit">Editar Viaje de Cliente</button>
     </div>
   </div>
   <div v-else>
@@ -93,7 +98,6 @@ const edit = async () => {
 .customer-trip-detail {
   max-width: 600px;
   min-width: 500px;
-  max-height: 460px;
   margin: 10px;
   padding: 10px;
   background-color: var(--light-border);
