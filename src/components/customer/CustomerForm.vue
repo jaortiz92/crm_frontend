@@ -79,7 +79,7 @@ onMounted(async () => {
         </div>
         <div class="field-input">
           <label>Correo</label>
-          <input v-model="customer.email" type="email" required />
+          <input v-model="customer.email" type="email" />
         </div>
         <div class="field-input">
           <label>Celular(Telefono)</label>
