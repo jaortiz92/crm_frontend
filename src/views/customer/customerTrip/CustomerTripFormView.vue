@@ -25,6 +25,8 @@ const customerTripStore = useCustomerTripStore()
 if (customerTripStore.isThereCustomerTrip()) {
   customerTrip.value = customerTripStore.getCustomerTrip()
   isEdit.value = true
+} else if (customerTripStore.isThereCustomer()) {
+  customerTrip.value = customerTripStore.getCustomerTrip()
 } else {
   customerTrip.value = basicModels.customerTrip
 }

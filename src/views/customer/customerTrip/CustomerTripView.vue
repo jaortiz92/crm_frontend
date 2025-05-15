@@ -80,6 +80,7 @@ const filter = (filterValues, checkboxTouched) => {
 
 const create = () => {
   customerTripStore.clearCustomerTrip()
+  console.log(customerTripStore.getCustomerTrip())
   router.push('/customerTripForm')
 }
 

@@ -20,6 +20,8 @@ import CustomerSummaryTable from '@/components/customer/CustomerSummaryTable.vue
 import { useCustomerStore } from '@/stores/customerStore'
 import { useContactStore } from '@/stores/contactStore'
 import { usePhotoStore } from '@/stores/photoStore'
+import { useCustomerTripStore } from '@/stores/customerTripStore'
+
 import CustomerPhotos from '@/components/customer/photo/CustomerPhotos.vue'
 
 const route = useRoute()
@@ -32,6 +34,7 @@ const lastRating = ref(null)
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
 const photoStore = usePhotoStore()
+const customerTripStore = useCustomerTripStore()
 const router = useRouter()
 const showAll = ref(false)
 const activities = ref([])
@@ -84,6 +87,11 @@ const activateShowAll = async () => {
   photos.value = (await photoService.getPhotoByIdCustomer(idCustomer)).data
   showAll.value = true
 }
+
+const createCustomerTrip = () => {
+  customerTripStore.crateCustomerTripWithId(idCustomer)
+  router.push('/customerTripForm')
+}
 </script>
 
 <template>
@@ -103,6 +111,9 @@ const activateShowAll = async () => {
       <div class="customer_trips">
         <h2>Viajes del cliente</h2>
         <CustomerTripTable :customerTrips="customerTrips"></CustomerTripTable>
+        <div class="button-edit">
+          <button @click="createCustomerTrip">Crear Viaje del cliente</button>
+        </div>
       </div>
     </div>
   </div>
