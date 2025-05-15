@@ -86,7 +86,7 @@ const onPaymentChange = () => {
     </div>
     <div v-if="advance.payment > 0" class="field-input">
       <label>Fecha de Ultimo pago</label>
-      <input v-model="advance.payment_date" type="date" required />
+      <input v-model="advance.last_payment_date" type="date" required />
     </div>
     <button type="submit">{{ isEdit ? `Actualizar Anticipo` : 'Crear Anticipo' }}</button>
   </form>
