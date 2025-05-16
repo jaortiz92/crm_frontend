@@ -32,6 +32,7 @@ import RestorePasswordView from '@/views/user/login/RestorePasswordView.vue'
 import ResetPasswordView from '@/views/user/login/ResetPasswordView.vue'
 import UpdatePasswordView from '@/views/user/login/UpdatePasswordView.vue'
 import ShipmentView from '@/views/shipment/ShipmentView.vue'
+import ShipmentDetailView from '@/views/shipment/ShipmentDetailView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -115,6 +116,12 @@ const router = createRouter({
       path: '/shipment',
       name: 'Shipment',
       component: ShipmentView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/shipment/:id',
+      name: 'ShipmentDetail',
+      component: ShipmentDetailView,
       meta: { requiresAuth: true }
     },
     {
