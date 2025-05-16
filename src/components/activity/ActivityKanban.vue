@@ -222,6 +222,11 @@ watch(activityTypes, () => {
   margin: 8px;
 }
 
+.kanban-card-item h3 {
+  white-space: normal;
+  word-break: break-word;
+}
+
 .kanban-card-item:hover {
   color: var(--text-white);
   background-color: var(--light-color-opposite-two);
