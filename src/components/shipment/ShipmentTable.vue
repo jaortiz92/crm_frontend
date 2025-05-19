@@ -63,7 +63,9 @@ const showAll = () => {
           <td v-if="additionalInfo">{{ item.estimated_delivery_date }}</td>
           <td :class="{ checkbox: true, checked: item.received }"></td>
           <td v-if="additionalInfo">{{ item.received ? item.received_date : 'Sin entregar' }}</td>
-          <td>Más detalles</td>
+          <router-link :to="{ name: 'ShipmentDetail', params: { id: item.id_shipment } }">
+            Más detalles
+          </router-link>
         </tr>
       </tbody>
     </table>

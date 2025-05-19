@@ -83,7 +83,7 @@ const { shipment } = toRefs(props)
       <p>
         <strong>Comentarios: </strong>
       </p>
-      <p class="space-for-text" v-if="shipment.comment">{{ shipment.details }}</p>
+      <p class="space-for-text" v-if="shipment.details">{{ shipment.details }}</p>
       <p class="space-for-text" v-else>Sin Comentarios</p>
     </div>
   </div>

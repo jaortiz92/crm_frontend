@@ -1,6 +1,8 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/userStore.js'
+import { useShipmentStore } from '@/stores/shipmentStore'
 
 import ShipmentTable from '@/components/shipment/ShipmentTable.vue'
 
@@ -10,6 +12,8 @@ import { shipmentService } from '@/services/shipmentService'
 const userStore = useUserStore()
 const id_user = ref('')
 const shipments = ref([])
+const shipmentStore = useShipmentStore()
+const router = useRouter()
 
 const addShipments = async () => {
   try {
@@ -27,10 +31,18 @@ const addDataUser = async () => {
   }
 }
 
+const create = () => {
+  shipmentStore.clearShipment()
+  router.push('/shipmentForm')
+}
+
 addDataUser()
 </script>
 
 <template>
+  <div class="button-create">
+    <button @click="create">Crear</button>
+  </div>
   <main>
     <div>
       <h3>Envios</h3>

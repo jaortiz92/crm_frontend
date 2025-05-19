@@ -106,5 +106,16 @@ export const basicModels = {
   photo: {
     id_customer: null,
     url_photo: null
+  },
+  shipment: {
+    id_invoice: null,
+    shipment_date: null,
+    carrier: null,
+    tracking_number: null,
+    estimated_delivery_date: null,
+    shipment_cost: 0,
+    received: false,
+    received_date: null,
+    details: null
   }
 }

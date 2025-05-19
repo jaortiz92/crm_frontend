@@ -10,6 +10,9 @@ export const invoiceService = {
   getInvoiceByOrder: function (id_invoice) {
     return axiosInstance.get(`/invoice/order/${id_invoice}`)
   },
+  getInvoiceByCustomer: function (id_customer) {
+    return axiosInstance.get(`/invoice/customer/${id_customer}`)
+  },
   getInvoiceWithDetails: function (id_invoice) {
     return axiosInstance.get(`/invoice/${id_invoice}/details`)
   },
