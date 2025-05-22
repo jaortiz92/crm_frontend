@@ -3,7 +3,7 @@ import { useUserStore } from '@/stores/userStore'
 
 const axiosInstance = axios.create({
   baseURL: 'http://127.0.0.1:8003',
-  timeout: 10000, // 10 seconds
+  timeout: 20000, // 20 seconds
   headers: {
     'Content-Type': 'application/json'
   }
