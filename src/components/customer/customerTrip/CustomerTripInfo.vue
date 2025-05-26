@@ -27,14 +27,22 @@ const { customerTrip } = toRefs(props)
       {{ customerTrip.collection.short_collection_name }} - Q{{ customerTrip.collection.quarter }}
     </p>
   </div>
-  <div class="detail-row">
-    <p><strong>Presupuesto Valor:</strong></p>
-    <p>{{ formatters.formatterGeneralNumber(customerTrip.budget) }}</p>
+  <div v-if="!customerTrip.with_budget">
+    <div class="detail-row">
+      <p><strong>Sin Presupuestar</strong></p>
+    </div>
   </div>
-  <div class="detail-row">
-    <p><strong>Presupuesto Prendas:</strong></p>
-    <p>{{ formatters.formatterGeneralNumber(customerTrip.budget_quantities) }}</p>
+  <div v-else>
+    <div class="detail-row">
+      <p><strong>Presupuesto Valor:</strong></p>
+      <p>{{ formatters.formatterGeneralNumber(customerTrip.budget) }}</p>
+    </div>
+    <div class="detail-row">
+      <p><strong>Presupuesto Prendas:</strong></p>
+      <p>{{ formatters.formatterGeneralNumber(customerTrip.budget_quantities) }}</p>
+    </div>
   </div>
+
   <div class="detail-row">
     <p>
       <strong>Asesor:</strong>

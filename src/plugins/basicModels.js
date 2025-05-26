@@ -42,7 +42,8 @@ export const basicModels = {
     budget: null,
     budget_quantities: null,
     closed: false,
-    comment: null
+    comment: null,
+    with_budget: true
   },
   customer: {
     company_name: null,

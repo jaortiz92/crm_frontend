@@ -16,6 +16,16 @@ const props = defineProps({
 })
 
 const { customerTrips, additionalInfo } = toRefs(props)
+const budgetStatus = (value) => {
+  if (value === true) {
+    return 'Si'
+  } else if (value === false) {
+    return 'No'
+  } else {
+    return 'Sin información'
+  }
+}
+
 const limitedItems = computed(() => {
   return customerTrips.value.slice(0, itemsToShow.value)
 })
@@ -40,6 +50,7 @@ const showAll = () => {
           <th v-if="additionalInfo">Cliente</th>
           <th>Colección</th>
           <th>Fecha Temporada</th>
+          <th>Presupuestado</th>
           <th>Presupuesto Prendas</th>
           <th>Presupuesto Valor</th>
           <th>Linea</th>
@@ -54,6 +65,7 @@ const showAll = () => {
           <td v-if="additionalInfo">{{ item.customer.company_name }}</td>
           <td>{{ item.collection.short_collection_name }}</td>
           <td>{{ item.collection.year }} Q{{ item.collection.quarter }}</td>
+          <td>{{ budgetStatus(item.with_budget) }}</td>
           <td>{{ formatters.formatterGeneralNumber(item.budget) }}</td>
           <td>{{ formatters.formatterGeneralNumber(item.budget_quantities) }}</td>
           <td>{{ item.collection.line.line_name }}</td>

@@ -26,6 +26,13 @@ const { initialCustomerTrip, isEdit } = toRefs(props)
 
 const customerTrip = ref({ ...initialCustomerTrip.value })
 
+const updateBudget = () => {
+  if (!customerTrip.value.with_budget) {
+    customerTrip.value.budget = 0
+    customerTrip.value.budget_quantities = 0
+  }
+}
+
 const emit = defineEmits(['save'])
 const save = () => {
   emit('save', customerTrip.value)
@@ -71,6 +78,16 @@ const save = () => {
       </div>
       <div class="detail-column">
         <div class="field-input">
+          <label>¿Con Presupuesto? </label
+          ><input
+            @change="updateBudget"
+            v-model="customerTrip.with_budget"
+            type="checkbox"
+            class="checkbox"
+          />
+        </div>
+
+        <div v-if="customerTrip.with_budget" class="field-input">
           <label>Presupuesto Valor</label>
           <div class="input-number">
             <input
@@ -83,7 +100,7 @@ const save = () => {
             <p>{{ formatters.formatterGeneralNumber(customerTrip.budget) }}</p>
           </div>
         </div>
-        <div class="field-input">
+        <div v-if="customerTrip.with_budget" class="field-input">
           <label>Presupuesto Prendas</label>
           <div class="input-number">
             <input
