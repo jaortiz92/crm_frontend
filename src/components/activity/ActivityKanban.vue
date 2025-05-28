@@ -144,11 +144,11 @@ watch(activityTypes, () => {
           <h3>{{ index + 1 }}) {{ column.activity_order }}.{{ column.activity }}</h3>
           <h4>
             Clientes:
-            {{
+            <strong>{{
               pendingActivities.filter(
                 (activity) => activity.activity_type.activity_order === column.activity_order
               ).length
-            }}
+            }}</strong>
           </h4>
 
           <div
@@ -168,8 +168,10 @@ watch(activityTypes, () => {
             </div>
             <div @click="goToCustomerTrip(activity.id_customer_trip)" class="kanban-card-item">
               <p>
-                {{ activity.customer_trip.collection.short_collection_name }} => ID Viaje:
-                {{ activity.customer_trip.id_customer_trip }}
+                <strong
+                  >{{ activity.customer_trip.collection.short_collection_name }} => ID Viaje:
+                  {{ activity.customer_trip.id_customer_trip }}
+                </strong>
               </p>
             </div>
             <div @click="edit(activity)" class="kanban-card-item">
@@ -222,7 +224,8 @@ watch(activityTypes, () => {
   margin: 8px;
 }
 
-.kanban-card-item h3 {
+.kanban-card-item h3,
+p {
   white-space: normal;
   word-break: break-word;
 }
