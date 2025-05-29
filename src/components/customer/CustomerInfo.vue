@@ -47,24 +47,25 @@ const editRating = async () => {
   </div>
   <div class="detail-row">
     <p><strong>Tipo de tienda:</strong></p>
-    <p>{{ customer.store_type.store_type }}</p>
+    <p v-if="customer.store_type">{{ customer.store_type.store_type }}</p>
+    <p v-else></p>
   </div>
   <div class="detail-row">
     <p>
       <strong>Asesor:</strong>
     </p>
-    <p>
-      {{ customer.seller.first_name }}
-      {{ customer.seller.last_name }}
-    </p>
+    <p v-if="customer.seller">{{ customer.seller.first_name }} {{ customer.seller.last_name }}</p>
+    <p v-else></p>
   </div>
   <div class="detail-row">
     <p><strong>Departamento:</strong></p>
-    <p>{{ customer.city.department.department_name }}</p>
+    <p v-if="customer.city">{{ customer.city.department.department_name }}</p>
+    <p v-else></p>
   </div>
   <div class="detail-row">
     <p><strong>Ciudad:</strong></p>
-    <p>{{ customer.city.city_name }}</p>
+    <p v-if="customer.city">{{ customer.city.city_name }}</p>
+    <p v-else></p>
   </div>
   <div class="detail-row">
     <p><strong>Categoria:</strong></p>
