@@ -34,6 +34,8 @@ import UpdatePasswordView from '@/views/user/login/UpdatePasswordView.vue'
 import ShipmentView from '@/views/shipment/ShipmentView.vue'
 import ShipmentDetailView from '@/views/shipment/ShipmentDetailView.vue'
 import ShipmentFormView from '@/views/shipment/ShipmentFormView.vue'
+import BulkUploadView from '@/views/bulk/BulkUploadView.vue'
+import BulkCreateUpdateCustomerView from '@/views/bulk/formats/BulkCreateUpdateCustomerView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -221,7 +223,19 @@ const router = createRouter({
       component: AdvanceFormView,
       meta: { requiresAuth: true }
     },
+    {
+      path: '/bulkUpload/',
+      name: 'BulkUpload',
+      component: BulkUploadView,
+      meta: { requiresAuth: true }
+    },
 
+    {
+      path: '/bulkUpload/customer/:type',
+      name: 'BulkUploadCustomer',
+      component: BulkCreateUpdateCustomerView,
+      meta: { requiresAuth: true }
+    },
     {
       path: '/userForm/edit-create/:status',
       name: 'UserForm',

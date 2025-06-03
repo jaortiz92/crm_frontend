@@ -67,6 +67,9 @@ watch(
           <li class="button-nav">
             <RouterLink to="/shipment">Envios</RouterLink>
           </li>
+          <li class="button-nav">
+            <RouterLink to="/bulkUpload">Cargas Masivas</RouterLink>
+          </li>
           <li class="button-nav logout"><div @click="logout">Cerrar Sesion</div></li>
         </ul>
       </div>
