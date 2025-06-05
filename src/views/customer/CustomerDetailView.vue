@@ -17,6 +17,7 @@ import CustomerTripTable from '@/components/customer/customerTrip/CustomerTripTa
 import ActivityTable from '@/components/activity/ActivityTable.vue'
 import TaskTable from '@/components/task/TaskTable.vue'
 import CustomerSummaryTable from '@/components/customer/CustomerSummaryTable.vue'
+import { useUserStore } from '@/stores/userStore.js'
 import { useCustomerStore } from '@/stores/customerStore'
 import { useContactStore } from '@/stores/contactStore'
 import { usePhotoStore } from '@/stores/photoStore'
@@ -31,6 +32,7 @@ const contacts = ref([])
 const customerTrips = ref([])
 const customerSummary = ref([])
 const lastRating = ref(null)
+const userStore = useUserStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
 const photoStore = usePhotoStore()
@@ -104,14 +106,20 @@ const createCustomerTrip = () => {
         <h2>Contactos</h2>
         <ContactTable :contacts="contacts"></ContactTable>
       </div>
-      <div class="button-edit">
+      <div
+        v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
+        class="button-edit"
+      >
         <button @click="edit">Editar Cliente</button>
         <button @click="createContact">Crear Contacto</button>
       </div>
       <div class="customer_trips">
         <h2>Viajes del cliente</h2>
         <CustomerTripTable :customerTrips="customerTrips"></CustomerTripTable>
-        <div class="button-edit">
+        <div
+          v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
+          class="button-edit"
+        >
           <button @click="createCustomerTrip">Crear Viaje del cliente</button>
         </div>
       </div>

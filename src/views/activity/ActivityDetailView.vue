@@ -8,25 +8,20 @@ import { alertService } from '@/services/alertService'
 import { useActivityStore } from '@/stores/activityStore'
 
 import { activityService } from '@/services/activityService'
-import { roleService } from '@/services/roleService'
 
 import ActivityInfo from '@/components/activity/ActivityInfo.vue'
 import ActivityFormAutho from '@/components/activity/ActivityFormAutho.vue'
-import { autho } from '@/plugins/autho'
 
 const route = useRoute()
 const activity = ref(null)
 const router = useRouter()
 const activityStore = useActivityStore()
 const userStore = useUserStore()
-const roles = autho.activitiesAutho
-const role = ref('')
 const showAutho = ref(false)
 
 onMounted(async () => {
   const idActivity = route.params.id
   activity.value = (await activityService.getActivityById(idActivity)).data
-  role.value = (await roleService.getRoleById(userStore.user.id_role)).data
 })
 
 const edit = async () => {
@@ -63,7 +58,9 @@ const authorizeActivity = async (activityAutho) => {
       </div>
       <div class="button-edit">
         <button
-          v-if="roles.includes(role.role_name) && activity.budget > 0"
+          v-if="
+            userStore.hasRole(['Gerente', 'Financiero', 'Administrador']) && activity.budget > 0
+          "
           @click="showAutho = !showAutho"
         >
           Autorizar

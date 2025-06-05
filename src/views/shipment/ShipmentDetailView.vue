@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { alertService } from '@/services/alertService'
 
+import { useUserStore } from '@/stores/userStore.js'
 import { useShipmentStore } from '@/stores/shipmentStore'
 
 import { shipmentService } from '@/services/shipmentService'
@@ -12,6 +13,7 @@ import ShipmentInfo from '@/components/shipment/ShipmentInfo.vue'
 const route = useRoute()
 const shipment = ref(null)
 const router = useRouter()
+const userStore = useUserStore()
 const shipmentStore = useShipmentStore()
 
 onMounted(async () => {
@@ -34,7 +36,10 @@ const edit = async () => {
       <div class="shipment-header">
         <ShipmentInfo :shipment="shipment"></ShipmentInfo>
       </div>
-      <div class="button-edit">
+      <div
+        v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Logistica')"
+        class="button-edit"
+      >
         <button @click="edit">Editar</button>
       </div>
     </div>

@@ -1,7 +1,7 @@
 <script setup>
 import { useUserStore } from '@/stores/userStore.js'
 import { useRouter } from 'vue-router'
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -12,23 +12,9 @@ const logout = async () => {
 
 const hasToken = computed(() => userStore.token)
 
-const first_name = ref('')
-const last_name = ref('')
-
-const addDataUser = async () => {
-  last_name.value = await userStore.user.last_name
-  first_name.value = await userStore.user.first_name
-}
-
-watch(
-  () => userStore.user,
-  () => {
-    if (userStore.user) {
-      addDataUser()
-    }
-  },
-  { immediate: true }
-)
+const userFullName = computed(() => {
+  return userStore.user ? `${userStore.user.first_name} ${userStore.user.last_name}` : ''
+})
 </script>
 
 <template>
@@ -37,37 +23,37 @@ watch(
       <img src="@/assets/logo.svg" alt="Logo" />
       <h4 v-if="hasToken" class="welcome">
         Bienvenido
-        <router-link :to="{ name: 'UserDetail' }"> {{ first_name }} {{ last_name }} </router-link>
+        <router-link :to="{ name: 'UserDetail' }">{{ userFullName }}</router-link>
       </h4>
     </div>
     <nav v-show="hasToken" class="nav">
       <div>
         <ul>
-          <li class="button-nav">
+          <li v-if="userStore.hasPermission('low')" class="button-nav">
             <RouterLink to="/">Home</RouterLink>
           </li>
-          <li class="button-nav">
+          <li v-if="userStore.hasPermission('low')" class="button-nav">
             <RouterLink to="/customer">Clientes</RouterLink>
           </li>
-          <li class="button-nav">
+          <li v-if="userStore.hasPermission('low')" class="button-nav">
             <RouterLink to="/customerTrip">Viajes De Cliente</RouterLink>
           </li>
-          <li class="button-nav">
+          <li v-if="userStore.hasPermission('low')" class="button-nav">
             <RouterLink to="/order">Ordenes</RouterLink>
           </li>
-          <li class="button-nav">
+          <li v-if="userStore.hasPermission('low')" class="button-nav">
             <RouterLink to="/invoice">Facturas</RouterLink>
           </li>
-          <li class="button-nav">
+          <li v-if="userStore.hasPermission('low')" class="button-nav">
             <RouterLink to="/activity">Actividades</RouterLink>
           </li>
-          <li class="button-nav">
+          <li v-if="userStore.hasPermission('low')" class="button-nav">
             <RouterLink to="/task">Tareas</RouterLink>
           </li>
-          <li class="button-nav">
+          <li v-if="userStore.hasPermission('low')" class="button-nav">
             <RouterLink to="/shipment">Envios</RouterLink>
           </li>
-          <li class="button-nav">
+          <li v-if="userStore.hasPermission('mediumHigh')" class="button-nav">
             <RouterLink to="/bulkUpload">Cargas Masivas</RouterLink>
           </li>
           <li class="button-nav logout"><div @click="logout">Cerrar Sesion</div></li>

@@ -15,6 +15,7 @@ import ActivityComments from '@/components/activity/ActivityComments.vue'
 import CustomerTripSummaryTable from '@/components/customer/customerTrip/CustomerTripSummaryTable.vue'
 import OrderTable from '@/components/order/table/OrderTable.vue'
 import InvoiceTable from '@/components/invoice/table/InvoiceTable.vue'
+import { useUserStore } from '@/stores/userStore.js'
 import { useCustomerTripStore } from '@/stores/customerTripStore'
 
 const route = useRoute()
@@ -22,6 +23,7 @@ const customerTrip = ref(null)
 const activities = ref([])
 const orders = ref([])
 const invoices = ref([])
+const userStore = useUserStore()
 const customerTripStore = useCustomerTripStore()
 const router = useRouter()
 const customerTripSummary = ref([])
@@ -82,7 +84,10 @@ const edit = async () => {
       <h2>Comentarios en Actividades</h2>
       <ActivityComments :activities="activities"></ActivityComments>
     </div>
-    <div class="button-edit">
+    <div
+      v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
+      class="button-edit"
+    >
       <button @click="edit">Editar Viaje de Cliente</button>
     </div>
   </div>

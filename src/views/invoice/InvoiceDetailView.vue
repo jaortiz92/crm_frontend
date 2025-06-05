@@ -8,6 +8,7 @@ import { invoiceService } from '@/services/invoiceService'
 
 import InvoiceDetailTable from '@/components/invoice/table/InvoiceDetailTable.vue'
 import InvoiceInfo from '@/components/invoice/InvoiceInfo.vue'
+import { useUserStore } from '@/stores/userStore.js'
 import { useInvoiceStore } from '@/stores/invoiceStore'
 import InvoiceDetailByBrandTable from '@/components/invoice/table/InvoiceDetailByBrandTable.vue'
 import InvoiceDetailBySizeTable from '@/components/invoice/table/InvoiceDetailBySizeTable.vue'
@@ -21,6 +22,7 @@ const invoiceDetailsBySize = ref([])
 const invoice = ref(null)
 const invoiceStore = useInvoiceStore()
 const router = useRouter()
+const userStore = useUserStore()
 
 onMounted(async () => {
   const idInvoice = route.params.id
@@ -74,8 +76,11 @@ const edit = async () => {
         <InvoiceDetailTable :invoiceDetails="invoiceDetails"></InvoiceDetailTable>
       </div>
     </div>
-    <div class="button-edit">
-      <button @click="edit">Editar</button>
+    <div
+      v-if="userStore.hasPermission('medium') | userStore.hasRole('Asesor Comercial')"
+      class="button-edit"
+    >
+      <button @click="edit">Editar Factura</button>
     </div>
   </div>
   <div v-else>

@@ -40,7 +40,10 @@ addDataUser()
 </script>
 
 <template>
-  <div class="button-create">
+  <div
+    v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Logistica')"
+    class="button-create"
+  >
     <button @click="create">Crear</button>
   </div>
   <main>

@@ -30,6 +30,29 @@ export const useUserStore = defineStore('userStore', {
       this.user = null
       this.username = null
       localStorage.removeItem('token')
+    },
+    hasPermission(requiredAccess) {
+      //permissions with scale
+      if (!this.user?.role) return false
+
+      const userAccess = this.user.role.access_type
+      const roleHierarchy = {
+        ninguno: 0,
+        low: 1,
+        mediumLow: 2,
+        medium: 3,
+        mediumHigh: 4,
+        all: 5
+      }
+
+      return roleHierarchy[userAccess] >= roleHierarchy[requiredAccess]
+    },
+
+    hasRole(roleNames) {
+      //permissions with name
+      if (!this.user?.role) return false
+      const roles = Array.isArray(roleNames) ? roleNames : [roleNames]
+      return roles.includes(this.user.role.role_name)
     }
   }
 })

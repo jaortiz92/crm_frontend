@@ -12,6 +12,7 @@ import OrderDetailTable from '@/components/order/table/OrderDetailTable.vue'
 import OrderInfo from '@/components/order/OrderInfo.vue'
 import InvoiceTable from '@/components/invoice/table/InvoiceTable.vue'
 import AdvanceTable from '@/components/advance/AdvanceTable.vue'
+import { useUserStore } from '@/stores/userStore.js'
 import { useOrderStore } from '@/stores/orderStore'
 import OrderDetailByBrandTable from '@/components/order/table/OrderDetailByBrandTable.vue'
 import OrderDetailByDescriptionTable from '@/components/order/table/OrderDetailByDescriptionTable.vue'
@@ -25,6 +26,7 @@ const orderDetailsBySize = ref([])
 const order = ref(null)
 const invoices = ref([])
 const advances = ref([])
+const userStore = useUserStore()
 const orderStore = useOrderStore()
 const router = useRouter()
 
@@ -70,7 +72,10 @@ const createAdvance = async () => {
       <div>
         <h2>Anticipos</h2>
         <AdvanceTable :advances="advances"></AdvanceTable>
-        <div class="button-edit">
+        <div
+          v-if="userStore.hasPermission('medium') | userStore.hasRole('Asesor Comercial')"
+          class="button-edit"
+        >
           <button @click="createAdvance">Crear Anticipo</button>
         </div>
       </div>
@@ -97,8 +102,11 @@ const createAdvance = async () => {
         <OrderDetailTable :orderDetails="orderDetails"></OrderDetailTable>
       </div>
     </div>
-    <div class="button-edit">
-      <button @click="edit">Editar</button>
+    <div
+      v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
+      class="button-edit"
+    >
+      <button @click="edit">Editar Orden</button>
     </div>
   </div>
   <div v-else>
