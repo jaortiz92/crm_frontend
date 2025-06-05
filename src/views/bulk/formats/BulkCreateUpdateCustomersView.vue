@@ -7,11 +7,9 @@ import { alertService } from '@/services/alertService'
 
 const file = ref(null)
 const uploading = ref(false)
-const message = ref('')
-const error = ref('')
 const route = useRoute()
 const type = ref(route.params.type)
-console.log(type.value)
+const isLoading = ref(false)
 
 const handleFileUpload = (event) => {
   file.value = event.target.files[0]
@@ -27,13 +25,13 @@ const handleFileUpload = (event) => {
 
 const uploadFile = async () => {
   if (!file.value) {
-    error.value = 'Debe seleccionar un archivo.'
+    alertService.generalError('Debe seleccionar un archivo.')
     return
   }
 
+  isLoading.value = true
+
   uploading.value = true
-  error.value = ''
-  message.value = ''
 
   try {
     const formData = new FormData()
@@ -47,32 +45,39 @@ const uploadFile = async () => {
     }
 
     if (response.data.message.error) {
-      error.value = response.data.message.error
+      alertService.generalError(response.data.message.error)
     } else {
-      message.value = 'Clientes creados correctamente.'
+      alertService.generalSucces('Clientes creados correctamente.')
     }
 
     file.value = null
   } catch (err) {
-    error.value =
+    alertService.generalError(
       err.response?.data?.message?.error ||
-      err.response?.data?.detail ||
-      'Error al subir el archivo.'
+        err.response?.data?.detail ||
+        'Error al subir el archivo.'
+    )
   } finally {
     uploading.value = false
+    isLoading.value = false
   }
 }
 </script>
 
 <template>
+  <div v-if="isLoading" class="global-loading-overlay">
+    <p>Procesando, por favor espere...</p>
+    <div class="spinner"></div>
+  </div>
+
   <div class="form-upload-customers">
     <h2 v-if="type === 'create'">Carga Masiva - <strong>Crear</strong> Clientes</h2>
     <h2 v-else-if="type === 'update'">Carga Masiva - <strong>Actualizar</strong> Clientes</h2>
 
     <input type="file" id="document" @change="handleFileUpload" accept=".xlsx,.xlsm" required />
-    <button @click="uploadFile" :disabled="uploading || !file">Subir Archivo</button>
-    <div class="message success" v-if="message">{{ message }}</div>
-    <div class="message error" v-if="error">{{ error }}</div>
+    <div>
+      <button @click="uploadFile" :disabled="uploading || !file">Subir Archivo</button>
+    </div>
   </div>
 </template>
 
@@ -80,6 +85,7 @@ const uploadFile = async () => {
 .form-upload-customers {
   max-width: 600px;
   margin: 0 auto;
+  padding: 20px;
   border: 1px solid var(--gray-border);
   border-radius: 8px;
   background-color: var(--background-light);
@@ -89,18 +95,5 @@ const uploadFile = async () => {
 button:disabled {
   background-color: #aaa;
   cursor: not-allowed;
-}
-
-.message {
-  margin-top: 1rem;
-  font-weight: bold;
-}
-
-.success {
-  color: green;
-}
-
-.error {
-  color: red;
 }
 </style>

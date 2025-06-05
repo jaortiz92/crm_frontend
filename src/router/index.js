@@ -35,7 +35,7 @@ import ShipmentView from '@/views/shipment/ShipmentView.vue'
 import ShipmentDetailView from '@/views/shipment/ShipmentDetailView.vue'
 import ShipmentFormView from '@/views/shipment/ShipmentFormView.vue'
 import BulkUploadView from '@/views/bulk/BulkUploadView.vue'
-import BulkCreateUpdateCustomerView from '@/views/bulk/formats/BulkCreateUpdateCustomerView.vue'
+import BulkCreateUpdateCustomerView from '@/views/bulk/formats/BulkCreateUpdateCustomersView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
