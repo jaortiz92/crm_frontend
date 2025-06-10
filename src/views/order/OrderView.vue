@@ -15,7 +15,7 @@ import { filterFormat } from '@/plugins/filterFormat'
 const userStore = useUserStore()
 const id_user = ref('')
 const skip = 0
-const limit = 500
+const limit = 1000
 const orders = ref([])
 const filteredOrders = ref([])
 const router = useRouter()
