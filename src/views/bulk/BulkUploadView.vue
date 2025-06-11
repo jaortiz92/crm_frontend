@@ -17,6 +17,18 @@ const options = [
     id: 'BulkUpdateCustomer',
     route: 'BulkUploadCustomer',
     params: { type: 'update' }
+  },
+  {
+    label: 'Crear Viaje de Clientes',
+    id: 'BulkCreateCustomerTrip',
+    route: 'BulkUploadCustomerTrip',
+    params: { type: 'create' }
+  },
+  {
+    label: 'Actualizar Viaje de Clientes',
+    id: 'BulkUpdateCustomerTrip',
+    route: 'BulkUploadCustomerTrip',
+    params: { type: 'update' }
   }
 ]
 
@@ -47,9 +59,13 @@ const goToUpload = () => {
 
 <style scoped>
 .menu-container {
-  max-width: 400px;
-  margin: auto;
-  padding: 2rem;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+  border: 1px solid var(--gray-border);
+  border-radius: 8px;
+  background-color: var(--background-light);
+  box-shadow: 0 4px 8px var(--shadow);
 }
 select,
 button {

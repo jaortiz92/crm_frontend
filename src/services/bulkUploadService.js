@@ -14,5 +14,19 @@ export const bulkUploadService = {
         'Content-Type': 'multipart/form-data'
       }
     })
+  },
+  CreateCustomerTrips: function (file) {
+    return axiosInstance.post(`/customer_trip/file/customerTripsTemplate/create`, file, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+  },
+  UpdateCustomerTrips: function (file) {
+    return axiosInstance.post(`/customer_trip/file/customerTripsTemplate/update`, file, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
   }
 }

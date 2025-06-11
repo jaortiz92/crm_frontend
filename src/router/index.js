@@ -36,6 +36,7 @@ import ShipmentDetailView from '@/views/shipment/ShipmentDetailView.vue'
 import ShipmentFormView from '@/views/shipment/ShipmentFormView.vue'
 import BulkUploadView from '@/views/bulk/BulkUploadView.vue'
 import BulkCreateUpdateCustomerView from '@/views/bulk/formats/BulkCreateUpdateCustomersView.vue'
+import BulkCreateUpdateCustomerTripsView from '@/views/bulk/formats/BulkCreateUpdateCustomerTripsView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -229,11 +230,16 @@ const router = createRouter({
       component: BulkUploadView,
       meta: { requiresAuth: true }
     },
-
     {
       path: '/bulkUpload/customer/:type',
       name: 'BulkUploadCustomer',
       component: BulkCreateUpdateCustomerView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/bulkUpload/customerTrip/:type',
+      name: 'BulkUploadCustomerTrip',
+      component: BulkCreateUpdateCustomerTripsView,
       meta: { requiresAuth: true }
     },
     {

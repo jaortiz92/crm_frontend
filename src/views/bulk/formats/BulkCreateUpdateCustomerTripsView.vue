@@ -39,15 +39,15 @@ const uploadFile = async () => {
     let response = null
 
     if (type.value === 'create') {
-      response = await bulkUploadService.CreateCustomers(formData)
+      response = await bulkUploadService.CreateCustomerTrips(formData)
     } else if (type.value === 'update') {
-      response = await bulkUploadService.UpdateCustomers(formData)
+      response = await bulkUploadService.UpdateCustomerTrips(formData)
     }
 
     if (response.data.message.error) {
       alertService.generalError(response.data.message.error)
     } else {
-      alertService.generalSucces('Clientes creados correctamente.')
+      alertService.generalSucces('Viajes de Cliente creados correctamente.')
     }
 
     file.value = null
@@ -71,8 +71,10 @@ const uploadFile = async () => {
   </div>
 
   <div class="form-upload-customers">
-    <h2 v-if="type === 'create'">Carga Masiva - <strong>Crear</strong> Clientes</h2>
-    <h2 v-else-if="type === 'update'">Carga Masiva - <strong>Actualizar</strong> Clientes</h2>
+    <h2 v-if="type === 'create'">Carga Masiva - <strong>Crear</strong> Viajes de Cliente</h2>
+    <h2 v-else-if="type === 'update'">
+      Carga Masiva - <strong>Actualizar</strong> Viajes de Cliente
+    </h2>
 
     <input type="file" id="document" @change="handleFileUpload" accept=".xlsx,.xlsm" required />
     <div>
