@@ -37,6 +37,7 @@ import ShipmentFormView from '@/views/shipment/ShipmentFormView.vue'
 import BulkUploadView from '@/views/bulk/BulkUploadView.vue'
 import BulkCreateUpdateCustomerView from '@/views/bulk/formats/BulkCreateUpdateCustomersView.vue'
 import BulkCreateUpdateCustomerTripsView from '@/views/bulk/formats/BulkCreateUpdateCustomerTripsView.vue'
+import ActivityTypeManagerView from '@/views/activity/ActivityTypeManagerView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -260,6 +261,12 @@ const router = createRouter({
       path: '/user/me',
       name: 'UserDetail',
       component: UserDetailView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/activity-type/manager',
+      name: 'ActivityTypeManager',
+      component: ActivityTypeManagerView,
       meta: { requiresAuth: true }
     }
 

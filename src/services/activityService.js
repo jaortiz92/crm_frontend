@@ -28,6 +28,15 @@ export const activityService = {
   getActivityTypesMandatory: function () {
     return axiosInstance.get(`/activity_type/mandatory/`)
   },
+  createActivityType(activityType) {
+    return axiosInstance.post('/activity_type/', activityType)
+  },
+  updateActivityType(idActivityType, activityType) {
+    return axiosInstance.put(`/activity_type/${idActivityType}`, activityType)
+  },
+  deleteActivityType(idActivityType) {
+    return axiosInstance.delete(`/activity_type/${idActivityType}`)
+  },
   getActivitiesByCustomer: function (id_customer) {
     return axiosInstance.get(`/activity/query/?id_customer=${id_customer}`)
   },
