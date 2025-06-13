@@ -104,12 +104,23 @@ const create = () => {
   router.push('/activityForm')
 }
 
+const config = () => {
+  activityStore.clearActivity()
+  router.push('/activity-type/manager')
+}
+
 addDataUser()
 </script>
 
 <template>
-  <div class="button-create">
+  <div class="buttons-general">
     <button @click="create">Crear</button>
+    <button
+      v-if="userStore.hasPermission('all') | userStore.hasRole('Servicio al Cliente')"
+      @click="config"
+    >
+      Configuración
+    </button>
   </div>
   <main>
     <div>

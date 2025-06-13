@@ -105,5 +105,11 @@ export const alertService = {
       `¿Quiere actualizar el/la ${element}?`,
       `Actualizará ${element} con ID: <strong>${id}</strong>`
     )
+  },
+  async deleteElement(id, element) {
+    return await this.generalQuestion(
+      `¿Quiere eliminar el/la ${element}?`,
+      `Eliminará el/la ${element} con ID: <strong>${id}</strong>`
+    )
   }
 }

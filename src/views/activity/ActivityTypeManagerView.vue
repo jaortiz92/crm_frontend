@@ -34,12 +34,12 @@ const deleteActivityType = async (id) => {
     const activityToDelete = activityTypes.value.find((a) => a.id_activity_type === id)
     if (!activityToDelete) return
 
-    const responseUser = await alertService.editElement(
+    const responseUser = await alertService.deleteElement(
       activityToDelete.id_activity_type,
-      'Actividad'
+      'Tipo de actividad'
     )
 
-    if (!responseUser) return
+    if (responseUser.isConfirmed !== true) return
 
     await activityService.deleteActivityType(id)
     editingId.value = null
@@ -54,7 +54,10 @@ const saveChanges = async (id) => {
     const activityToUpdate = activityTypes.value.find((a) => a.id_activity_type === id)
     if (!activityToUpdate) return
 
-    // Validate order
+    const responseUser = await alertService.editElement(id, 'Tipo de actividad')
+
+    if (responseUser.isConfirmed !== true) return
+
     if (activityToUpdate.mandatory) {
       const mandatoryActivities = activityTypes.value
         .filter((a) => a.mandatory)
@@ -199,7 +202,12 @@ onMounted(() => {
               <template v-if="editingId === activity.id_activity_type">
                 <button @click="saveChanges(activity.id_activity_type)">Guardar</button>
                 <button @click="cancelEdit">Cancelar</button>
-                <button @click="deleteActivityType(activity.id_activity_type)">Eliminar</button>
+                <button
+                  class="delete-button"
+                  @click="deleteActivityType(activity.id_activity_type)"
+                >
+                  Eliminar
+                </button>
               </template>
               <button
                 v-else
@@ -214,7 +222,7 @@ onMounted(() => {
       </table>
     </div>
 
-    <form class="add-activity-form">
+    <form class="add-activity-form" @submit.prevent="addNewActivity">
       <h3>Agregar Nueva Actividad</h3>
       <div class="form-grid">
         <div>
@@ -235,7 +243,7 @@ onMounted(() => {
         </div>
 
         <div>
-          <button @click="addNewActivity" :disabled="!newActivity.activity">Agregar</button>
+          <button type="submit" :disabled="!newActivity.activity">Agregar</button>
         </div>
       </div>
     </form>
