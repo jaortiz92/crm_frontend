@@ -130,7 +130,7 @@ const addNewActivity = async () => {
   }
 }
 
-const categories = ref(['General', 'Comercial', 'Mercadeo', 'Logistica'])
+const categories = ref(['General', 'Comercial', 'Mercadeo', 'Logistica', 'Financiera', 'Tesoreria'])
 
 onMounted(() => {
   loadData()

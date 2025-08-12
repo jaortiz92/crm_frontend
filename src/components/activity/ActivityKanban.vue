@@ -1,5 +1,5 @@
 <script setup>
-import { defineProps, toRefs, onMounted, ref, watch } from 'vue'
+import { defineProps, toRefs, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useActivityStore } from '@/stores/activityStore'
@@ -20,8 +20,6 @@ const props = defineProps({
 
 const router = useRouter()
 const activityStore = useActivityStore()
-const topScroll = ref(null)
-const mainScroll = ref(null)
 const categoryActivityTypeFilter = ref('Todas')
 const activityTypesFiltered = ref([])
 const categoryActivityTypes = ref([])
@@ -59,14 +57,6 @@ const saveUpdate = async (activity) => {
   )
 }
 
-const syncScroll = (e) => {
-  if (e.target === topScroll.value) {
-    mainScroll.value.scrollLeft = topScroll.value.scrollLeft
-  } else if (e.target === mainScroll.value) {
-    topScroll.value.scrollLeft = mainScroll.value.scrollLeft
-  }
-}
-
 const handleDragStart = (activity) => {
   draggedActivity.value = activity
 }
@@ -100,13 +90,6 @@ const allowDrop = (event) => {
   event.preventDefault()
 }
 
-onMounted(() => {
-  if (topScroll.value && mainScroll.value) {
-    topScroll.value.addEventListener('scroll', syncScroll)
-    mainScroll.value.addEventListener('scroll', syncScroll)
-  }
-})
-
 watch(activityTypes, () => {
   categoryActivityTypes.value = [
     ...new Set(activityTypes.value.map((item) => item.category))
@@ -116,70 +99,73 @@ watch(activityTypes, () => {
 </script>
 
 <template>
-  <div class="field-input">
-    <label>Categoria</label>
-    <select v-model="categoryActivityTypeFilter" @change="updateKambaCategory">
-      <option>Todas</option>
-      <option v-for="option in categoryActivityTypes" :key="option" :value="option">
-        {{ option }}
-      </option>
-    </select>
-  </div>
-
-  <div class="kanban-board-wrapper">
-    <div class="kanban-board-scroll" ref="topScroll">
-      <div class="kanban-board"><p></p></div>
+  <div class="kanban">
+    <div class="field-input">
+      <label>Categoria</label>
+      <select v-model="categoryActivityTypeFilter" @change="updateKambaCategory">
+        <option>Todas</option>
+        <option v-for="option in categoryActivityTypes" :key="option" :value="option">
+          {{ option }}
+        </option>
+      </select>
     </div>
 
-    <div class="kanban-board-scroll" ref="mainScroll">
-      <div class="kanban-board">
-        <div
-          v-for="(column, index) in activityTypesFiltered"
-          :key="column.activity"
-          class="kanban-column"
-          @dragover="allowDrop"
-          @drop="handleDrop(column)"
-        >
-          <h3>{{ column.category }}</h3>
-          <h3>{{ index + 1 }}) {{ column.activity_order }}.{{ column.activity }}</h3>
-          <h4>
-            Clientes:
-            <strong>{{
-              pendingActivities.filter(
-                (activity) => activity.activity_type.activity_order === column.activity_order
-              ).length
-            }}</strong>
-          </h4>
-
+    <div class="kanban-board-wrapper">
+      <div class="kanban-board-scroll">
+        <div class="kanban-board">
           <div
-            v-for="activity in pendingActivities.filter(
-              (activity) => activity.activity_type.activity_order === column.activity_order
-            )"
-            :key="activity.id_activity"
-            class="kanban-card"
-            draggable="true"
-            @dragstart="handleDragStart(activity)"
+            v-for="(column, index) in activityTypesFiltered"
+            :key="column.activity"
+            class="kanban-column"
+            @dragover="allowDrop"
+            @drop="handleDrop(column)"
           >
-            <div class="kanban-card-item">
-              <p>...</p>
-            </div>
-            <div @click="goToCustomer(activity.customer_trip.id_customer)" class="kanban-card-item">
-              <h3>{{ activity.customer_trip.customer.company_name }}</h3>
-            </div>
-            <div @click="goToCustomerTrip(activity.id_customer_trip)" class="kanban-card-item">
-              <p>
-                <strong
-                  >{{ activity.customer_trip.collection.short_collection_name }} => ID Viaje:
-                  {{ activity.customer_trip.id_customer_trip }}
-                </strong>
-              </p>
-            </div>
-            <div @click="edit(activity)" class="kanban-card-item">
-              <p>Fecha Estimada: {{ activity.estimated_date }}</p>
-              <p>
-                Responsable: {{ activity.user_activities.first_name }}
-                {{ activity.user_activities.last_name }}
-              </p>
+            <h3>{{ column.category }}</h3>
+            <h3>{{ index + 1 }}) {{ column.activity_order }}.{{ column.activity }}</h3>
+            <h4>
+              Clientes:
+              <strong>{{
+                pendingActivities.filter(
+                  (activity) => activity.activity_type.activity_order === column.activity_order
+                ).length
+              }}</strong>
+            </h4>
+
+            <div class="kanban-cards-container">
+              <div
+                v-for="activity in pendingActivities.filter(
+                  (activity) => activity.activity_type.activity_order === column.activity_order
+                )"
+                :key="activity.id_activity"
+                class="kanban-card"
+                draggable="true"
+                @dragstart="handleDragStart(activity)"
+              >
+                <div class="kanban-card-item">
+                  <p>...</p>
+                </div>
+                <div
+                  @click="goToCustomer(activity.customer_trip.id_customer)"
+                  class="kanban-card-item"
+                >
+                  <h3>{{ activity.customer_trip.customer.company_name }}</h3>
+                </div>
+                <div @click="goToCustomerTrip(activity.id_customer_trip)" class="kanban-card-item">
+                  <p>
+                    <strong
+                      >{{ activity.customer_trip.collection.short_collection_name }} => ID Viaje:
+                      {{ activity.customer_trip.id_customer_trip }}
+                    </strong>
+                  </p>
+                </div>
+                <div @click="edit(activity)" class="kanban-card-item">
+                  <p>Fecha Estimada: {{ activity.estimated_date }}</p>
+                  <p>
+                    Responsable: {{ activity.user_activities.first_name }}
+                    {{ activity.user_activities.last_name }}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -189,20 +175,44 @@ watch(activityTypes, () => {
 </template>
 
 <style scoped>
-.kanban-board {
-  font-size: 70%;
-  display: flex;
-  gap: 1rem;
-  width: 3500px;
+.kanban {
+  background-color: var(--text-white);
+  padding: 10px;
+  border-radius: 8px;
 }
 
 .kanban-column {
-  min-width: 200px;
+  width: 200px;
   background-color: var(--background-light);
   border-radius: 8px;
   padding: 1rem;
+  display: flex;
+  flex-direction: column;
 }
 
+.kanban-column h3 {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.kanban-cards-container {
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}
+
+.kanban-board {
+  font-size: 70%;
+  display: flex;
+  gap: 5px;
+  width: max-content;
+}
+
+.kanban-board-scroll {
+  overflow-x: auto;
+  white-space: nowrap;
+}
 .kanban-card {
   background-color: var(--text-white);
   border-radius: 8px;
@@ -243,11 +253,6 @@ p {
 .kanban-board-wrapper {
   display: flex;
   flex-direction: column;
-}
-
-.kanban-board-scroll {
-  overflow-x: auto;
-  white-space: nowrap;
 }
 
 .field-input {
