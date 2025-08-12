@@ -159,5 +159,29 @@ export const filterFormat = {
     label: 'Forma de Pago',
     type: 'text',
     placeholder: 'Filtrar por forma de pago'
+  },
+  carrier: {
+    key: 'carrier',
+    label: 'Transportadora',
+    type: 'text',
+    placeholder: 'Filtrar por Transportadora'
+  },
+  trackingNumber: {
+    key: 'trackingNumber',
+    label: 'Numero de Guia',
+    type: 'text',
+    placeholder: 'Filtrar por Numero de Guia'
+  },
+  costFrom: {
+    key: 'costFrom',
+    label: 'Costo de envio desde',
+    type: 'number',
+    placeholder: 'Filtrar por costo de envio desde'
+  },
+  costUntil: {
+    key: 'costUntil',
+    label: 'Costo de envio hasta',
+    type: 'number',
+    placeholder: 'Filtrar por costo de envio hasta'
   }
 }

@@ -86,7 +86,8 @@ const handleCheckboxChange = (key) => {
 
 .field {
   flex: 1 1 calc(15% - 10px);
-  padding: 7px;
+  margin: 2px;
+  padding: 8px;
   border: 1px solid var(--light-border);
   border-radius: 5px;
   box-shadow: 0 1px 4px var(--shadow);
