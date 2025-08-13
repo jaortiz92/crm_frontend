@@ -120,17 +120,18 @@ watch(activityTypes, () => {
             @dragover="allowDrop"
             @drop="handleDrop(column)"
           >
-            <h3>{{ column.category }}</h3>
-            <h3>{{ index + 1 }}) {{ column.activity_order }}.{{ column.activity }}</h3>
-            <h4>
-              Clientes:
-              <strong>{{
-                pendingActivities.filter(
-                  (activity) => activity.activity_type.activity_order === column.activity_order
-                ).length
-              }}</strong>
-            </h4>
-
+            <div class="kanban-column-header">
+              <h3>{{ index + 1 }}) {{ column.activity_order }}.{{ column.activity }}</h3>
+              <h4>{{ column.category }}</h4>
+              <h4>
+                Clientes:
+                <strong>{{
+                  pendingActivities.filter(
+                    (activity) => activity.activity_type.activity_order === column.activity_order
+                  ).length
+                }}</strong>
+              </h4>
+            </div>
             <div class="kanban-cards-container">
               <div
                 v-for="activity in pendingActivities.filter(
@@ -195,11 +196,33 @@ watch(activityTypes, () => {
   word-break: break-word;
 }
 
+.kanban-column-header {
+  height: 100px;
+  border: 2px solid var(--gray-border);
+  border-radius: 8px;
+  margin: 5px 0px 5px 0px;
+  padding: 5px 0px 5px 0px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.kanban-column-header h3 {
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+.kanban-column-header h4 {
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
 .kanban-cards-container {
-  max-height: 500px;
+  height: 550px;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
+  padding-top: 10px;
 }
 
 .kanban-board {
@@ -238,6 +261,8 @@ watch(activityTypes, () => {
 p {
   white-space: normal;
   word-break: break-word;
+  padding-right: 5px;
+  padding-left: 5px;
 }
 
 .kanban-card-item:hover {
@@ -246,7 +271,7 @@ p {
   transition: background-color 0.3s ease;
   cursor: pointer;
   border-radius: 8px;
-  padding: 0.5%;
+  padding: 1%;
   font-weight: bold;
 }
 

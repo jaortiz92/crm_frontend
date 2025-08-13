@@ -103,5 +103,4 @@ addDataUser()
       <ShipmentTable :shipments="filteredShipments" :additionalInfo="true"></ShipmentTable>
     </div>
   </main>
-  {{ shipments }}
 </template>
