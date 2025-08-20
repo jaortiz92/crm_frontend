@@ -163,7 +163,7 @@ onMounted(async () => {
 
         <div class="field-input">
           <label>Marca</label>
-          <select multiple v-model="customer.brand_ids" required>
+          <select class="brands-input" multiple v-model="customer.brand_ids" required>
             <option
               v-for="option in options.brands"
               :key="option.id_brand"
@@ -214,6 +214,10 @@ onMounted(async () => {
   gap: 10px;
   justify-content: center;
   align-items: center;
+}
+
+.brands-input {
+  min-height: 220px;
 }
 
 button {

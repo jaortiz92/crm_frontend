@@ -21,8 +21,11 @@ const props = defineProps({
 const router = useRouter()
 const activityStore = useActivityStore()
 const categoryActivityTypeFilter = ref('Todas')
+const categoryActivityCollectionFilter = ref('Todas')
 const activityTypesFiltered = ref([])
 const categoryActivityTypes = ref([])
+const pendingActivitiesFiltered = ref([])
+const categoryActivityCollections = ref([])
 const { pendingActivities, activityTypes } = toRefs(props)
 
 const draggedActivity = ref(null)
@@ -48,6 +51,16 @@ const updateKambaCategory = () => {
       (item) => item.category === categoryActivityTypeFilter.value
     )
   }
+
+  if (categoryActivityCollectionFilter.value === 'Todas') {
+    pendingActivitiesFiltered.value = pendingActivities.value
+  } else {
+    pendingActivitiesFiltered.value = pendingActivities.value.filter(
+      (item) =>
+        item.customer_trip.collection.short_collection_name ===
+        categoryActivityCollectionFilter.value
+    )
+  }
 }
 
 const saveUpdate = async (activity) => {
@@ -61,7 +74,8 @@ const handleDragStart = (activity) => {
   draggedActivity.value = activity
 }
 
-const handleDrop = async (targetType) => {
+const handleDrop = async (targetType, event) => {
+  event.preventDefault()
   if (!draggedActivity.value) return
   if (draggedActivity.value.id_activity_type === targetType.id_activity_type) return
 
@@ -74,7 +88,7 @@ const handleDrop = async (targetType) => {
     const original_id_activity_type = draggedActivity.value.id_activity_type
     try {
       draggedActivity.value.id_activity_type = targetType.id_activity_type
-      saveUpdate(draggedActivity.value)
+      await saveUpdate(draggedActivity.value)
       draggedActivity.value.activity_type = targetType
     } catch {
       draggedActivity.value.id_activity_type = original_id_activity_type
@@ -90,24 +104,56 @@ const allowDrop = (event) => {
   event.preventDefault()
 }
 
-watch(activityTypes, () => {
-  categoryActivityTypes.value = [
-    ...new Set(activityTypes.value.map((item) => item.category))
-  ].sort()
-  updateKambaCategory()
-})
+watch(
+  activityTypes,
+  () => {
+    categoryActivityTypes.value = [
+      ...new Set(activityTypes.value.map((item) => item.category))
+    ].sort()
+    updateKambaCategory()
+  },
+  {
+    immediate: true
+  }
+)
+
+watch(
+  pendingActivities,
+  () => {
+    categoryActivityCollections.value = [
+      ...new Set(
+        pendingActivities.value.map((item) => item.customer_trip.collection.short_collection_name)
+      )
+    ].sort()
+    updateKambaCategory()
+  },
+  {
+    immediate: true
+  }
+)
 </script>
 
 <template>
   <div class="kanban">
-    <div class="field-input">
-      <label>Categoria</label>
-      <select v-model="categoryActivityTypeFilter" @change="updateKambaCategory">
-        <option>Todas</option>
-        <option v-for="option in categoryActivityTypes" :key="option" :value="option">
-          {{ option }}
-        </option>
-      </select>
+    <div class="filters">
+      <div class="field-input">
+        <label>Categoria</label>
+        <select v-model="categoryActivityTypeFilter" @change="updateKambaCategory">
+          <option>Todas</option>
+          <option v-for="option in categoryActivityTypes" :key="option" :value="option">
+            {{ option }}
+          </option>
+        </select>
+      </div>
+      <div class="field-input">
+        <label>Temporada </label>
+        <select v-model="categoryActivityCollectionFilter" @change="updateKambaCategory">
+          <option>Todas</option>
+          <option v-for="option in categoryActivityCollections" :key="option" :value="option">
+            {{ option }}
+          </option>
+        </select>
+      </div>
     </div>
 
     <div class="kanban-board-wrapper">
@@ -115,10 +161,10 @@ watch(activityTypes, () => {
         <div class="kanban-board">
           <div
             v-for="(column, index) in activityTypesFiltered"
-            :key="column.activity"
+            :key="column.id_activity_type"
             class="kanban-column"
             @dragover="allowDrop"
-            @drop="handleDrop(column)"
+            @drop="(event) => handleDrop(column, event)"
           >
             <div class="kanban-column-header">
               <h3>{{ index + 1 }}) {{ column.activity_order }}.{{ column.activity }}</h3>
@@ -126,7 +172,7 @@ watch(activityTypes, () => {
               <h4>
                 Clientes:
                 <strong>{{
-                  pendingActivities.filter(
+                  pendingActivitiesFiltered.filter(
                     (activity) => activity.activity_type.activity_order === column.activity_order
                   ).length
                 }}</strong>
@@ -134,7 +180,7 @@ watch(activityTypes, () => {
             </div>
             <div class="kanban-cards-container">
               <div
-                v-for="activity in pendingActivities.filter(
+                v-for="activity in pendingActivitiesFiltered.filter(
                   (activity) => activity.activity_type.activity_order === column.activity_order
                 )"
                 :key="activity.id_activity"
@@ -281,12 +327,12 @@ p {
 }
 
 .field-input {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 16px;
+  padding-right: 10px;
+  padding-left: 10px;
 }
 
 .field-input label {
+  width: 200px;
   font-size: 100%;
   margin-bottom: 6px;
   font-weight: 600;
@@ -294,6 +340,7 @@ p {
 }
 
 .field-input select {
+  width: 200px;
   padding: 10px 12px;
   font-size: 90%;
   border: 1px solid var(--gray-border);
@@ -307,5 +354,10 @@ p {
   border-color: var(--light-color);
   background-color: var(--background-white);
   box-shadow: 0 0 5px var(--shadow);
+}
+
+.filters {
+  display: flex;
+  gap: 10px;
 }
 </style>
