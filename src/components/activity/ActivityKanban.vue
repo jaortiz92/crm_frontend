@@ -22,10 +22,12 @@ const router = useRouter()
 const activityStore = useActivityStore()
 const categoryActivityTypeFilter = ref('Todas')
 const categoryActivityCollectionFilter = ref('Todas')
+const categoryActivityLineFilter = ref('Todas')
 const activityTypesFiltered = ref([])
 const categoryActivityTypes = ref([])
 const pendingActivitiesFiltered = ref([])
 const categoryActivityCollections = ref([])
+const categoryActivityLines = ref([])
 const { pendingActivities, activityTypes } = toRefs(props)
 
 const draggedActivity = ref(null)
@@ -52,15 +54,22 @@ const updateKambaCategory = () => {
     )
   }
 
-  if (categoryActivityCollectionFilter.value === 'Todas') {
-    pendingActivitiesFiltered.value = pendingActivities.value
-  } else {
-    pendingActivitiesFiltered.value = pendingActivities.value.filter(
+  let result = pendingActivities.value
+
+  if (categoryActivityCollectionFilter.value !== 'Todas') {
+    result = result.filter(
       (item) =>
         item.customer_trip.collection.short_collection_name ===
         categoryActivityCollectionFilter.value
     )
   }
+
+  if (categoryActivityLineFilter.value !== 'Todas') {
+    result = result.filter(
+      (item) => item.customer_trip.collection.line.line_name === categoryActivityLineFilter.value
+    )
+  }
+  pendingActivitiesFiltered.value = result
 }
 
 const saveUpdate = async (activity) => {
@@ -131,6 +140,20 @@ watch(
     immediate: true
   }
 )
+watch(
+  pendingActivities,
+  () => {
+    categoryActivityLines.value = [
+      ...new Set(
+        pendingActivities.value.map((item) => item.customer_trip.collection.line.line_name)
+      )
+    ].sort()
+    updateKambaCategory()
+  },
+  {
+    immediate: true
+  }
+)
 </script>
 
 <template>
@@ -146,10 +169,19 @@ watch(
         </select>
       </div>
       <div class="field-input">
-        <label>Temporada </label>
+        <label>Temporada</label>
         <select v-model="categoryActivityCollectionFilter" @change="updateKambaCategory">
           <option>Todas</option>
           <option v-for="option in categoryActivityCollections" :key="option" :value="option">
+            {{ option }}
+          </option>
+        </select>
+      </div>
+      <div class="field-input">
+        <label>Linea</label>
+        <select v-model="categoryActivityLineFilter" @change="updateKambaCategory">
+          <option>Todas</option>
+          <option v-for="option in categoryActivityLines" :key="option" :value="option">
             {{ option }}
           </option>
         </select>
