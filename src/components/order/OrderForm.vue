@@ -79,6 +79,20 @@ const handleFileUpload = (event) => {
     <div class="fields">
       <div class="detail-column">
         <div v-if="!isEdit" class="field-input">
+          <label>ID Order</label>
+          <div class="input-number">
+            <input
+              v-model="order.id_order"
+              orderStore
+              type="number"
+              min="1"
+              max="500000"
+              required
+            />
+            <p>{{ formatters.formatterGeneralNumber(order.id_order) }}</p>
+          </div>
+        </div>
+        <div v-if="!isEdit" class="field-input">
           <label>Cliente</label>
           <select @change="updateCustomerTrip" v-model="new_values.id_customer" required>
             <option
@@ -126,6 +140,8 @@ const handleFileUpload = (event) => {
           <label>Fecha estimada de entrega</label>
           <input v-model="order.delivery_date" type="date" required />
         </div>
+      </div>
+      <div class="detail-column">
         <div class="field-input">
           <label>Forma de pago</label>
           <select v-model="order.id_payment_method" required>
@@ -138,8 +154,6 @@ const handleFileUpload = (event) => {
             </option>
           </select>
         </div>
-      </div>
-      <div class="detail-column">
         <div class="field-input">
           <label>Numero de prendas</label>
           <div class="input-number">

@@ -25,6 +25,7 @@ export const basicModels = {
     budget_authorized: null
   },
   order: {
+    id_order: null,
     id_customer_trip: null,
     id_seller: null,
     date_order: null,
