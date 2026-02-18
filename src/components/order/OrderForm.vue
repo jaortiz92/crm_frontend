@@ -217,8 +217,9 @@ const handleFileUpload = (event) => {
         <div v-if="details" class="field-input">
           <label>Marca:</label>
           <select v-model="order.type_format" required>
-            <option key="1" value="child">Kyly</option>
+            <option key="1" value="kyly">Kyly</option>
             <option key="2" value="dame">Givec o Tinta</option>
+            <option key="3" value="pampili">Pampili</option>
           </select>
           <label for="document">Documento:</label>
           <input
