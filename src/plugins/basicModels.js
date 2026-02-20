@@ -57,6 +57,7 @@ export const basicModels = {
     address: null,
     brand_ids: [],
     id_seller: null,
+    id_seller_origin: null,
     stores: null,
     id_city: null,
     active: true,

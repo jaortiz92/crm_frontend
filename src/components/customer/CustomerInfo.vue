@@ -85,6 +85,15 @@ const editRating = async () => {
   </div>
   <div class="detail-row">
     <p>
+      <strong>Asesor Inicial:</strong>
+    </p>
+    <p v-if="customer.seller_origin">
+      {{ customer.seller_origin.first_name }} {{ customer.seller_origin.last_name }}
+    </p>
+    <p v-else></p>
+  </div>
+  <div class="detail-row">
+    <p>
       <strong>Activo:</strong>
     </p>
     <p>

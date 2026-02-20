@@ -108,7 +108,7 @@ onMounted(async () => {
           </select>
         </div>
         <div class="field-input">
-          <label>Vendedor</label>
+          <label>Asesor</label>
           <select v-model="customer.id_seller" required>
             <option v-for="option in options.users" :key="option.id_user" :value="option.id_user">
               {{ option.first_name }} {{ option.last_name }}
@@ -128,8 +128,16 @@ onMounted(async () => {
           </select>
         </div>
         <div class="field-input">
+          <label>Asesor Inicial</label>
+          <select v-model="customer.id_seller_origin" required>
+            <option v-for="option in options.users" :key="option.id_user" :value="option.id_user">
+              {{ option.first_name }} {{ option.last_name }}
+            </option>
+          </select>
+        </div>
+        <div class="field-input">
           <label>Fecha de primer contacto</label>
-          <input v-model="customer.date_started_buying" type="date"/>
+          <input v-model="customer.date_started_buying" type="date" />
         </div>
         <div class="field-input">
           <label>Redes Sociales</label>
