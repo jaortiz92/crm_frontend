@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCustomerStore } from '@/stores/customerStore'
 import { storeTypeService } from '@/services/storeTypeService'
+import { originTypeService } from '@/services/originTypeService'
 import { brandService } from '@/services/brandService'
 
 import { basicModels } from '@/plugins/basicModels'
@@ -17,6 +18,7 @@ import { departmentService } from '@/services/departmentService'
 const options = ref({
   users: [],
   storeTypes: [],
+  originTypes: [],
   brands: [],
   departments: [],
   cities: []
@@ -36,6 +38,7 @@ if (customerStore.isThereCustomer()) {
 onMounted(async () => {
   options.value.users = (await userService.getUsers(0, 1000)).data
   options.value.storeTypes = (await storeTypeService.getStoreTypes()).data
+  options.value.originTypes = (await originTypeService.getOriginTypes()).data
   options.value.brands = (await brandService.getBrands()).data
   options.value.departments = (await departmentService.getDepartments()).data
 })

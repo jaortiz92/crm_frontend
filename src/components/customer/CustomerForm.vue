@@ -16,7 +16,8 @@ const props = defineProps({
       storeTypes: [],
       brands: [],
       departments: [],
-      cities: []
+      cities: [],
+      originTypes: []
     })
   },
   isEdit: {
@@ -113,6 +114,22 @@ onMounted(async () => {
               {{ option.first_name }} {{ option.last_name }}
             </option>
           </select>
+        </div>
+        <div class="field-input">
+          <label>Tipo de origen</label>
+          <select v-model="customer.id_origin_type" required>
+            <option
+              v-for="option in options.originTypes"
+              :key="option.id_origin_type"
+              :value="option.id_origin_type"
+            >
+              {{ option.origin_type }} = "{{ option.description }}"
+            </option>
+          </select>
+        </div>
+        <div class="field-input">
+          <label>Fecha de primer contacto</label>
+          <input v-model="customer.date_started_buying" type="date"/>
         </div>
         <div class="field-input">
           <label>Redes Sociales</label>

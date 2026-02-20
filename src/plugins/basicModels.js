@@ -51,6 +51,8 @@ export const basicModels = {
     document: null,
     email: null,
     phone: null,
+    id_origin_type: null,
+    date_started_buying: null,
     id_store_type: null,
     address: null,
     brand_ids: [],
