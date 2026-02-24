@@ -203,7 +203,7 @@ const handleFileUpload = (event) => {
               v-model="order.total_with_tax"
               orderStore
               type="number"
-              min="500000"
+              min="50000"
               max="500000000"
               required
             />
