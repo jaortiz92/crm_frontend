@@ -34,5 +34,8 @@ export const orderService = {
   },
   getOrderDetailsBySizeAndIdOrder: function (id_order) {
     return axiosInstance.get(`/order_detail/by_size/${id_order}`)
+  },
+  deleteOrder: function (id_order, with_details = false) {
+    return axiosInstance.delete(`/order/${id_order}?with_details=${with_details}`)
   }
 }

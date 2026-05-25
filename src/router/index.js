@@ -40,6 +40,8 @@ import BulkCreateUpdateCustomerTripsView from '@/views/bulk/formats/BulkCreateUp
 import ActivityTypeManagerView from '@/views/activity/ActivityTypeManagerView.vue'
 import QueriesView from '@/views/query/QueriesView.vue'
 import ClientValidatorQueryView from '@/views/query/formats/ClientValidatorQueryView.vue'
+import DeletionsView from '@/views/deletions/DeletionsView.vue'
+
 
 
 const router = createRouter({
@@ -258,6 +260,21 @@ const router = createRouter({
       component: ClientValidatorQueryView,
       meta: { requiresAuth: true }
     },
+    {
+      path: '/deletions',
+      name: 'Deletions',
+      component: DeletionsView,
+      meta: { requiresAuth: true },
+      beforeEnter: (to, from, next) => {
+        const userStore = useUserStore()
+        if (userStore.hasPermission('high')) {
+          next()
+        } else {
+          next('/')
+        }
+      }
+    },
+
 
     {
       path: '/userForm/edit-create/:status',

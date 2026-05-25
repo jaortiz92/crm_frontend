@@ -18,5 +18,8 @@ export const customerTripService = {
   },
   getCustomerTripSummary: function (id_customer_trip) {
     return axiosInstance.get(`/query/customer_trip_summary/${id_customer_trip}`)
+  },
+  deleteCustomerTrip: function (id_customer_trip) {
+    return axiosInstance.delete(`/customer_trip/${id_customer_trip}`)
   }
 }

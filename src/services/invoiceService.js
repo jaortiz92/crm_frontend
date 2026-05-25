@@ -37,5 +37,8 @@ export const invoiceService = {
   },
   getInvoiceDetailsBySizeAndIdInvoice: function (id_invoice) {
     return axiosInstance.get(`/invoice_detail/by_size/${id_invoice}`)
+  },
+  deleteInvoice: function (id_invoice, with_details = false) {
+    return axiosInstance.delete(`/invoice/${id_invoice}?with_details=${with_details}`)
   }
 }

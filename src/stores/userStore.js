@@ -42,7 +42,8 @@ export const useUserStore = defineStore('userStore', {
         mediumLow: 2,
         medium: 3,
         mediumHigh: 4,
-        all: 5
+        high: 5,
+        all: 6
       }
 
       return roleHierarchy[userAccess] >= roleHierarchy[requiredAccess]
