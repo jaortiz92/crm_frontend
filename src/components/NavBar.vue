@@ -56,6 +56,9 @@ const userFullName = computed(() => {
           <li v-if="userStore.hasPermission('mediumHigh')" class="button-nav">
             <RouterLink to="/bulkUpload">Cargas Masivas</RouterLink>
           </li>
+          <li v-if="userStore.hasPermission('mediumHigh')" class="button-nav">
+            <RouterLink to="/queries">Consultas</RouterLink>
+          </li>
           <li class="button-nav logout"><div @click="logout">Cerrar Sesion</div></li>
         </ul>
       </div>

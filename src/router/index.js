@@ -38,6 +38,9 @@ import BulkUploadView from '@/views/bulk/BulkUploadView.vue'
 import BulkCreateUpdateCustomerView from '@/views/bulk/formats/BulkCreateUpdateCustomersView.vue'
 import BulkCreateUpdateCustomerTripsView from '@/views/bulk/formats/BulkCreateUpdateCustomerTripsView.vue'
 import ActivityTypeManagerView from '@/views/activity/ActivityTypeManagerView.vue'
+import QueriesView from '@/views/query/QueriesView.vue'
+import ClientValidatorQueryView from '@/views/query/formats/ClientValidatorQueryView.vue'
+
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -243,6 +246,19 @@ const router = createRouter({
       component: BulkCreateUpdateCustomerTripsView,
       meta: { requiresAuth: true }
     },
+    {
+      path: '/queries',
+      name: 'Queries',
+      component: QueriesView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/queries/customer-validator',
+      name: 'ClientValidatorQuery',
+      component: ClientValidatorQueryView,
+      meta: { requiresAuth: true }
+    },
+
     {
       path: '/userForm/edit-create/:status',
       name: 'UserForm',
