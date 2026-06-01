@@ -111,10 +111,13 @@ label {
 
 /* Tables */
 table {
-  border: 1px solid var(--gray-border);
+  border: 1px solid #edf2f7;
   border-spacing: 0px;
+  border-collapse: separate;
   width: 100%;
   border-radius: var(--border-radius-size);
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
 thead th:first-child {
@@ -137,30 +140,39 @@ thead {
   background-color: var(--dark-color);
   width: 100%;
 }
+
 th {
-  height: 30px;
-  text-align: center;
   padding: 12px 15px;
-  font-size: 110%;
-  color: var(--text-white);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+  height: auto;
+  text-align: center;
 }
 
 td {
-  width: fit-content;
+  padding: 10px 14px;
+  border-bottom: 1px solid #edf2f7;
+  color: var(--text-black);
+  height: auto;
+  font-size: 0.85rem;
   text-align: center;
-  padding: 2px 4px 2px 4px;
-  font-size: 90%;
 }
 
-tbody tr:nth-child(odd) {
-  background-color: var(--text-white);
+tbody tr {
+  background-color: #ffffff;
+  transition: background-color 0.2s ease;
 }
+
 tbody tr:nth-child(even) {
-  background-color: var(--normal-color-opposite-one);
+  background-color: #e8f3ff;
 }
 
 tbody tr:hover {
-  background-color: var(--light-color-opposite-two);
+  background-color: rgba(5, 199, 242, 0.20);
 }
 .item-detail-value {
   font-size: 75%;

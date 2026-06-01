@@ -78,7 +78,6 @@ onMounted(async () => {
 <template>
   <main>
     <div>
-      <h3>Resumen Colecciones</h3>
       <CollectionSummary :collectionSummary="collectionSummary"> </CollectionSummary>
     </div>
     <div>
