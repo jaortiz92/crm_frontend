@@ -40,6 +40,7 @@ import BulkCreateUpdateCustomerTripsView from '@/views/bulk/formats/BulkCreateUp
 import ActivityTypeManagerView from '@/views/activity/ActivityTypeManagerView.vue'
 import QueriesView from '@/views/query/QueriesView.vue'
 import ClientValidatorQueryView from '@/views/query/formats/ClientValidatorQueryView.vue'
+import OrdersWithoutInvoicesQueryView from '@/views/query/formats/OrdersWithoutInvoicesQueryView.vue'
 import DeletionsView from '@/views/deletions/DeletionsView.vue'
 
 
@@ -258,6 +259,12 @@ const router = createRouter({
       path: '/queries/customer-validator',
       name: 'ClientValidatorQuery',
       component: ClientValidatorQueryView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/queries/orders-without-invoices/:isClosed?',
+      name: 'OrdersWithoutInvoicesQuery',
+      component: OrdersWithoutInvoicesQueryView,
       meta: { requiresAuth: true }
     },
     {

@@ -81,11 +81,10 @@ const executeDelete = async () => {
   isLoading.value = true
 
   try {
-    let response
     if (config.hasDeepDelete) {
-      response = await config.service[config.deleteMethod](id, isDeepDelete.value)
+      await config.service[config.deleteMethod](id, isDeepDelete.value)
     } else {
-      response = await config.service[config.deleteMethod](id)
+      await config.service[config.deleteMethod](id)
     }
 
     alertService.generalSucces(`${config.label} con ID ${id} eliminado correctamente.`)

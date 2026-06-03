@@ -7,5 +7,9 @@ export const queryService = {
         'Content-Type': 'multipart/form-data'
       }
     })
+  },
+  getOrdersWithoutInvoices: function (closed) {
+    return axiosInstance.get(`/query/orders_without_invoices/${closed}`)
   }
 }
+

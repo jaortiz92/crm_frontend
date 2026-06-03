@@ -395,7 +395,7 @@ const showAll = () => {
               </th>
               <th @click="sortBy('budget_quantities')" class="sortable-th">
                 <div class="th-content">
-                  <span>Presup. Prendas</span>
+                  <span>Prendas Presup.</span>
                   <span class="sort-icon-holder" v-show="sortKey === 'budget_quantities'">
                     <svg
                       v-if="sortAsc"
@@ -428,7 +428,7 @@ const showAll = () => {
               </th>
               <th @click="sortBy('budget')" class="sortable-th">
                 <div class="th-content">
-                  <span>Presup. Valor</span>
+                  <span>Valor Presup.</span>
                   <span class="sort-icon-holder" v-show="sortKey === 'budget'">
                     <svg
                       v-if="sortAsc"
@@ -461,7 +461,7 @@ const showAll = () => {
               </th>
               <th @click="sortBy('orders')" class="sortable-th">
                 <div class="th-content">
-                  <span>N° Ordenes</span>
+                  <span>N° Ord.</span>
                   <span class="sort-icon-holder" v-show="sortKey === 'orders'">
                     <svg
                       v-if="sortAsc"
@@ -558,6 +558,72 @@ const showAll = () => {
                   </span>
                 </div>
               </th>
+              <th @click="sortBy('invoice')" class="sortable-th">
+                <div class="th-content">
+                  <span>N° Fact.</span>
+                  <span class="sort-icon-holder" v-show="sortKey === 'invoice'">
+                    <svg
+                      v-if="sortAsc"
+                      class="sort-arrow"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                    <svg
+                      v-else
+                      class="sort-arrow"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  </span>
+                </div>
+              </th>
+              <th @click="sortBy('invoice_quantities')" class="sortable-th">
+                <div class="th-content">
+                  <span>Prendas Fact.</span>
+                  <span class="sort-icon-holder" v-show="sortKey === 'invoice_quantities'">
+                    <svg
+                      v-if="sortAsc"
+                      class="sort-arrow"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                    <svg
+                      v-else
+                      class="sort-arrow"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  </span>
+                </div>
+              </th>
               <th @click="sortBy('invoice_without_tax')" class="sortable-th">
                 <div class="th-content">
                   <span>Valor Fact.</span>
@@ -593,7 +659,7 @@ const showAll = () => {
               </th>
               <th @click="sortBy('invoice_discount')" class="sortable-th">
                 <div class="th-content">
-                  <span>Descuento</span>
+                  <span>Desc.</span>
                   <span class="sort-icon-holder" v-show="sortKey === 'invoice_discount'">
                     <svg
                       v-if="sortAsc"
@@ -650,6 +716,12 @@ const showAll = () => {
               </td>
               <td class="text-right font-semibold">
                 ${{ formatters.formatterGeneralNumber(item.order_without_tax) }}
+              </td>
+              <td class="text-right font-medium">
+                {{ formatters.formatterGeneralNumber(item.invoices) }}
+              </td>
+              <td class="text-right font-medium">
+                {{ formatters.formatterGeneralNumber(item.invoice_quantities) }}
               </td>
               <td class="text-right invoice-amount font-semibold">
                 ${{ formatters.formatterGeneralNumber(item.invoice_without_tax) }}

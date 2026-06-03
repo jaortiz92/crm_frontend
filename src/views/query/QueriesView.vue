@@ -10,6 +10,18 @@ const options = [
     label: 'Validador de Clientes (Existencia en BD)',
     id: 'ClientValidator',
     route: 'ClientValidatorQuery'
+  },
+  {
+    label: 'Órdenes sin Facturas (Viajes Activos)',
+    id: 'OrdersWithoutInvoicesActive',
+    route: 'OrdersWithoutInvoicesQuery',
+    params: { isClosed: 'false' }
+  },
+  {
+    label: 'Órdenes sin Facturas (Viajes Cerrados)',
+    id: 'OrdersWithoutInvoicesClosed',
+    route: 'OrdersWithoutInvoicesQuery',
+    params: { isClosed: 'true' }
   }
 ]
 
@@ -17,7 +29,8 @@ const goToQuery = () => {
   if (selected.value) {
     const selectedOption = options.find((opt) => opt.id === selected.value)
     router.push({
-      name: selectedOption.route
+      name: selectedOption.route,
+      params: selectedOption.params || {}
     })
   }
 }
