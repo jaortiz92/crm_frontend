@@ -43,8 +43,6 @@ import ClientValidatorQueryView from '@/views/query/formats/ClientValidatorQuery
 import OrdersWithoutInvoicesQueryView from '@/views/query/formats/OrdersWithoutInvoicesQueryView.vue'
 import DeletionsView from '@/views/deletions/DeletionsView.vue'
 
-
-
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -281,7 +279,6 @@ const router = createRouter({
         }
       }
     },
-
 
     {
       path: '/userForm/edit-create/:status',

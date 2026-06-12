@@ -172,7 +172,7 @@ tbody tr:nth-child(even) {
 }
 
 tbody tr:hover {
-  background-color: rgba(5, 199, 242, 0.20);
+  background-color: rgba(5, 199, 242, 0.2);
 }
 .item-detail-value {
   font-size: 75%;

@@ -3,6 +3,9 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useInvoiceStore } from '@/stores/invoiceStore'
 
+import { useOrderStore } from '@/stores/orderStore'
+import { customerService } from '@/services/customerService'
+
 import { basicModels } from '@/plugins/basicModels'
 import { alertService } from '@/services/alertService'
 
@@ -14,16 +17,26 @@ const invoice = ref({})
 const isEdit = ref(false)
 const router = useRouter()
 const invoiceStore = useInvoiceStore()
+const orderStore = useOrderStore()
 const isLoading = ref(false)
+
+const options = ref({
+  customers: []
+})
 
 if (invoiceStore.isThereInvoice()) {
   invoice.value = invoiceStore.getInvoice()
   isEdit.value = true
 } else {
-  invoice.value = basicModels.invoice
+  invoice.value = { ...basicModels.invoice }
+  if (orderStore.isThereOrder()) {
+    invoice.value.id_order = orderStore.getOrder().id_order
+  }
 }
 
-onMounted(async () => {})
+onMounted(async () => {
+  options.value.customers = (await customerService.getCustomers(0, 1000)).data
+})
 
 const saveFile = async (id_order, file) => {
   const formData = new FormData()
@@ -103,6 +116,11 @@ const save = async (invoice, file) => {
   </div>
   <div>
     <h2>{{ isEdit ? `Actualizar Factura: ID ${invoice.id_invoice}` : 'Crear Factura' }}</h2>
-    <InvoiceFrom :initialInvoice="invoice" :isEdit="isEdit" @save="save"></InvoiceFrom>
+    <InvoiceFrom
+      :initialInvoice="invoice"
+      :options="options"
+      :isEdit="isEdit"
+      @save="save"
+    ></InvoiceFrom>
   </div>
 </template>

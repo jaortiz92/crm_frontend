@@ -7,6 +7,9 @@ export const orderService = {
   getOrdersByCutomerTrip: function (id_customer_trip) {
     return axiosInstance.get(`/order/customer_trip/${id_customer_trip}`)
   },
+  getOrdersByCustomer: function (id_customer) {
+    return axiosInstance.get(`/order/customer/${id_customer}`)
+  },
   getOrderWithDetails: function (id_ortder) {
     return axiosInstance.get(`/order/${id_ortder}/details`)
   },

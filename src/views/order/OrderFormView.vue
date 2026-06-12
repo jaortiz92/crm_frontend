@@ -28,7 +28,7 @@ if (orderStore.isThereOrder()) {
   order.value = orderStore.getOrder()
   isEdit.value = true
 } else {
-  order.value = basicModels.order
+  order.value = { ...basicModels.order }
 }
 
 onMounted(async () => {
@@ -107,6 +107,11 @@ const save = async (order, file) => {
   </div>
   <div>
     <h2>{{ isEdit ? `Actualizar Orden: ID ${order.id_order}` : 'Crear Orden' }}</h2>
-    <OrderFrom :initialOrder="order" :options="options" :isEdit="isEdit" @save="save"></OrderFrom>
+    <OrderFrom
+      :initialOrder="order"
+      :options="options"
+      :isEdit="isEdit"
+      @save="save"
+    ></OrderFrom>
   </div>
 </template>

@@ -62,8 +62,9 @@ const getColumnActivitiesCount = (column) => {
 }
 
 const autoCollapseEmptyColumns = () => {
-  if (hasAutoCollapsed.value || !activityTypes.value.length || !pendingActivities.value.length) return
-  
+  if (hasAutoCollapsed.value || !activityTypes.value.length || !pendingActivities.value.length)
+    return
+
   activityTypes.value.forEach((column) => {
     const count = pendingActivities.value.filter(
       (activity) => activity.activity_type.activity_order === column.activity_order
@@ -72,7 +73,7 @@ const autoCollapseEmptyColumns = () => {
       collapsedColumns.value[column.id_activity_type] = true
     }
   })
-  
+
   hasAutoCollapsed.value = true
 }
 
@@ -80,7 +81,7 @@ const isOverdue = (estimatedDate) => {
   if (!estimatedDate) return false
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  
+
   // Parse YYYY-MM-DD safely
   const parts = estimatedDate.split('-')
   if (parts.length !== 3) return false
@@ -122,11 +123,13 @@ const updateKambaCategory = () => {
       const userFirst = (item.user_activities?.first_name || '').toLowerCase()
       const userLast = (item.user_activities?.last_name || '').toLowerCase()
       const fullName = `${userFirst} ${userLast}`
-      
-      return company.includes(query) || 
-             tripId.includes(query) || 
-             collection.includes(query) ||
-             fullName.includes(query)
+
+      return (
+        company.includes(query) ||
+        tripId.includes(query) ||
+        collection.includes(query) ||
+        fullName.includes(query)
+      )
     })
   }
 
@@ -247,22 +250,44 @@ watch(
         <div class="search-input-wrapper">
           <label>Buscar</label>
           <div class="search-field-container">
-            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg
+              class="search-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
-            <input 
-              type="text" 
-              v-model="searchFilter" 
-              placeholder="Buscar por cliente, responsable o viaje..." 
+            <input
+              type="text"
+              v-model="searchFilter"
+              placeholder="Buscar por cliente, responsable o viaje..."
               class="search-input"
             />
-            <button v-if="searchFilter" @click="searchFilter = ''" class="clear-search-btn" title="Limpiar búsqueda">&times;</button>
+            <button
+              v-if="searchFilter"
+              @click="searchFilter = ''"
+              class="clear-search-btn"
+              title="Limpiar búsqueda"
+            >
+              &times;
+            </button>
           </div>
         </div>
         <div class="filters-row">
           <div class="field-input-wrapper">
             <label>Categoría</label>
-            <select v-model="categoryActivityTypeFilter" @change="updateKambaCategory" class="modern-select">
+            <select
+              v-model="categoryActivityTypeFilter"
+              @change="updateKambaCategory"
+              class="modern-select"
+            >
               <option>Todas</option>
               <option v-for="option in categoryActivityTypes" :key="option" :value="option">
                 {{ option }}
@@ -271,7 +296,11 @@ watch(
           </div>
           <div class="field-input-wrapper">
             <label>Temporada</label>
-            <select v-model="categoryActivityCollectionFilter" @change="updateKambaCategory" class="modern-select">
+            <select
+              v-model="categoryActivityCollectionFilter"
+              @change="updateKambaCategory"
+              class="modern-select"
+            >
               <option>Todas</option>
               <option v-for="option in categoryActivityCollections" :key="option" :value="option">
                 {{ option }}
@@ -280,7 +309,11 @@ watch(
           </div>
           <div class="field-input-wrapper">
             <label>Línea</label>
-            <select v-model="categoryActivityLineFilter" @change="updateKambaCategory" class="modern-select">
+            <select
+              v-model="categoryActivityLineFilter"
+              @change="updateKambaCategory"
+              class="modern-select"
+            >
               <option>Todas</option>
               <option v-for="option in categoryActivityLines" :key="option" :value="option">
                 {{ option }}
@@ -304,22 +337,31 @@ watch(
             @drop="(event) => handleDrop(column, event)"
           >
             <!-- Column Header (Shown only when NOT collapsed) -->
-            <div 
+            <div
               v-show="!collapsedColumns[column.id_activity_type]"
-              class="kanban-column-header" 
+              class="kanban-column-header"
               @click="toggleColumn(column.id_activity_type)"
             >
               <div class="column-header-main">
                 <span class="column-collapse-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="icon-chevron">
-                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    class="icon-chevron"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                      clip-rule="evenodd"
+                    />
                   </svg>
                 </span>
                 <h3 class="column-title" :title="column.activity">
                   {{ index + 1 }}. {{ column.activity }}
                 </h3>
               </div>
-              
+
               <div class="column-header-meta">
                 <span class="category-tag">{{ column.category }}</span>
                 <span class="client-count-badge">
@@ -361,65 +403,118 @@ watch(
                   class="card-section company-section"
                   title="Ver detalle del cliente"
                 >
-                  <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  <svg
+                    class="icon-svg"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                    />
                   </svg>
                   <h4 class="company-name">{{ activity.customer_trip.customer.company_name }}</h4>
                 </div>
 
                 <!-- Trip Details -->
-                <div 
-                  @click="goToCustomerTrip(activity.id_customer_trip)" 
+                <div
+                  @click="goToCustomerTrip(activity.id_customer_trip)"
                   class="card-section trip-section"
                   title="Ver detalle del viaje"
                 >
-                  <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                  <svg
+                    class="icon-svg"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                    />
                   </svg>
                   <span class="trip-badge">
-                    {{ activity.customer_trip.collection.short_collection_name }} &middot; ID {{ activity.customer_trip.id_customer_trip }}
+                    {{ activity.customer_trip.collection.short_collection_name }} &middot; ID
+                    {{ activity.customer_trip.id_customer_trip }}
                   </span>
                 </div>
 
                 <!-- Footer with Info -->
-                <div @click="edit(activity)" class="card-section info-section" title="Editar actividad">
-                  <div class="info-row date-row" :class="{ 'date-overdue': isOverdue(activity.estimated_date) }">
-                    <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                <div
+                  @click="edit(activity)"
+                  class="card-section info-section"
+                  title="Editar actividad"
+                >
+                  <div
+                    class="info-row date-row"
+                    :class="{ 'date-overdue': isOverdue(activity.estimated_date) }"
+                  >
+                    <svg
+                      class="icon-svg"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
                     </svg>
                     <span>
                       Est: <strong>{{ activity.estimated_date }}</strong>
-                      <span v-if="isOverdue(activity.estimated_date)" class="overdue-tag">Vencida</span>
+                      <span v-if="isOverdue(activity.estimated_date)" class="overdue-tag"
+                        >Vencida</span
+                      >
                     </span>
                   </div>
                   <div class="info-row user-row">
-                    <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    <svg
+                      class="icon-svg"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      />
                     </svg>
                     <span class="user-name">
-                      {{ activity.user_activities.first_name }} {{ activity.user_activities.last_name }}
+                      {{ activity.user_activities.first_name }}
+                      {{ activity.user_activities.last_name }}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
-            
+
             <!-- Collapsed view minimal placeholder (Shown only when collapsed) -->
-            <div 
+            <div
               v-show="collapsedColumns[column.id_activity_type]"
               class="collapsed-column-indicator"
               @click="toggleColumn(column.id_activity_type)"
               title="Haz clic para expandir la columna"
             >
-              <div 
-                class="collapsed-badge" 
+              <div
+                class="collapsed-badge"
                 :class="{ 'badge-zero': getColumnActivitiesCount(column) === 0 }"
               >
                 {{ getColumnActivitiesCount(column) }}
               </div>
-              <span class="vertical-text">
-                {{ index + 1 }}. {{ column.activity }}
-              </span>
+              <span class="vertical-text"> {{ index + 1 }}. {{ column.activity }} </span>
             </div>
           </div>
         </div>

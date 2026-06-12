@@ -17,6 +17,7 @@ import OrderTable from '@/components/order/table/OrderTable.vue'
 import InvoiceTable from '@/components/invoice/table/InvoiceTable.vue'
 import { useUserStore } from '@/stores/userStore.js'
 import { useCustomerTripStore } from '@/stores/customerTripStore'
+import { useOrderStore } from '@/stores/orderStore'
 
 const route = useRoute()
 const customerTrip = ref(null)
@@ -25,6 +26,7 @@ const orders = ref([])
 const invoices = ref([])
 const userStore = useUserStore()
 const customerTripStore = useCustomerTripStore()
+const orderStore = useOrderStore()
 const router = useRouter()
 const customerTripSummary = ref([])
 
@@ -47,6 +49,15 @@ const edit = async () => {
   if (responseUser.isConfirmed) {
     customerTripStore.setCustomerTrip(customerTrip.value)
     router.push('/customerTripForm')
+  }
+}
+
+const createOrder = async () => {
+  const responseUser = await alertService.createElement('Orden')
+  if (responseUser.isConfirmed) {
+    orderStore.clearOrder()
+    customerTripStore.setCustomerTrip(customerTrip.value)
+    router.push('/orderForm')
   }
 }
 </script>
@@ -73,6 +84,12 @@ const edit = async () => {
         <div class="orders">
           <h2>Ordenes</h2>
           <OrderTable :orders="orders" :itemsScale="3"></OrderTable>
+          <div
+            v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
+            class="button-edit"
+          >
+            <button @click="createOrder">Crear Orden</button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,8 +1,11 @@
 <script setup>
-import { defineProps, defineEmits, toRefs, ref } from 'vue'
+import { defineProps, defineEmits, toRefs, ref, computed, onMounted } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
 import { formatters } from '@/plugins/formatters'
 import { alertService } from '@/services/alertService'
+import { customerTripService } from '@/services/customerTripService'
+import { orderService } from '@/services/orderService'
+import { useOrderStore } from '@/stores/orderStore'
 
 const props = defineProps({
   initialInvoice: {
@@ -22,11 +25,69 @@ const props = defineProps({
   }
 })
 
-const { initialInvoice, isEdit } = toRefs(props)
+const { initialInvoice, options, isEdit } = toRefs(props)
 
 const invoice = ref({ ...initialInvoice.value })
 const details = ref(false)
 const file = ref(null)
+
+const selectedCustomerId = ref(null)
+const selectedCustomerTripId = ref(null)
+const customersTrips = ref([])
+const customerOrders = ref([])
+
+const orderStore = useOrderStore()
+
+const filteredOrders = computed(() => {
+  if (!selectedCustomerTripId.value) {
+    return customerOrders.value
+  }
+  return customerOrders.value.filter(
+    (order) => order.id_customer_trip === selectedCustomerTripId.value
+  )
+})
+
+const onCustomerChange = async () => {
+  selectedCustomerTripId.value = null
+  invoice.value.id_order = null
+  if (selectedCustomerId.value) {
+    try {
+      customersTrips.value = (
+        await customerTripService.getCustomerTripsByCustomer(selectedCustomerId.value)
+      ).data
+      customerOrders.value = (await orderService.getOrdersByCustomer(selectedCustomerId.value)).data
+    } catch (error) {
+      console.error('Error loading customer trips/orders:', error)
+      alertService.generalError('Error al cargar la información del cliente')
+    }
+  } else {
+    customersTrips.value = []
+    customerOrders.value = []
+  }
+}
+
+onMounted(async () => {
+  if (!isEdit.value && orderStore.isThereOrder()) {
+    const storedOrder = orderStore.getOrder()
+    if (storedOrder && storedOrder.customer_trip) {
+      selectedCustomerId.value = storedOrder.customer_trip.id_customer
+      try {
+        customersTrips.value = (
+          await customerTripService.getCustomerTripsByCustomer(selectedCustomerId.value)
+        ).data
+        customerOrders.value = (
+          await orderService.getOrdersByCustomer(selectedCustomerId.value)
+        ).data
+        selectedCustomerTripId.value = storedOrder.customer_trip.id_customer_trip
+        invoice.value.id_order = storedOrder.id_order
+      } catch (error) {
+        console.error('Error auto-populating from orderStore:', error)
+      } finally {
+        orderStore.clearOrder()
+      }
+    }
+  }
+})
 
 const emit = defineEmits(['save'])
 const save = () => {
@@ -67,6 +128,48 @@ const handleFileUpload = (event) => {
           <select v-model="invoice.key" required>
             <option v-for="index in 3" :key="index" :value="index">
               {{ index }}
+            </option>
+          </select>
+        </div>
+        <div v-if="!isEdit" class="field-input">
+          <label>Cliente</label>
+          <select @change="onCustomerChange" v-model="selectedCustomerId">
+            <option :value="null">-- Seleccione un cliente --</option>
+            <option
+              v-for="option in options.customers"
+              :key="option.id_customer"
+              :value="option.id_customer"
+            >
+              {{ option.company_name }}
+            </option>
+          </select>
+        </div>
+        <div v-if="!isEdit && selectedCustomerId" class="field-input">
+          <label>Viaje del Cliente</label>
+          <select v-model="selectedCustomerTripId">
+            <option :value="null">Todos los viajes / Sin filtrar</option>
+            <option
+              v-for="option in customersTrips"
+              :key="option.id_customer_trip"
+              :value="option.id_customer_trip"
+            >
+              {{ option.collection.line.line_name }}-{{
+                option.collection.short_collection_name
+              }}
+              -> ID={{ option.id_customer_trip }}
+            </option>
+          </select>
+        </div>
+        <div v-if="!isEdit && selectedCustomerId" class="field-input">
+          <label>Seleccionar Orden</label>
+          <select v-model="invoice.id_order">
+            <option :value="null">-- Seleccione una orden --</option>
+            <option
+              v-for="option in filteredOrders"
+              :key="option.id_order"
+              :value="option.id_order"
+            >
+              ID: {{ option.id_order }} - Delivery: {{ option.delivery_date }}
             </option>
           </select>
         </div>

@@ -64,8 +64,8 @@ const clearResults = () => {
 
 // Summary Metrics
 const totalCount = computed(() => results.value.length)
-const foundCount = computed(() => results.value.filter(r => r.exists).length)
-const notFoundCount = computed(() => results.value.filter(r => !r.exists).length)
+const foundCount = computed(() => results.value.filter((r) => r.exists).length)
+const notFoundCount = computed(() => results.value.filter((r) => !r.exists).length)
 
 const foundPercent = computed(() => {
   if (totalCount.value === 0) return 0
@@ -77,15 +77,17 @@ const filteredResults = computed(() => {
   if (!searchQuery.value.trim()) return results.value
 
   const query = searchQuery.value.toLowerCase().trim()
-  return results.value.filter(r => {
+  return results.value.filter((r) => {
     const docStr = formatDoc(r.document).toLowerCase()
     const nameStr = (r.company_name || '').toLowerCase()
     const sellerStr = (r.seller || '').toLowerCase()
     const emailStr = (r.email || '').toLowerCase()
-    return docStr.includes(query) || 
-           nameStr.includes(query) || 
-           sellerStr.includes(query) ||
-           emailStr.includes(query)
+    return (
+      docStr.includes(query) ||
+      nameStr.includes(query) ||
+      sellerStr.includes(query) ||
+      emailStr.includes(query)
+    )
   })
 })
 
@@ -101,7 +103,7 @@ const exportToCSV = () => {
   let csvContent = '\uFEFF' // UTF-8 BOM
   csvContent += 'Documento,Existe en BD,Compañía,Correo,Teléfono,Vendedor,Activo\n'
 
-  results.value.forEach(r => {
+  results.value.forEach((r) => {
     const doc = formatDoc(r.document)
     const exists = r.exists ? 'SÍ' : 'NO'
     const name = r.company_name ? `"${r.company_name.replace(/"/g, '""')}"` : ''
@@ -143,24 +145,23 @@ const goBack = () => {
     <!-- Upload Box -->
     <div class="upload-card">
       <p class="description">
-        Suba un archivo Excel (.xlsx o .xlsm). Buscaremos automáticamente la columna de documento y validaremos si los clientes ya están registrados en el CRM.
+        Suba un archivo Excel (.xlsx o .xlsm). Buscaremos automáticamente la columna de documento y
+        validaremos si los clientes ya están registrados en el CRM.
       </p>
       <div class="upload-controls">
-        <input 
-          type="file" 
-          id="queryFile" 
-          @change="handleFileUpload" 
-          accept=".xlsx,.xlsm" 
-          class="file-input" 
-          required 
+        <input
+          type="file"
+          id="queryFile"
+          @change="handleFileUpload"
+          accept=".xlsx,.xlsm"
+          class="file-input"
+          required
         />
         <div class="btn-group">
           <button @click="uploadFile" :disabled="isLoading || !file" class="submit-btn">
             Validar Clientes
           </button>
-          <button v-if="hasQueried" @click="clearResults" class="clear-btn">
-            Limpiar
-          </button>
+          <button v-if="hasQueried" @click="clearResults" class="clear-btn">Limpiar</button>
         </div>
       </div>
     </div>
@@ -198,16 +199,14 @@ const goBack = () => {
       <div class="action-panel">
         <div class="search-box">
           <span class="search-icon">🔍</span>
-          <input 
-            v-model="searchQuery" 
-            type="text" 
-            placeholder="Buscar por documento, compañía, vendedor o correo..." 
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Buscar por documento, compañía, vendedor o correo..."
             class="search-input"
           />
         </div>
-        <button @click="exportToCSV" class="export-btn">
-          📥 Exportar a CSV
-        </button>
+        <button @click="exportToCSV" class="export-btn">📥 Exportar a CSV</button>
       </div>
 
       <!-- Table Section -->
@@ -227,7 +226,11 @@ const goBack = () => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="res in filteredResults" :key="res.document" :class="{ 'row-exists': res.exists, 'row-absent': !res.exists }">
+            <tr
+              v-for="res in filteredResults"
+              :key="res.document"
+              :class="{ 'row-exists': res.exists, 'row-absent': !res.exists }"
+            >
               <td class="doc-cell font-mono">{{ formatDoc(res.document) }}</td>
               <td>
                 <span :class="['status-badge', res.exists ? 'badge-exists' : 'badge-absent']">

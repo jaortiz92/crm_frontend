@@ -1,9 +1,10 @@
 <script setup>
-import { defineProps, defineEmits, toRefs, ref } from 'vue'
+import { defineProps, defineEmits, toRefs, ref, onMounted } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
 import { formatters } from '@/plugins/formatters'
 import { customerTripService } from '@/services/customerTripService'
 import { alertService } from '@/services/alertService'
+import { useCustomerTripStore } from '@/stores/customerTripStore'
 
 const props = defineProps({
   initialOrder: {
@@ -15,28 +16,56 @@ const props = defineProps({
     default: () => ({
       customers: [],
       users: [],
-      paymentMethods: [],
-      customersTrips: []
+      paymentMethods: []
     })
   },
   isEdit: {
     type: Boolean,
     default: false
-  },
-  new_values: {
-    type: Object,
-    default: () => ({
-      id_customer_trip: null,
-      id_customer: null
-    })
   }
 })
 
-const { initialOrder, options, isEdit, new_values } = toRefs(props)
+const { initialOrder, options, isEdit } = toRefs(props)
 
 const order = ref({ ...initialOrder.value })
 const details = ref(false)
 const file = ref(null)
+
+const new_values = ref({
+  id_customer_trip: null,
+  id_customer: null
+})
+const customersTrips = ref([])
+
+const customerTripStore = useCustomerTripStore()
+
+onMounted(async () => {
+  if (
+    !isEdit.value &&
+    (customerTripStore.isThereCustomerTrip() || customerTripStore.isThereCustomer())
+  ) {
+    const storedTrip = customerTripStore.getCustomerTrip()
+    if (storedTrip) {
+      new_values.value.id_customer = storedTrip.id_customer
+
+      if (customerTripStore.isThereCustomerTrip()) {
+        new_values.value.id_customer_trip = storedTrip.id_customer_trip
+        order.value.id_customer_trip = storedTrip.id_customer_trip
+      }
+
+      if (new_values.value.id_customer) {
+        try {
+          customersTrips.value = (
+            await customerTripService.getCustomerTripsByCustomer(new_values.value.id_customer)
+          ).data
+        } catch (error) {
+          console.error('Error loading customer trips from store:', error)
+        }
+      }
+    }
+    customerTripStore.clearCustomerTrip()
+  }
+})
 
 const emit = defineEmits(['save'])
 const save = () => {
@@ -52,9 +81,13 @@ const updateWithoutTaxValue = () => {
 }
 
 const updateCustomerTrip = async () => {
-  options.value.customersTrips = (
-    await customerTripService.getCustomerTripsByCustomer(new_values.value.id_customer)
-  ).data
+  try {
+    customersTrips.value = (
+      await customerTripService.getCustomerTripsByCustomer(new_values.value.id_customer)
+    ).data
+  } catch (error) {
+    console.error('Error loading customer trips:', error)
+  }
 }
 
 const updateCustomerTripId = () => {
@@ -108,7 +141,7 @@ const handleFileUpload = (event) => {
           <label>Viaje del Cliente</label>
           <select @change="updateCustomerTripId" v-model="new_values.id_customer_trip" required>
             <option
-              v-for="option in options.customersTrips"
+              v-for="option in customersTrips"
               :key="option.id_customer_trip"
               :value="option.id_customer_trip"
             >

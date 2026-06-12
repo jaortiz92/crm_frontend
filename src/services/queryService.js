@@ -12,4 +12,3 @@ export const queryService = {
     return axiosInstance.get(`/query/orders_without_invoices/${closed}`)
   }
 }
-

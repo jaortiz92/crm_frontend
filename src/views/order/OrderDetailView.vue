@@ -14,6 +14,7 @@ import InvoiceTable from '@/components/invoice/table/InvoiceTable.vue'
 import AdvanceTable from '@/components/advance/AdvanceTable.vue'
 import { useUserStore } from '@/stores/userStore.js'
 import { useOrderStore } from '@/stores/orderStore'
+import { useInvoiceStore } from '@/stores/invoiceStore'
 import OrderDetailByBrandTable from '@/components/order/table/OrderDetailByBrandTable.vue'
 import OrderDetailByDescriptionTable from '@/components/order/table/OrderDetailByDescriptionTable.vue'
 import OrderDetailBySizeTable from '@/components/order/table/OrderDetailBySizeTable.vue'
@@ -28,6 +29,7 @@ const invoices = ref([])
 const advances = ref([])
 const userStore = useUserStore()
 const orderStore = useOrderStore()
+const invoiceStore = useInvoiceStore()
 const router = useRouter()
 
 onMounted(async () => {
@@ -61,6 +63,15 @@ const createAdvance = async () => {
     router.push(`/advanceForm/${orderDetails.value.id_order}`)
   }
 }
+
+const createInvoice = async () => {
+  const responseUser = await alertService.createElement('Factura')
+  if (responseUser.isConfirmed) {
+    invoiceStore.clearInvoice()
+    orderStore.setOrder(order.value)
+    router.push('/invoiceForm')
+  }
+}
 </script>
 
 <template>
@@ -82,6 +93,12 @@ const createAdvance = async () => {
       <div>
         <h2>Facturas</h2>
         <InvoiceTable :invoices="invoices"></InvoiceTable>
+        <div
+          v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
+          class="button-edit"
+        >
+          <button @click="createInvoice">Crear Factura</button>
+        </div>
       </div>
       <div class="order-detail">
         <h2>Resumen Detalle Orden</h2>
