@@ -10,5 +10,11 @@ export const queryService = {
   },
   getOrdersWithoutInvoices: function (closed) {
     return axiosInstance.get(`/query/orders_without_invoices/${closed}`)
+  },
+  getOrdersWithoutDetails: function () {
+    return axiosInstance.get(`/query/orders_without_details`)
+  },
+  getInvoicesWithoutDetails: function () {
+    return axiosInstance.get(`/query/invoices_without_details`)
   }
 }

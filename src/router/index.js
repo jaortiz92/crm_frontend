@@ -42,6 +42,8 @@ import ActivityTypeManagerView from '@/views/activity/ActivityTypeManagerView.vu
 import QueriesView from '@/views/query/QueriesView.vue'
 import ClientValidatorQueryView from '@/views/query/formats/ClientValidatorQueryView.vue'
 import OrdersWithoutInvoicesQueryView from '@/views/query/formats/OrdersWithoutInvoicesQueryView.vue'
+import OrdersWithoutDetailsQueryView from '@/views/query/formats/OrdersWithoutDetailsQueryView.vue'
+import InvoicesWithoutDetailsQueryView from '@/views/query/formats/InvoicesWithoutDetailsQueryView.vue'
 import DeletionsView from '@/views/deletions/DeletionsView.vue'
 
 const router = createRouter({
@@ -270,6 +272,18 @@ const router = createRouter({
       path: '/queries/orders-without-invoices/:isClosed?',
       name: 'OrdersWithoutInvoicesQuery',
       component: OrdersWithoutInvoicesQueryView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/queries/orders-without-details',
+      name: 'OrdersWithoutDetailsQuery',
+      component: OrdersWithoutDetailsQueryView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/queries/invoices-without-details',
+      name: 'InvoicesWithoutDetailsQuery',
+      component: InvoicesWithoutDetailsQueryView,
       meta: { requiresAuth: true }
     },
     {

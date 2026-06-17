@@ -22,8 +22,19 @@ const options = [
     id: 'OrdersWithoutInvoicesClosed',
     route: 'OrdersWithoutInvoicesQuery',
     params: { isClosed: 'true' }
+  },
+  {
+    label: 'Órdenes sin Detalles',
+    id: 'OrdersWithoutDetails',
+    route: 'OrdersWithoutDetailsQuery'
+  },
+  {
+    label: 'Facturas sin Detalles',
+    id: 'InvoicesWithoutDetails',
+    route: 'InvoicesWithoutDetailsQuery'
   }
-]
+ ]
+
 
 const goToQuery = () => {
   if (selected.value) {
