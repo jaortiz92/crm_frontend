@@ -28,5 +28,12 @@ export const bulkUploadService = {
         'Content-Type': 'multipart/form-data'
       }
     })
+  },
+  UploadInvoiceDetails: function (file) {
+    return axiosInstance.post(`/invoice_detail/bulk_file`, file, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
   }
 }

@@ -24,13 +24,19 @@ const options = [
     route: 'BulkUploadCustomerTrip',
     params: { type: 'create' }
   },
-  {
-    label: 'Actualizar Viaje de Clientes',
-    id: 'BulkUpdateCustomerTrip',
-    route: 'BulkUploadCustomerTrip',
-    params: { type: 'update' }
-  }
-]
+    {
+      label: 'Actualizar Viaje de Clientes',
+      id: 'BulkUpdateCustomerTrip',
+      route: 'BulkUploadCustomerTrip',
+      params: { type: 'update' }
+    },
+    {
+      label: 'Carga Masiva Detalle de Facturas',
+      id: 'BulkUploadInvoiceDetails',
+      route: 'BulkUploadInvoiceDetails',
+      params: {}
+    }
+  ]
 
 const goToUpload = () => {
   if (selected.value) {

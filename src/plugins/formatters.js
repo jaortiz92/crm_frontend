@@ -9,6 +9,8 @@ export const formatters = {
       result = 'Masculino'
     } else if (value == 2) {
       result = 'Femenino'
+    } else if (value == 0) {
+      result = 'Unisex'
     }
     return result
   },

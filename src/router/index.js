@@ -37,6 +37,7 @@ import ShipmentFormView from '@/views/shipment/ShipmentFormView.vue'
 import BulkUploadView from '@/views/bulk/BulkUploadView.vue'
 import BulkCreateUpdateCustomerView from '@/views/bulk/formats/BulkCreateUpdateCustomersView.vue'
 import BulkCreateUpdateCustomerTripsView from '@/views/bulk/formats/BulkCreateUpdateCustomerTripsView.vue'
+import BulkUploadInvoiceDetailsView from '@/views/bulk/formats/BulkUploadInvoiceDetailsView.vue'
 import ActivityTypeManagerView from '@/views/activity/ActivityTypeManagerView.vue'
 import QueriesView from '@/views/query/QueriesView.vue'
 import ClientValidatorQueryView from '@/views/query/formats/ClientValidatorQueryView.vue'
@@ -245,6 +246,12 @@ const router = createRouter({
       path: '/bulkUpload/customerTrip/:type',
       name: 'BulkUploadCustomerTrip',
       component: BulkCreateUpdateCustomerTripsView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/bulkUpload/invoiceDetails',
+      name: 'BulkUploadInvoiceDetails',
+      component: BulkUploadInvoiceDetailsView,
       meta: { requiresAuth: true }
     },
     {
