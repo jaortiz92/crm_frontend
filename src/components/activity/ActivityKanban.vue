@@ -6,6 +6,7 @@ import { useActivityStore } from '@/stores/activityStore'
 
 import { alertService } from '@/services/alertService'
 import { activityService } from '@/services/activityService'
+import { exportToCSV } from '@/plugins/csvExport'
 
 const props = defineProps({
   pendingActivities: {
@@ -141,6 +142,42 @@ const saveUpdate = async (activity) => {
   alertService.generalSucces(
     `La Actividad con ID ${activity.id_activity}, fue actualizada exitosamente`
   )
+}
+
+const handleExportCSV = () => {
+  const columns = [
+    { key: 'id_activity', label: 'ID Actividad' },
+    { key: 'company_name', label: 'Cliente' },
+    { key: 'id_customer_trip', label: 'ID Viaje' },
+    { key: 'short_collection_name', label: 'Temporada' },
+    { key: 'line_name', label: 'Línea' },
+    { key: 'activity_type', label: 'Actividad' },
+    { key: 'estimated_date', label: 'Fecha Estimada' },
+    { key: 'city', label: 'Ciudad' },
+    { key: 'user_name', label: 'Responsable' },
+    { key: 'seller', label: 'Asesor'},
+    { key: 'overdue', label: 'Vencida' }
+  ]
+
+  const rows = pendingActivitiesFiltered.value.map((activity) => ({
+    id_activity: activity.id_activity,
+    company_name: activity.customer_trip?.customer?.company_name || '',
+    id_customer_trip: activity.customer_trip?.id_customer_trip || '',
+    short_collection_name: activity.customer_trip?.collection?.short_collection_name || '',
+    line_name: activity.customer_trip?.collection?.line?.line_name || '',
+    activity_type: activity.activity_type?.activity || '',
+    estimated_date: activity.estimated_date || '',
+    city: activity.customer_trip?.customer?.city?.city_name || '',
+    seller: (activity.customer_trip?.seller?.first_name || '') + ' ' + (activity.customer_trip?.seller?.last_name || ''),
+    user_name:
+      (activity.user_activities?.first_name || '') +
+      ' ' +
+      (activity.user_activities?.last_name || ''),
+    overdue: isOverdue(activity.estimated_date) ? 'Si' : 'No'
+  }))
+
+  exportToCSV(rows, columns, 'actividades_exportadas.csv')
+  alertService.generalSucces('Archivo CSV exportado correctamente')
 }
 
 const handleDragStart = (activity) => {
@@ -320,6 +357,14 @@ watch(
               </option>
             </select>
           </div>
+        <button @click="handleExportCSV" class="export-csv-btn" title="Exportar datos visibles a CSV">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Exportar CSV
+        </button>
         </div>
       </div>
     </div>
@@ -708,6 +753,28 @@ watch(
 .modern-select:focus {
   border-color: var(--normal-color);
   box-shadow: 0 0 0 3px rgba(20, 161, 217, 0.15);
+}
+
+.export-csv-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--normal-color);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: 38px;
+  white-space: nowrap;
+}
+
+.export-csv-btn:hover {
+  background-color: var(--dark-color);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 /* Board container */
