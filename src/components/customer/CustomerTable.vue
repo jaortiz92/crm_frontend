@@ -33,6 +33,7 @@ const showAll = () => {
           <th>Nombre Cliente</th>
           <th>Documento</th>
           <th>Celular(Telefono)</th>
+          <th>Cliente de Consignación</th>
           <th>Activo</th>
           <th>Detalles</th>
         </tr>
@@ -43,7 +44,12 @@ const showAll = () => {
           <td>{{ item.company_name }}</td>
           <td>{{ item.document }}</td>
           <td>{{ formatters.formatterPhoneNumber(item.phone) }}</td>
-          <td :class="{ checkbox: true, checked: item.active }"></td>
+          <td class="bool-cell">
+            <span :class="{ checkbox: true, checked: item.is_consignation }"></span>
+          </td>
+          <td class="bool-cell">
+            <span :class="{ checkbox: true, checked: item.active }"></span>
+          </td>
           <td>
             <router-link :to="{ name: 'CustomerDetail', params: { id: item.id_customer } }">
               Ver mas
@@ -76,5 +82,11 @@ const showAll = () => {
   margin-left: auto;
   display: table;
   min-width: 400px;
+}
+
+.table-customers td.bool-cell {
+  text-align: center;
+  width: 40px;
+  padding: 4px 0;
 }
 </style>

@@ -38,7 +38,12 @@ const addDataUser = async () => {
   }
 }
 
-const customerFilterFields = [filterFormat.companyName, filterFormat.document, filterFormat.active]
+const customerFilterFields = [
+  filterFormat.companyName,
+  filterFormat.document,
+  filterFormat.is_consignation,
+  filterFormat.active
+]
 
 const filter = (filterValues, checkboxTouched) => {
   filteredCustomers.value = customers.value.filter(
@@ -46,6 +51,7 @@ const filter = (filterValues, checkboxTouched) => {
       (!filterValues.companyName ||
         customer.company_name.toLowerCase().includes(filterValues.companyName.toLowerCase())) &&
       (!filterValues.document || customer.document === filterValues.document) &&
+      (!checkboxTouched.is_consignation || customer.is_consignation === filterValues.is_consignation) &&
       (!checkboxTouched.active || customer.active === filterValues.active)
   )
 }

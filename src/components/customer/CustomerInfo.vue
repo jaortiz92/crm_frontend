@@ -94,6 +94,14 @@ const editRating = async () => {
   </div>
   <div class="detail-row">
     <p>
+      <strong>Cliente de Consignación:</strong>
+    </p>
+    <p>
+      <span :class="{ checkbox: true, checked: customer.is_consignation }"></span>
+    </p>
+  </div>
+  <div class="detail-row">
+    <p>
       <strong>Activo:</strong>
     </p>
     <p>

@@ -206,6 +206,10 @@ onMounted(async () => {
           <label>¿Activo? </label
           ><input v-model="customer.active" type="checkbox" class="checkbox" />
         </div>
+        <div class="field-input">
+          <label>¿Cliente de consignación? </label
+          ><input v-model="customer.is_consignation" type="checkbox" class="checkbox" />
+        </div>
       </div>
     </div>
     <div class="button-group">

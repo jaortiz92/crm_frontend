@@ -15,6 +15,12 @@ export const filterFormat = {
     type: 'checkbox',
     placeholder: 'Filtrar por activo'
   },
+  is_consignation: {
+    key: 'is_consignation',
+    label: 'Cliente de Consignación',
+    type: 'checkbox',
+    placeholder: 'Filtrar por cliente de consignación'
+  },
   shortCollectionName: {
     key: 'shortCollectionName',
     label: 'Colección',

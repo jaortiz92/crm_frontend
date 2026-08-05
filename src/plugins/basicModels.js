@@ -63,6 +63,7 @@ export const basicModels = {
     active: true,
     credit_limit: null,
     with_documents: false,
+    is_consignation: false,
     social_media: null,
     relevant_details: null
   },
