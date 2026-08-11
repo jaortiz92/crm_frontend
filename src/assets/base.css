@@ -21,6 +21,24 @@
   --red-color: #c21a1a;
   --shadow: var(--dark-color-opposite-two);
   --border-radius-size: 8px;
+
+  /* Semantic color tokens */
+  --color-surface: #f9f9f9;
+  --color-surface-card: #ffffff;
+  --color-border: rgba(97, 97, 97, 0.15);
+  --color-border-strong: rgba(97, 97, 97, 0.3);
+  --color-text-primary: #070707;
+  --color-text-secondary: #616161;
+  --color-text-tertiary: rgba(97, 97, 97, 0.5);
+
+  --color-brand: #03658c;
+  --color-brand-hover: #05c7f2;
+  --color-brand-light: #d0ebda;
+  --color-accent: #0a2098;
+
+  --color-success: #499a67;
+  --color-warning: #e2a50d;
+  --color-danger: #c21a1a;
 }
 
 #app {

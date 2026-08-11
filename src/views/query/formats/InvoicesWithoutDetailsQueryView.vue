@@ -150,7 +150,10 @@ const exportToCSV = () => {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.setAttribute('href', url)
-  link.setAttribute('download', `facturas_sin_detalles_${new Date().toISOString().slice(0, 10)}.csv`)
+  link.setAttribute(
+    'download',
+    `facturas_sin_detalles_${new Date().toISOString().slice(0, 10)}.csv`
+  )
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
@@ -370,7 +373,9 @@ h2 {
   align-items: center;
   gap: 16px;
   box-shadow: 0 4px 16px rgba(0, 16, 62, 0.04);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .stat-card:hover {

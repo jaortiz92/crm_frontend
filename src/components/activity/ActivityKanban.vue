@@ -155,7 +155,7 @@ const handleExportCSV = () => {
     { key: 'estimated_date', label: 'Fecha Estimada' },
     { key: 'city', label: 'Ciudad' },
     { key: 'user_name', label: 'Responsable' },
-    { key: 'seller', label: 'Asesor'},
+    { key: 'seller', label: 'Asesor' },
     { key: 'overdue', label: 'Vencida' }
   ]
 
@@ -168,7 +168,10 @@ const handleExportCSV = () => {
     activity_type: activity.activity_type?.activity || '',
     estimated_date: activity.estimated_date || '',
     city: activity.customer_trip?.customer?.city?.city_name || '',
-    seller: (activity.customer_trip?.seller?.first_name || '') + ' ' + (activity.customer_trip?.seller?.last_name || ''),
+    seller:
+      (activity.customer_trip?.seller?.first_name || '') +
+      ' ' +
+      (activity.customer_trip?.seller?.last_name || ''),
     user_name:
       (activity.user_activities?.first_name || '') +
       ' ' +
@@ -357,14 +360,28 @@ watch(
               </option>
             </select>
           </div>
-        <button @click="handleExportCSV" class="export-csv-btn" title="Exportar datos visibles a CSV">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Exportar CSV
-        </button>
+          <button
+            @click="handleExportCSV"
+            class="export-csv-btn"
+            title="Exportar datos visibles a CSV"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Exportar CSV
+          </button>
         </div>
       </div>
     </div>

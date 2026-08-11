@@ -43,6 +43,8 @@ const activities = ref([])
 const tasks = ref([])
 const photos = ref([])
 
+const canEdit = () => userStore.hasPermission('mediumHigh') || userStore.hasRole('Asesor Comercial')
+
 onMounted(async () => {
   lastRating.value = (await ratingService.getLastRatingByCustomer(idCustomer)).data
   customer.value = (await customerService.getCustomerFull(idCustomer)).data
@@ -83,91 +85,163 @@ const createContact = async () => {
   }
 }
 
+const createCustomerTrip = () => {
+  customerTripStore.crateCustomerTripWithId(idCustomer)
+  router.push('/customerTripForm')
+}
+
 const activateShowAll = async () => {
   activities.value = (await activityService.getActivitiesByCustomer(idCustomer)).data
   tasks.value = (await taskService.getTasksByCustomer(idCustomer)).data
   photos.value = (await photoService.getPhotoByIdCustomer(idCustomer)).data
   showAll.value = true
 }
-
-const createCustomerTrip = () => {
-  customerTripStore.crateCustomerTripWithId(idCustomer)
-  router.push('/customerTripForm')
-}
 </script>
 
 <template>
-  <div class="customer" v-if="customer && lastRating">
-    <div class="customer-detail">
+  <div v-if="customer && lastRating" class="customer-page">
+    <div class="customer-card-wrapper">
       <CustomerInfo :customer="customer" :lastRating="lastRating"></CustomerInfo>
     </div>
-    <div class="customer_additional">
-      <div class="contacts">
-        <h2>Contactos</h2>
-        <ContactTable :contacts="contacts"></ContactTable>
-      </div>
-      <div
-        v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
-        class="button-edit"
-      >
-        <button @click="edit">Editar Cliente</button>
-        <button @click="createContact">Crear Contacto</button>
-      </div>
-      <div class="customer_trips">
-        <h2>Viajes del cliente</h2>
-        <CustomerTripTable :customerTrips="customerTrips"></CustomerTripTable>
-        <div
-          v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
-          class="button-edit"
-        >
-          <button @click="createCustomerTrip">Crear Viaje del cliente</button>
+
+    <div class="summary-card">
+      <div class="summary-header">
+        <div class="section-header">
+          <div class="section-accent"></div>
+          <h2 class="section-title">Resumen</h2>
         </div>
+        <div v-if="canEdit()" class="actions-bar">
+          <button class="btn btn-primary" @click="edit">Editar Cliente</button>
+          <button class="btn btn-secondary" @click="createContact">Crear Contacto</button>
+          <button class="btn btn-primary" @click="createCustomerTrip">Crear Viaje del cliente</button>
+        </div>
+        <button v-if="!showAll" class="btn btn-outline" @click="activateShowAll">
+          Mostrar más información
+        </button>
+      </div>
+      <CustomerSummaryTable :customerSummary="customerSummary"></CustomerSummaryTable>
+    </div>
+
+
+    <section class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Contactos</h2>
+      </div>
+      <ContactTable :contacts="contacts"></ContactTable>
+    </section>
+
+    <section class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Viajes del cliente</h2>
+      </div>
+      <CustomerTripTable :customerTrips="customerTrips"></CustomerTripTable>
+    </section>
+
+    <div v-if="showAll" class="more-information">
+      <div class="detail-section">
+        <div class="section-header">
+          <div class="section-accent"></div>
+          <h3 class="section-title">Fotos</h3>
+        </div>
+        <CustomerPhotos
+          :photos="photos"
+          @editPhoto="editPhoto"
+          @createPhoto="createPhoto"
+        ></CustomerPhotos>
+      </div>
+
+      <div class="detail-section">
+        <div class="section-header">
+          <div class="section-accent"></div>
+          <h3 class="section-title">Actividades</h3>
+        </div>
+        <ActivityTable
+          :activities="activities"
+          :additionalInfo="true"
+          :itemsScale="10"
+        ></ActivityTable>
+      </div>
+
+      <div class="detail-section">
+        <div class="section-header">
+          <div class="section-accent"></div>
+          <h3 class="section-title">Tareas</h3>
+        </div>
+        <TaskTable :tasks="tasks" :additionalInfo="true" :itemsScale="10"></TaskTable>
       </div>
     </div>
   </div>
-  <div v-else>
+
+  <div v-else class="loading">
     <p>Cargando detalles...</p>
-  </div>
-  <div class="customer_summary">
-    <h2>Resumen</h2>
-    <CustomerSummaryTable :customerSummary="customerSummary"></CustomerSummaryTable>
-  </div>
-  <div class="button-edit">
-    <button v-if="!showAll" @click="activateShowAll">Mostrar MasInformación</button>
-  </div>
-  <div class="more-information" v-if="showAll">
-    <h2>Fotos</h2>
-    <CustomerPhotos
-      :photos="photos"
-      @editPhoto="editPhoto"
-      @createPhoto="createPhoto"
-    ></CustomerPhotos>
-    <h2>Actividades</h2>
-    <ActivityTable :activities="activities" :additionalInfo="true" :itemsScale="10"></ActivityTable>
-    <h2>Tareas</h2>
-    <TaskTable :tasks="tasks" :additionalInfo="true" :itemsScale="10"></TaskTable>
   </div>
 </template>
 
 <style scoped>
-.customer {
+.customer-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.customer-card-wrapper {
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.summary-header {
   display: flex;
-}
-.customer-detail {
-  max-width: 600px;
-  min-width: 500px;
-  margin: 10px;
-  padding: 10px;
-  background-color: var(--light-border);
-  border-radius: var(--border-radius-size);
-  box-shadow: 0 2px 10px var(--shadow);
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
-.button-edit button {
-  margin: 2px;
+.detail-section {
+  margin-bottom: 32px;
 }
 
-.customer_additional {
-  flex-grow: 1;
+.actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-secondary, #616161);
+}
+
+.more-information {
+  margin-top: 16px;
+}
+
+@media (max-width: 1024px) {
+  .summary-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .customer-page {
+    padding: 20px;
+  }
+
+  .summary-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
 }
 </style>

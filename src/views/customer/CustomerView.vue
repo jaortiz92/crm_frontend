@@ -51,7 +51,8 @@ const filter = (filterValues, checkboxTouched) => {
       (!filterValues.companyName ||
         customer.company_name.toLowerCase().includes(filterValues.companyName.toLowerCase())) &&
       (!filterValues.document || customer.document === filterValues.document) &&
-      (!checkboxTouched.is_consignation || customer.is_consignation === filterValues.is_consignation) &&
+      (!checkboxTouched.is_consignation ||
+        customer.is_consignation === filterValues.is_consignation) &&
       (!checkboxTouched.active || customer.active === filterValues.active)
   )
 }

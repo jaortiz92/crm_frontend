@@ -99,7 +99,17 @@ const visibleGroups = computed(() => {
       <img src="@/assets/logo.svg" alt="Logo" />
     </div>
     <button class="hamburger" @click="toggleMenu" aria-label="Menú de navegación" v-if="hasToken">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <line x1="3" y1="6" x2="21" y2="6" />
         <line x1="3" y1="12" x2="21" y2="12" />
         <line x1="3" y1="18" x2="21" y2="18" />
@@ -107,7 +117,17 @@ const visibleGroups = computed(() => {
     </button>
     <nav v-show="hasToken" class="nav" :class="{ 'nav-open': menuOpen }">
       <button class="hamburger-close" @click="closeMenu" aria-label="Cerrar menú">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <line x1="18" y1="6" x2="6" y2="18" />
           <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
@@ -118,10 +138,16 @@ const visibleGroups = computed(() => {
             <RouterLink to="/" @click="closeAllMenus" style="--accent: #14a1d9">Home</RouterLink>
           </li>
           <li v-if="userStore.hasPermission('low')" class="button-nav">
-            <RouterLink to="/customer" @click="closeAllMenus" style="--accent: #a5d5b7">Clientes</RouterLink>
+            <RouterLink to="/customer" @click="closeAllMenus" style="--accent: #a5d5b7"
+              >Clientes</RouterLink
+            >
           </li>
           <li v-for="group in visibleGroups" :key="group.name" class="dropdown">
-            <button class="dropdown-toggle" @click="toggleDropdown(group.name)" :style="{ '--accent': group.accentColor }">
+            <button
+              class="dropdown-toggle"
+              @click="toggleDropdown(group.name)"
+              :style="{ '--accent': group.accentColor }"
+            >
               {{ group.label }}
               <span class="arrow">▼</span>
             </button>
@@ -132,13 +158,19 @@ const visibleGroups = computed(() => {
             </ul>
           </li>
           <li v-if="hasToken" class="dropdown user-dropdown">
-            <button class="dropdown-toggle user-toggle" @click="toggleUserMenu" :style="{ '--accent': '#0d6ba6' }">
+            <button
+              class="dropdown-toggle user-toggle"
+              @click="toggleUserMenu"
+              :style="{ '--accent': '#0d6ba6' }"
+            >
               {{ userFullName }}
               <span class="arrow">▼</span>
             </button>
             <ul v-show="userMenuOpen" class="dropdown-menu user-dropdown-menu">
               <li class="button-nav">
-                <RouterLink :to="{ name: 'UserDetail' }" @click="closeAllMenus">Mi Perfil</RouterLink>
+                <RouterLink :to="{ name: 'UserDetail' }" @click="closeAllMenus"
+                  >Mi Perfil</RouterLink
+                >
               </li>
               <li class="button-nav logout"><div @click="logout">Cerrar Sesion</div></li>
             </ul>
@@ -301,7 +333,7 @@ li {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   min-width: 180px;
   z-index: 100;
-  padding: 4px  ;
+  padding: 4px;
 }
 
 @media (max-width: 767px) {

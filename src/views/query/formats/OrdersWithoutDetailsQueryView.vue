@@ -132,7 +132,8 @@ const exportToCSV = () => {
   if (orders.value.length === 0) return
 
   let csvContent = '\uFEFF'
-  csvContent += 'ID Orden,Fecha Orden,Fecha Entrega,Cliente,Vendedor,Colección,Cantidades,Total con IVA\n'
+  csvContent +=
+    'ID Orden,Fecha Orden,Fecha Entrega,Cliente,Vendedor,Colección,Cantidades,Total con IVA\n'
 
   orders.value.forEach((o) => {
     const id = o.id_order
@@ -375,7 +376,9 @@ h2 {
   align-items: center;
   gap: 16px;
   box-shadow: 0 4px 16px rgba(0, 16, 62, 0.04);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .stat-card:hover {

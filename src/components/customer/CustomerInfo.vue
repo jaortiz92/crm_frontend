@@ -21,182 +21,306 @@ const showRatingDetails = async () => {
 const editRating = async () => {
   router.push(`/rating/${customer.value.id_customer}`)
 }
+
+const formatValue = (value) => {
+  return value || 'Sin información'
+}
 </script>
 
 <template>
-  <h2>{{ customer.company_name }}</h2>
-  <div class="detail-row">
-    <p><strong>Documento:</strong></p>
-    <p>{{ customer.document }}</p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Correo:</strong></p>
-    <p>{{ customer.email }}</p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Celular(Telefono):</strong></p>
-    <p>{{ formatters.formatterPhoneNumber(customer.phone) }}</p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Dirección:</strong></p>
-    <p>{{ customer.address }}</p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Tiendas:</strong></p>
-    <p>{{ customer.stores }}</p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Tipo de tienda:</strong></p>
-    <p v-if="customer.store_type">{{ customer.store_type.store_type }}</p>
-    <p v-else></p>
-  </div>
-  <div class="detail-row">
-    <p>
-      <strong>Asesor:</strong>
-    </p>
-    <p v-if="customer.seller">{{ customer.seller.first_name }} {{ customer.seller.last_name }}</p>
-    <p v-else></p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Departamento:</strong></p>
-    <p v-if="customer.city">{{ customer.city.department.department_name }}</p>
-    <p v-else></p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Ciudad:</strong></p>
-    <p v-if="customer.city">{{ customer.city.city_name }}</p>
-    <p v-else></p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Categoria:</strong></p>
-    <p class="rating-detail" @click="showRatingDetails()">
-      ({{ lastRating.rating_category.level }})
-      <strong>{{ lastRating.rating_category.rating_category }}</strong>
-    </p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Tipo de origen:</strong></p>
-    <p v-if="customer.origin_type">{{ customer.origin_type.origin_type }}</p>
-    <p v-else></p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Fecha de Primer Contacto:</strong></p>
-    <p>{{ customer.date_started_buying }}</p>
-  </div>
-  <div class="detail-row">
-    <p>
-      <strong>Asesor Inicial:</strong>
-    </p>
-    <p v-if="customer.seller_origin">
-      {{ customer.seller_origin.first_name }} {{ customer.seller_origin.last_name }}
-    </p>
-    <p v-else></p>
-  </div>
-  <div class="detail-row">
-    <p>
-      <strong>Cliente de Consignación:</strong>
-    </p>
-    <p>
-      <span :class="{ checkbox: true, checked: customer.is_consignation }"></span>
-    </p>
-  </div>
-  <div class="detail-row">
-    <p>
-      <strong>Activo:</strong>
-    </p>
-    <p>
-      <span :class="{ checkbox: true, checked: customer.active }"></span>
-    </p>
-  </div>
-  <div class="detail-row">
-    <p>
-      <strong>Con documentos:</strong>
-    </p>
-    <p>
-      <span :class="{ checkbox: true, checked: customer.with_documents }"></span>
-    </p>
-  </div>
-  <div class="detail-column">
-    <p><strong>Marcas:</strong></p>
+  <div class="detail-card">
+    <h1 class="customer-name">{{ customer.company_name }}</h1>
 
-    <div v-if="customer.brands.length == 0">
-      <p class="space-for-text">Sin Marcas</p>
+    <dl class="detail-grid">
+      <div class="detail-group">
+        <dt>Documento:</dt>
+        <dd>{{ formatValue(customer.document) }}</dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Correo:</dt>
+        <dd>{{ formatValue(customer.email) }}</dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Celular (Teléfono):</dt>
+        <dd>
+          {{ customer.phone ? formatters.formatterPhoneNumber(customer.phone) : 'Sin información' }}
+        </dd>
+      </div>
+
+      <div class="detail-group detail-pair--full">
+        <dt>Dirección:</dt>
+        <dd>{{ formatValue(customer.address) }}</dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Departamento:</dt>
+        <dd>{{ customer.city?.department?.department_name || 'Sin información' }}</dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Ciudad:</dt>
+        <dd>{{ customer.city?.city_name || 'Sin información' }}</dd>
+      </div>
+
+      <div class="detail-divider" style="grid-column: 1 / -1"></div>
+      
+      <div class="detail-group">
+        <dt>Asesor:</dt>
+        <dd>
+          {{
+            customer.seller
+              ? `${customer.seller.first_name} ${customer.seller.last_name}`
+              : 'Sin información'
+          }}
+        </dd>
+      </div>
+      <div class="detail-group">
+        <dt>Tipo de tienda:</dt>
+        <dd>{{ customer.store_type?.store_type || 'Sin información' }}</dd>
+      </div>
+      <div class="detail-group">
+        <dt>Tiendas:</dt>
+        <dd>{{ formatValue(customer.stores) }}</dd>
+      </div>
+      
+      <div class="detail-divider" style="grid-column: 1 / -1"></div>
+
+      
+      <div class="detail-group">
+        <dt>Tipo de origen:</dt>
+        <dd>{{ customer.origin_type?.origin_type || 'Sin información' }}</dd>
+      </div>
+
+
+      <div class="detail-group">
+        <dt>Fecha primer contacto:</dt>
+        <dd>{{ formatValue(customer.date_started_buying) }}</dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Asesor inicial:</dt>
+        <dd>
+          <span v-if="customer.seller_origin">
+            {{ customer.seller_origin.first_name }} {{ customer.seller_origin.last_name }}
+          </span>
+          <span v-else>Sin información</span>
+        </dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Categoría:</dt>
+        <dd>
+          <span class="rating-label" @click="showRatingDetails()">
+            ({{ lastRating?.rating_category?.level || 'Sin categoría' }})
+            <strong>{{ lastRating?.rating_category?.rating_category || 'Sin categoría' }}</strong>
+          </span>
+        </dd>
+      </div>
+
+      <div class="detail-divider" style="grid-column: 1 / -1"></div>
+
+      <div class="detail-group detail-pair--status">
+        <dt>Cliente de consignación:</dt>
+        <dd>
+          <span
+            :class="{
+              'badge badge--warning': customer.is_consignation,
+              'badge badge--muted': !customer.is_consignation
+            }"
+          >
+            {{ customer.is_consignation ? 'Sí' : 'No' }}
+          </span>
+        </dd>
+      </div>
+
+      <div class="detail-group detail-pair--status">
+        <dt>Activo:</dt>
+        <dd>
+          <span
+            :class="{
+              'badge badge--success': customer.active,
+              'badge badge--muted': !customer.active
+            }"
+          >
+            {{ customer.active ? 'Sí' : 'No' }}
+          </span>
+        </dd>
+      </div>
+
+      <div class="detail-group detail-pair--status">
+        <dt>Con documentos:</dt>
+        <dd>
+          <span
+            :class="{
+              'badge badge--success': customer.with_documents,
+              'badge badge--muted': !customer.with_documents
+            }"
+          >
+            {{ customer.with_documents ? 'Sí' : 'No' }}
+          </span>
+        </dd>
+      </div>
+
+      <div class="detail-divider" style="grid-column: 1 / -1"></div>
+
+      <div class="detail-group detail-pair--full">
+        <dt>Marcas:</dt>
+        <dd>
+          <span v-if="customer.brands && customer.brands.length > 0">
+            <span class="tag" v-for="brand in customer.brands" :key="brand.brand_name">
+              {{ brand.brand_name }}: {{ brand.line.line_name }}
+            </span>
+          </span>
+          <span v-else class="muted">Sin marcas</span>
+        </dd>
+      </div>
+
+      <div class="detail-group detail-pair--full">
+        <dt>Redes sociales:</dt>
+        <dd>{{ formatValue(customer.social_media) }}</dd>
+      </div>
+
+      <div class="detail-group detail-pair--full">
+        <dt>Detalles relevantes:</dt>
+        <dd>{{ formatValue(customer.relevant_details) }}</dd>
+      </div>
+    </dl>
+
+    <div class="rating-section">
+      <RatingInfo
+        :rating="lastRating"
+        :isModalRatingVisible="isModalRatingVisible"
+        @close="isModalRatingVisible = false"
+        @edit="editRating"
+      ></RatingInfo>
     </div>
-    <div v-else>
-      <p class="space-for-text" v-for="brand in customer.brands" :key="brand.brand_name">
-        - {{ brand.brand_name }}: {{ brand.line.line_name }}
-      </p>
-    </div>
-  </div>
-  <div class="detail-column">
-    <p>
-      <strong>Redes Sociales:</strong>
-    </p>
-    <p class="space-for-text" v-if="customer.social_media">
-      {{ customer.social_media }}
-    </p>
-    <p class="space-for-text" v-else>Sin Redes</p>
-  </div>
-  <div class="detail-column">
-    <p>
-      <strong>Detalles relevantes:</strong>
-    </p>
-    <p class="space-for-text" v-if="customer.relevant_details">
-      {{ customer.relevant_details }}
-    </p>
-    <p class="space-for-text" v-else>Sin Detalles</p>
-  </div>
-  <div>
-    <RatingInfo
-      :rating="lastRating"
-      :isModalRatingVisible="isModalRatingVisible"
-      @close="isModalRatingVisible = close"
-      @edit="editRating"
-    ></RatingInfo>
   </div>
 </template>
 
 <style scoped>
-.detail-row {
-  display: flex;
-  margin: 1%;
-  justify-content: space-between;
-  padding: 5px 0;
-  border-bottom: 1px solid var(--gray-border);
+.detail-card {
+  width: 100%;
+  background: var(--color-surface-card, #ffffff);
+  border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
+  border-radius: var(--border-radius-size, 8px);
+  padding: 20px;
 }
 
-.detail-row p {
-  font-size: 100%;
-  margin: 3px;
+.customer-name {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--color-text-primary, #070707);
+  margin: 0 0 24px 0;
+  text-align: left;
 }
 
-.detail-row:last-child {
-  border-bottom: none;
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 20px;
+  width: 100%;
 }
 
-@media (max-width: 600px) {
-  .detail-row {
-    flex-direction: column;
-    text-align: left;
-  }
-
-  .detail-row p:last-child {
-    text-align: left;
-    margin-top: 5px;
-  }
+.detail-group {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 12px;
+  align-items: center;
 }
 
-.checkbox {
+.detail-group dt {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #616161);
+  text-align: left;
+}
+
+.detail-group dd {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary, #070707);
   margin: 0;
+  text-align: left;
+  word-break: break-word;
 }
 
-.rating-detail:hover {
+.detail-pair--full dd {
+  grid-column: 1 / -1;
+}
+
+.detail-divider {
+  height: 1px;
+  background: var(--color-border, rgba(97, 97, 97, 0.15));
+  width: 100%;
+  margin: 4px 0;
+}
+
+.detail-pair--status .badge {
+  font-size: 11px;
+  padding: 4px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.25px;
+}
+
+.badge--success {
+  background: rgba(73, 154, 103, 0.15);
+  color: var(--color-success, #499a67);
+}
+
+.badge--warning {
+  background: rgba(226, 165, 13, 0.15);
+  color: var(--color-warning, #e2a50d);
+}
+
+.badge--muted {
+  background: rgba(97, 97, 97, 0.1);
+  color: var(--color-text-tertiary, rgba(97, 97, 97, 0.5));
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  margin: 2px 4px 2px 0;
+  font-size: 13px;
+  border-radius: 4px;
+  background: var(--color-brand-light, #d0ebda);
+  color: var(--color-text-primary, #070707);
+}
+
+.muted {
+  color: var(--color-text-tertiary, rgba(97, 97, 97, 0.5));
+}
+
+.rating-label {
+  color: var(--color-brand, #03658c);
   cursor: pointer;
+  text-decoration: underline;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.space-for-text {
-  text-align: justify;
-  white-space: pre-wrap;
-  margin: 1px;
+.rating-label:hover {
+  color: var(--color-brand-hover, #05c7f2);
+}
+
+.rating-section {
+  margin-top: 24px;
+}
+
+@media (max-width: 768px) {
+  .detail-card {
+    padding: 20px;
+  }
+
+  .customer-name {
+    font-size: 22px;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 }
 </style>

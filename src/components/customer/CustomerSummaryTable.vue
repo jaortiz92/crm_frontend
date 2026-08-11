@@ -26,40 +26,42 @@ const showAll = () => {
 
 <template>
   <div v-if="customerSummary.length > 0">
-    <table class="table-customer-summary">
-      <thead>
-        <tr>
-          <th>Collección</th>
-          <th>Año</th>
-          <th>N° Viajes de Cliente</th>
-          <th>Presupuesto Prendas</th>
-          <th>Presupuesto Valor</th>
-          <th>N° Ordenes</th>
-          <th>Prendas Ordenadas</th>
-          <th>Valor Ordenes</th>
-          <th>N° Facturas</th>
-          <th>Prendas Facturadas</th>
-          <th>Valor Facturado</th>
-          <th>Descuento Facturado</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="item in limitedItems" :key="item.id_customer">
-          <td>{{ item.short_collection_name }}</td>
-          <td>{{ item.year }}-Q{{ item.quarter }}</td>
-          <td>{{ item.customer_trips }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.budget_quantities) }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.budget) }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.orders) }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.order_quantities) }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.order_without_tax) }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.invoices) }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.invoice_quantities) }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.invoice_without_tax) }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.invoice_discount) }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-wrapper">
+      <table class="table-customer-summary">
+        <thead>
+          <tr>
+            <th>Collección</th>
+            <th>Año</th>
+            <th>N° Viajes de Cliente</th>
+            <th>Presupuesto Prendas</th>
+            <th>Presupuesto Valor</th>
+            <th>N° Ordenes</th>
+            <th>Prendas Ordenadas</th>
+            <th>Valor Ordenes</th>
+            <th>N° Facturas</th>
+            <th>Prendas Facturadas</th>
+            <th>Valor Facturado</th>
+            <th>Descuento Facturado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in limitedItems" :key="item.id_customer">
+            <td>{{ item.short_collection_name }}</td>
+            <td>{{ item.year }}-Q{{ item.quarter }}</td>
+            <td>{{ item.customer_trips }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.budget_quantities) }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.budget) }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.orders) }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.order_quantities) }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.order_without_tax) }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.invoices) }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.invoice_quantities) }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.invoice_without_tax) }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.invoice_discount) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <div class="buttons-to-show">
       <button class="button-all" v-if="itemsToShow < customerSummary.length" @click="showAll">
         Mostrar Todo
@@ -78,11 +80,13 @@ const showAll = () => {
 </template>
 
 <style scoped>
+.table-wrapper {
+  overflow-x: auto;
+}
+
 .table-customer-summary {
-  width: 95%;
-  margin-right: auto;
-  margin-left: auto;
-  display: table;
-  min-width: 400px;
+  width: 100%;
+  min-width: 800px;
+  border-collapse: collapse;
 }
 </style>

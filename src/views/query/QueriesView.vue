@@ -33,8 +33,7 @@ const options = [
     id: 'InvoicesWithoutDetails',
     route: 'InvoicesWithoutDetailsQuery'
   }
- ]
-
+]
 
 const goToQuery = () => {
   if (selected.value) {
