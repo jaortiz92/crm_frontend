@@ -30,6 +30,8 @@ const orderStore = useOrderStore()
 const router = useRouter()
 const customerTripSummary = ref([])
 
+const canEdit = () => userStore.hasPermission('mediumHigh') || userStore.hasRole('Asesor Comercial')
+
 onMounted(async () => {
   const idCustomerTrip = route.params.id
   customerTrip.value = (await customerTripService.getCustomerTripsById(idCustomerTrip)).data
@@ -63,71 +65,97 @@ const createOrder = async () => {
 </script>
 
 <template>
-  <div>
-    <h1>Viaje de Cliente</h1>
-  </div>
-  <div v-if="customerTrip">
-    <div class="customer-trip">
-      <div class="customer-trip-detail">
-        <CustomerTripInfo :customerTrip="customerTrip"></CustomerTripInfo>
-      </div>
-      <div class="customer-trip-additional">
-        <div class="customer_trip_summary">
-          <CustomerTripSummaryTable
-            :customerTripSummary="customerTripSummary"
-          ></CustomerTripSummaryTable>
-        </div>
-        <div class="activities">
-          <h2>Actividades</h2>
-          <ActivityTable :activities="activities" :itemsScale="3"></ActivityTable>
-        </div>
-        <div class="orders">
-          <h2>Ordenes</h2>
-          <OrderTable :orders="orders" :itemsScale="3"></OrderTable>
-          <div
-            v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
-            class="button-edit"
-          >
-            <button @click="createOrder">Crear Orden</button>
-          </div>
-        </div>
-      </div>
+  <div v-if="customerTrip" class="customer-trip-page">
+    <div class="customer-trip-card-wrapper">
+      <CustomerTripInfo :customerTrip="customerTrip"></CustomerTripInfo>
     </div>
-    <div class="invoices">
-      <h2>Facturas</h2>
+
+    <section class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Resumen</h2>
+      </div>
+      <CustomerTripSummaryTable
+        :customerTripSummary="customerTripSummary"
+      ></CustomerTripSummaryTable>
+      <div v-if="canEdit()" class="actions-bar">
+        <button class="btn btn-secondary" @click="createOrder">Crear Orden</button>
+        <button class="btn btn-primary" @click="edit">Editar Viaje de Cliente</button>
+      </div>
+    </section>
+
+    <section class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Actividades</h2>
+      </div>
+      <ActivityTable :activities="activities" :itemsScale="3"></ActivityTable>
+    </section>
+
+    <section class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Ordenes</h2>
+      </div>
+      <OrderTable :orders="orders" :itemsScale="3"></OrderTable>
+    </section>
+
+    <section class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Facturas</h2>
+      </div>
       <InvoiceTable :invoices="invoices" :items-scale="3"></InvoiceTable>
-    </div>
-    <div>
-      <h2>Comentarios en Actividades</h2>
+    </section>
+
+    <section class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Comentarios en Actividades</h2>
+      </div>
       <ActivityComments :activities="activities"></ActivityComments>
-    </div>
-    <div
-      v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
-      class="button-edit"
-    >
-      <button @click="edit">Editar Viaje de Cliente</button>
-    </div>
+    </section>
+
   </div>
-  <div v-else>
+
+  <div v-else class="loading">
     <p>Cargando detalles...</p>
   </div>
 </template>
 
 <style scoped>
-.customer-trip {
-  display: flex;
-}
-.customer-trip-detail {
-  max-width: 600px;
-  min-width: 500px;
-  margin: 10px;
-  padding: 10px;
-  background-color: var(--light-border);
-  border-radius: var(--border-radius-size);
-  box-shadow: 0 2px 10px var(--shadow);
+.customer-trip-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
 }
 
-.customer-trip-additional {
-  flex-grow: 1;
+.customer-trip-card-wrapper {
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.detail-section {
+  margin-bottom: 32px;
+}
+
+.actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-secondary, #616161);
+}
+
+@media (max-width: 768px) {
+  .customer-trip-page {
+    padding: 20px;
+  }
 }
 </style>

@@ -110,16 +110,16 @@ const activateShowAll = async () => {
           <div class="section-accent"></div>
           <h2 class="section-title">Resumen</h2>
         </div>
-        <div v-if="canEdit()" class="actions-bar">
-          <button class="btn btn-primary" @click="edit">Editar Cliente</button>
-          <button class="btn btn-secondary" @click="createContact">Crear Contacto</button>
-          <button class="btn btn-primary" @click="createCustomerTrip">Crear Viaje del cliente</button>
-        </div>
-        <button v-if="!showAll" class="btn btn-outline" @click="activateShowAll">
-          Mostrar más información
-        </button>
       </div>
       <CustomerSummaryTable :customerSummary="customerSummary"></CustomerSummaryTable>
+      <div v-if="canEdit()" class="actions-bar">
+        <button class="btn btn-primary" @click="edit">Editar Cliente</button>
+        <button class="btn btn-secondary" @click="createContact">Crear Contacto</button>
+        <button class="btn btn-primary" @click="createCustomerTrip">Crear Viaje del cliente</button>
+      </div>
+      <button v-if="!showAll" class="btn btn-outline" @click="activateShowAll">
+        Mostrar más información
+      </button>
     </div>
 
 

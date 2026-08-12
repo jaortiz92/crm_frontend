@@ -43,44 +43,46 @@ const showAll = () => {
 
 <template>
   <div v-if="customerTrips.length > 0">
-    <table class="table-customerTrips">
-      <thead>
-        <tr>
-          <th>ID Viaje de Cliente</th>
-          <th v-if="additionalInfo">Cliente</th>
-          <th>Colección</th>
-          <th>Fecha Temporada</th>
-          <th>Presupuestado</th>
-          <th>Presupuesto Prendas</th>
-          <th>Presupuesto Valor</th>
-          <th>Linea</th>
-          <th>Asesor</th>
-          <th>Cerrado</th>
-          <th>Detalles</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="item in limitedItems" :key="item.id_customer_trips">
-          <td>{{ item.id_customer_trip }}</td>
-          <td v-if="additionalInfo">{{ item.customer.company_name }}</td>
-          <td>{{ item.collection.short_collection_name }}</td>
-          <td>{{ item.collection.year }} Q{{ item.collection.quarter }}</td>
-          <td>{{ budgetStatus(item.with_budget) }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.budget) }}</td>
-          <td>{{ formatters.formatterGeneralNumber(item.budget_quantities) }}</td>
-          <td>{{ item.collection.line.line_name }}</td>
-          <td>{{ item.seller.first_name }} {{ item.seller.last_name }}</td>
-          <td :class="{ checkbox: true, checked: item.closed }"></td>
-          <td>
-            <router-link
-              :to="{ name: 'CustomerTripDetail', params: { id: item.id_customer_trip } }"
-            >
-              Ver mas
-            </router-link>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-wrapper">
+      <table class="table-customerTrips">
+        <thead>
+          <tr>
+            <th>ID Viaje de Cliente</th>
+            <th v-if="additionalInfo">Cliente</th>
+            <th>Colección</th>
+            <th>Fecha Temporada</th>
+            <th>Presupuestado</th>
+            <th>Presupuesto Prendas</th>
+            <th>Presupuesto Valor</th>
+            <th>Linea</th>
+            <th>Asesor</th>
+            <th>Cerrado</th>
+            <th>Detalles</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in limitedItems" :key="item.id_customer_trips">
+            <td>{{ item.id_customer_trip }}</td>
+            <td v-if="additionalInfo">{{ item.customer.company_name }}</td>
+            <td>{{ item.collection.short_collection_name }}</td>
+            <td>{{ item.collection.year }} Q{{ item.collection.quarter }}</td>
+            <td>{{ budgetStatus(item.with_budget) }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.budget) }}</td>
+            <td>{{ formatters.formatterGeneralNumber(item.budget_quantities) }}</td>
+            <td>{{ item.collection.line.line_name }}</td>
+            <td>{{ item.seller.first_name }} {{ item.seller.last_name }}</td>
+            <td :class="{ checkbox: true, checked: item.closed }"></td>
+            <td>
+              <router-link
+                :to="{ name: 'CustomerTripDetail', params: { id: item.id_customer_trip } }"
+              >
+                Ver mas
+              </router-link>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <div class="buttons-to-show">
       <button class="button-all" v-if="itemsToShow < customerTrips.length" @click="showAll">
         Mostrar Todo
@@ -99,11 +101,14 @@ const showAll = () => {
 </template>
 
 <style scoped>
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .table-customerTrips {
-  width: 95%;
-  margin-right: auto;
-  margin-left: auto;
-  display: table;
-  min-width: 400px;
+  width: 100%;
+  min-width: 800px;
 }
 </style>

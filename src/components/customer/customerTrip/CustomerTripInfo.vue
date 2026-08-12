@@ -9,107 +9,214 @@ const { customerTrip } = toRefs(props)
 </script>
 
 <template>
-  <router-link :to="{ name: 'CustomerDetail', params: { id: customerTrip.id_customer } }">
-    <h2>{{ customerTrip.customer.company_name }}</h2>
-  </router-link>
-  <div class="detail-row">
-    <p><strong>ID Viaje de Cliente:</strong></p>
-    <p>{{ customerTrip.id_customer_trip }}</p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Linea:</strong></p>
-    <p>{{ customerTrip.collection.line.line_name }}</p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Colección:</strong></p>
-    <p>
-      {{ customerTrip.collection.collection_name }} -
-      {{ customerTrip.collection.short_collection_name }} - Q{{ customerTrip.collection.quarter }}
-    </p>
-  </div>
-  <div v-if="!customerTrip.with_budget">
-    <div class="detail-row">
-      <p><strong>Sin Presupuestar</strong></p>
-    </div>
-  </div>
-  <div v-else>
-    <div class="detail-row">
-      <p><strong>Presupuesto Valor:</strong></p>
-      <p>{{ formatters.formatterGeneralNumber(customerTrip.budget) }}</p>
-    </div>
-    <div class="detail-row">
-      <p><strong>Presupuesto Prendas:</strong></p>
-      <p>{{ formatters.formatterGeneralNumber(customerTrip.budget_quantities) }}</p>
-    </div>
-  </div>
+  <div class="detail-card">
+    <router-link
+      :to="{ name: 'CustomerDetail', params: { id: customerTrip.id_customer } }"
+      class="customer-name"
+    >
+      {{ customerTrip.customer.company_name }}
+    </router-link>
 
-  <div class="detail-row">
-    <p>
-      <strong>Asesor:</strong>
-    </p>
-    <p>
-      {{ customerTrip.seller.first_name }}
-      {{ customerTrip.seller.last_name }}
-    </p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Departamento:</strong></p>
-    <p>{{ customerTrip.customer.city.department.department_name }}</p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Ciudad:</strong></p>
-    <p>{{ customerTrip.customer.city.city_name }}</p>
-  </div>
-  <div class="detail-row">
-    <p>
-      <strong>Cerrado:</strong>
-    </p>
-    <p>
-      <span :class="{ checkbox: true, checked: customerTrip.closed }"></span>
-    </p>
-  </div>
-  <div class="detail-row">
-    <p><strong>Comentarios:</strong></p>
-    <p class="comment" v-if="customerTrip.comment">{{ customerTrip.comment }}</p>
-    <p v-else>Sin Comentarios</p>
+    <dl class="detail-grid">
+      <div class="detail-group">
+        <dt>ID Viaje:</dt>
+        <dd>{{ customerTrip.id_customer_trip }}</dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Línea:</dt>
+        <dd>{{ customerTrip.collection.line.line_name }}</dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Colección:</dt>
+        <dd>
+          {{ customerTrip.collection.collection_name }} -
+          {{ customerTrip.collection.short_collection_name }} - Q{{
+            customerTrip.collection.quarter
+          }}
+        </dd>
+      </div>
+
+      <div class="detail-divider" style="grid-column: 1 / -1"></div>
+
+      <template v-if="!customerTrip.with_budget">
+        <div class="detail-group detail-pair--full">
+          <dt>Presupuesto:</dt>
+          <dd><span class="badge badge--warning">Sin Presupuestar</span></dd>
+        </div>
+      </template>
+      <template v-else>
+        <div class="detail-group">
+          <dt>Presupuesto Valor:</dt>
+          <dd>{{ formatters.formatterGeneralNumber(customerTrip.budget) }}</dd>
+        </div>
+        <div class="detail-group">
+          <dt>Presupuesto Prendas:</dt>
+          <dd>{{ formatters.formatterGeneralNumber(customerTrip.budget_quantities) }}</dd>
+        </div>
+        <div></div>
+      </template>
+
+      <div class="detail-divider" style="grid-column: 1 / -1"></div>
+
+      <div class="detail-group">
+        <dt>Asesor:</dt>
+        <dd>
+          {{ customerTrip.seller.first_name }}
+          {{ customerTrip.seller.last_name }}
+        </dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Departamento:</dt>
+        <dd>{{ customerTrip.customer.city.department.department_name }}</dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Ciudad:</dt>
+        <dd>{{ customerTrip.customer.city.city_name }}</dd>
+      </div>
+
+      <div class="detail-divider" style="grid-column: 1 / -1"></div>
+
+      <div class="detail-group detail-pair--status">
+        <dt>Cerrado:</dt>
+        <dd>
+          <span
+            :class="{
+              'badge badge--success': customerTrip.closed,
+              'badge badge--muted': !customerTrip.closed
+            }"
+          >
+            {{ customerTrip.closed ? 'Sí' : 'No' }}
+          </span>
+        </dd>
+      </div>
+
+      <div class="detail-group detail-pair--full">
+        <dt>Comentarios:</dt>
+        <dd v-if="customerTrip.comment" class="comment">{{ customerTrip.comment }}</dd>
+        <dd v-else class="muted">Sin comentarios</dd>
+      </div>
+    </dl>
   </div>
 </template>
 
 <style scoped>
-.detail-row {
-  display: flex;
-  margin: 1%;
-  justify-content: space-between;
-  padding: 5px 0;
-  border-bottom: 1px solid var(--gray-border);
+.detail-card {
+  width: 100%;
+  background: var(--color-surface-card, #ffffff);
+  border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
+  border-radius: var(--border-radius-size, 8px);
+  padding: 20px;
 }
 
-.detail-row p {
-  font-size: 100%;
-  margin: 3px;
+.customer-name {
+  display: block;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--color-text-primary, #070707);
+  margin: 0 0 24px 0;
+  text-align: left;
+  text-decoration: none;
 }
 
-.detail-row:last-child {
-  border-bottom: none;
+.customer-name:hover {
+  color: var(--color-brand, #03658c);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 20px;
+  width: 100%;
+}
+
+.detail-group {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.detail-group dt {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #616161);
+  text-align: left;
+}
+
+.detail-group dd {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary, #070707);
+  margin: 0;
+  text-align: left;
+  word-break: break-word;
+}
+
+.detail-pair--full dd {
+  grid-column: 1 / -1;
+}
+
+.detail-divider {
+  height: 1px;
+  background: var(--color-border, rgba(97, 97, 97, 0.15));
+  width: 100%;
+  margin: 4px 0;
+}
+
+.detail-pair--status .badge {
+  font-size: 11px;
+  padding: 4px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.25px;
+}
+
+.badge {
+  display: inline-block;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge--success {
+  background: rgba(73, 154, 103, 0.15);
+  color: var(--color-success, #499a67);
+}
+
+.badge--warning {
+  background: rgba(226, 165, 13, 0.15);
+  color: var(--color-warning, #e2a50d);
+}
+
+.badge--muted {
+  background: rgba(97, 97, 97, 0.1);
+  color: var(--color-text-tertiary, rgba(97, 97, 97, 0.5));
 }
 
 .comment {
-  text-align: justify;
+  text-align: left;
+  line-height: 1.5;
 }
 
-@media (max-width: 600px) {
-  .detail-row {
-    flex-direction: column;
-    text-align: left;
-  }
-
-  .detail-row p:last-child {
-    text-align: left;
-    margin-top: 5px;
-  }
+.muted {
+  color: var(--color-text-tertiary, rgba(97, 97, 97, 0.5));
 }
 
-.checkbox {
-  margin: 0;
+@media (max-width: 768px) {
+  .detail-card {
+    padding: 20px;
+  }
+
+  .customer-name {
+    font-size: 22px;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 }
 </style>

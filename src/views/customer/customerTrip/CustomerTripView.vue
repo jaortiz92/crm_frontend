@@ -87,20 +87,59 @@ addDataUser()
 </script>
 
 <template>
-  <div
-    v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
-    class="button-create"
-  >
-    <button @click="create">Crear</button>
-  </div>
-  <main>
-    <div>
-      <h3>Viajes De Clientes</h3>
-      <FilterForm :filterFields="customerFilterFields" @filter="filter" />
-      <CustomerTripTable
-        :customerTrips="filteredCustomerTrips"
-        :additionalInfo="true"
-      ></CustomerTripTable>
+  <div class="customer-trip-page">
+    <div class="page-header">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Viajes De Clientes</h2>
+      </div>
+      <div
+        v-if="userStore.hasPermission('mediumHigh') || userStore.hasRole('Asesor Comercial')"
+        class="actions-bar"
+      >
+        <button class="btn btn-primary" @click="create">Crear</button>
+      </div>
     </div>
-  </main>
+
+    <FilterForm :filterFields="customerFilterFields" @filter="filter" />
+
+    <CustomerTripTable
+      :customerTrips="filteredCustomerTrips"
+      :additionalInfo="true"
+    ></CustomerTripTable>
+  </div>
 </template>
+
+<style scoped>
+.customer-trip-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .customer-trip-page {
+    padding: 20px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+</style>
