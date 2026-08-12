@@ -65,7 +65,7 @@ const formatValue = (value) => {
       </div>
 
       <div class="detail-divider" style="grid-column: 1 / -1"></div>
-      
+
       <div class="detail-group">
         <dt>Asesor:</dt>
         <dd>
@@ -84,15 +84,13 @@ const formatValue = (value) => {
         <dt>Tiendas:</dt>
         <dd>{{ formatValue(customer.stores) }}</dd>
       </div>
-      
+
       <div class="detail-divider" style="grid-column: 1 / -1"></div>
 
-      
       <div class="detail-group">
         <dt>Tipo de origen:</dt>
         <dd>{{ customer.origin_type?.origin_type || 'Sin información' }}</dd>
       </div>
-
 
       <div class="detail-group">
         <dt>Fecha primer contacto:</dt>

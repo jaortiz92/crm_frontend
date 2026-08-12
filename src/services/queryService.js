@@ -16,5 +16,8 @@ export const queryService = {
   },
   getInvoicesWithoutDetails: function () {
     return axiosInstance.get(`/query/invoices_without_details`)
+  },
+  getCustomerTripsWithoutOrders: function (closed) {
+    return axiosInstance.get(`/query/customer_trips_without_orders/${closed}`)
   }
 }

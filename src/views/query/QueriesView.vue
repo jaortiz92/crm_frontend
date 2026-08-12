@@ -32,6 +32,18 @@ const options = [
     label: 'Facturas sin Detalles',
     id: 'InvoicesWithoutDetails',
     route: 'InvoicesWithoutDetailsQuery'
+  },
+  {
+    label: 'Viajes sin Órdenes (Viajes Activos)',
+    id: 'CustomerTripsWithoutOrdersActive',
+    route: 'CustomerTripsWithoutOrdersQuery',
+    params: { isClosed: 'false' }
+  },
+  {
+    label: 'Viajes sin Órdenes (Viajes Cerrados)',
+    id: 'CustomerTripsWithoutOrdersClosed',
+    route: 'CustomerTripsWithoutOrdersQuery',
+    params: { isClosed: 'true' }
   }
 ]
 

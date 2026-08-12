@@ -115,7 +115,6 @@ const createOrder = async () => {
       </div>
       <ActivityComments :activities="activities"></ActivityComments>
     </section>
-
   </div>
 
   <div v-else class="loading">

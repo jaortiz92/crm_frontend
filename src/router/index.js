@@ -44,6 +44,7 @@ import ClientValidatorQueryView from '@/views/query/formats/ClientValidatorQuery
 import OrdersWithoutInvoicesQueryView from '@/views/query/formats/OrdersWithoutInvoicesQueryView.vue'
 import OrdersWithoutDetailsQueryView from '@/views/query/formats/OrdersWithoutDetailsQueryView.vue'
 import InvoicesWithoutDetailsQueryView from '@/views/query/formats/InvoicesWithoutDetailsQueryView.vue'
+import CustomerTripsWithoutOrdersQueryView from '@/views/query/formats/CustomerTripsWithoutOrdersQueryView.vue'
 import DeletionsView from '@/views/deletions/DeletionsView.vue'
 
 const router = createRouter({
@@ -284,6 +285,12 @@ const router = createRouter({
       path: '/queries/invoices-without-details',
       name: 'InvoicesWithoutDetailsQuery',
       component: InvoicesWithoutDetailsQueryView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/queries/customer-trips-without-orders/:isClosed?',
+      name: 'CustomerTripsWithoutOrdersQuery',
+      component: CustomerTripsWithoutOrdersQueryView,
       meta: { requiresAuth: true }
     },
     {

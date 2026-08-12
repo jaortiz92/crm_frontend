@@ -122,7 +122,6 @@ const activateShowAll = async () => {
       </button>
     </div>
 
-
     <section class="detail-section">
       <div class="section-header">
         <div class="section-accent"></div>
