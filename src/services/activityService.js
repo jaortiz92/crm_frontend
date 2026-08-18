@@ -37,6 +37,11 @@ export const activityService = {
   deleteActivityType(idActivityType) {
     return axiosInstance.delete(`/activity_type/${idActivityType}`)
   },
+  reorderMandatoryActivities(activities) {
+    return axiosInstance.put('/activity_type/reorder/', {
+      activities: activities
+    })
+  },
   getActivitiesByCustomer: function (id_customer) {
     return axiosInstance.get(`/activity/query/?id_customer=${id_customer}`)
   },

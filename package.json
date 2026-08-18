@@ -16,6 +16,7 @@
     "sweetalert2": "^11.14.3",
     "vue": "^3.4.29",
     "vue-router": "^4.3.3",
+    "vuedraggable": "^4.1.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
