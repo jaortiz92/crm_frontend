@@ -91,17 +91,49 @@ addDataUser()
 </script>
 
 <template>
-  <div
-    v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
-    class="button-create"
-  >
-    <button @click="create">Crear</button>
-  </div>
-  <main>
-    <div>
-      <h3>Ordenes</h3>
-      <FilterForm :filterFields="orderFilterFields" @filter="filter" />
-      <OrderTable :orders="filteredOrders" :additionalInfo="true"></OrderTable>
+  <div class="list-page">
+    <div class="page-header">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Órdenes</h2>
+      </div>
+      <div
+        v-if="userStore.hasPermission('mediumHigh') || userStore.hasRole('Asesor Comercial')"
+        class="actions-bar"
+      >
+        <button class="btn btn-primary" @click="create">Crear</button>
+      </div>
     </div>
-  </main>
+
+    <FilterForm :filterFields="orderFilterFields" @filter="filter" />
+    <OrderTable :orders="filteredOrders" :additionalInfo="true"></OrderTable>
+  </div>
 </template>
+
+<style scoped>
+.list-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .list-page {
+    padding: 20px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+</style>

@@ -113,24 +113,57 @@ addDataUser()
 </script>
 
 <template>
-  <div class="buttons-general">
-    <button @click="create">Crear</button>
-    <button
-      v-if="userStore.hasPermission('all') | userStore.hasRole('Servicio al Cliente')"
-      @click="config"
-    >
-      Configuración
-    </button>
-  </div>
-  <main>
-    <div>
-      <h3>Actividades</h3>
-      <FilterForm :filterFields="activityFilterFields" @filter="filter" />
-      <ActivityTable
-        :activities="filteredActivities"
-        :additionalInfo="true"
-        :itemsScale="10"
-      ></ActivityTable>
+  <div class="list-page">
+    <div class="page-header">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Actividades</h2>
+      </div>
+      <div class="actions-bar">
+        <button class="btn btn-primary" @click="create">Crear</button>
+        <button
+          v-if="userStore.hasPermission('all') || userStore.hasRole('Servicio al Cliente')"
+          class="btn btn-secondary"
+          @click="config"
+        >
+          Configuración
+        </button>
+      </div>
     </div>
-  </main>
+
+    <FilterForm :filterFields="activityFilterFields" @filter="filter" />
+    <ActivityTable
+      :activities="filteredActivities"
+      :additionalInfo="true"
+      :itemsScale="10"
+    ></ActivityTable>
+  </div>
 </template>
+
+<style scoped>
+.list-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .list-page {
+    padding: 20px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+</style>

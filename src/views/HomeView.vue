@@ -76,26 +76,57 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main>
-    <div>
+  <div class="home-page">
+    <div class="detail-section">
       <CollectionSummary :collectionSummary="collectionSummary"> </CollectionSummary>
     </div>
-    <div>
+
+    <div class="detail-section">
       <ActivityKanban :pendingActivities="pendingActivities" :activityTypes="activityTypes">
       </ActivityKanban>
     </div>
 
-    <div>
-      <h3>Actividades Pendientes</h3>
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Actividades Pendientes</h2>
+      </div>
       <ActivityTable :activities="pendingActivitiesMe" :additionalInfo="true"></ActivityTable>
     </div>
-    <div>
-      <h3>Tareas Pendientes</h3>
+
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Tareas Pendientes</h2>
+      </div>
       <TasksTable :tasks="pendingTasks"></TasksTable>
     </div>
-    <div>
-      <h3>Tareas Asignadas Pendientes</h3>
+
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Tareas Asignadas Pendientes</h2>
+      </div>
       <TasksTable :tasks="pendingAssignedTasks"></TasksTable>
     </div>
-  </main>
+  </div>
 </template>
+
+<style scoped>
+.home-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.detail-section {
+  margin-bottom: 32px;
+}
+
+@media (max-width: 768px) {
+  .home-page {
+    padding: 20px;
+  }
+}
+</style>

@@ -90,17 +90,49 @@ addDataUser()
 </script>
 
 <template>
-  <div
-    v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Logistica')"
-    class="button-create"
-  >
-    <button @click="create">Crear</button>
-  </div>
-  <main>
-    <div>
-      <h3>Envios</h3>
-      <FilterForm :filterFields="shipmentFilterFields" @filter="filter" />
-      <ShipmentTable :shipments="filteredShipments" :additionalInfo="true"></ShipmentTable>
+  <div class="list-page">
+    <div class="page-header">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Envíos</h2>
+      </div>
+      <div
+        v-if="userStore.hasPermission('mediumHigh') || userStore.hasRole('Logistica')"
+        class="actions-bar"
+      >
+        <button class="btn btn-primary" @click="create">Crear</button>
+      </div>
     </div>
-  </main>
+
+    <FilterForm :filterFields="shipmentFilterFields" @filter="filter" />
+    <ShipmentTable :shipments="filteredShipments" :additionalInfo="true"></ShipmentTable>
+  </div>
 </template>
+
+<style scoped>
+.list-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .list-page {
+    padding: 20px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+</style>

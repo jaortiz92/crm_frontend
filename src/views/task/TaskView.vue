@@ -111,23 +111,72 @@ addDataUser()
 </script>
 
 <template>
-  <div class="button-create">
-    <button @click="create">Crear</button>
-  </div>
-  <main>
-    <div>
-      <h3>Tareas</h3>
+  <div class="list-page">
+    <div class="page-header">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Tareas</h2>
+      </div>
+      <div class="actions-bar">
+        <button class="btn btn-primary" @click="create">Crear</button>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h3 class="section-title">Mis Tareas</h3>
+      </div>
       <TaskTable :tasks="tasks" :additionalInfo="true"></TaskTable>
     </div>
-    <div>
-      <h3>Tareas Asignadas</h3>
+
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h3 class="section-title">Tareas Asignadas</h3>
+      </div>
       <TaskTable :tasks="tasksAssigned" :additionalInfo="true"></TaskTable>
     </div>
 
-    <div>
-      <h3>Todas las Tareas</h3>
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h3 class="section-title">Todas las Tareas</h3>
+      </div>
       <FilterForm :filterFields="taskFilterFields" @filter="filter" />
       <TaskTable :tasks="filteredTasksAll" :additionalInfo="true"></TaskTable>
     </div>
-  </main>
+  </div>
 </template>
+
+<style scoped>
+.list-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.detail-section {
+  margin-bottom: 32px;
+}
+
+@media (max-width: 768px) {
+  .list-page {
+    padding: 20px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+</style>
