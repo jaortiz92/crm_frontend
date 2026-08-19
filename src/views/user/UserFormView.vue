@@ -35,6 +35,7 @@ onMounted(async () => {
 
 const save = async (userData) => {
   const validate = 'Validate user data'
+  userData.phone = userData.phone?.toString()
   if (!isEdit.value) {
     const responseUser = await alertService.createElement('Usuario')
     if (responseUser.isConfirmed) {
@@ -67,10 +68,28 @@ const save = async (userData) => {
 </script>
 
 <template>
-  <div>
-    <h2>
-      {{ isEdit ? `Actualizar Usuario: ID ${user.id_user}` : 'Crear Usuario' }}
-    </h2>
+  <div class="form-page">
+    <div class="section-header">
+      <div class="section-accent"></div>
+      <h2 class="section-title">
+        {{ isEdit ? `Actualizar Usuario: ID ${user.id_user}` : 'Crear Usuario' }}
+      </h2>
+    </div>
     <UserForm :initialUser="user" :options="options" :isEdit="isEdit" @save="save" />
   </div>
 </template>
+
+<style scoped>
+.form-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+@media (max-width: 768px) {
+  .form-page {
+    padding: 20px;
+  }
+}
+</style>

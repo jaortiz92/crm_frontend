@@ -92,13 +92,16 @@ const save = async (contact) => {
 </script>
 
 <template>
-  <div>
-    <h2>
-      {{ isEdit ? `Actualizar Contacto: ID ${contact.id_contact}` : 'Crear Contacto' }}
-    </h2>
-    <h2 v-if="customer.id_customer">
-      {{ `A la compañia: ${customer.company_name}` }}
-    </h2>
+  <div class="form-page">
+    <div class="section-header">
+      <div class="section-accent"></div>
+      <h2 class="section-title">
+        {{ isEdit ? `Actualizar Contacto: ID ${contact.id_contact}` : 'Crear Contacto' }}
+      </h2>
+    </div>
+    <p v-if="customer.id_customer" class="form-subtitle">
+      A la compañia: {{ customer.company_name }}
+    </p>
     <ContactFrom
       :initialContact="contact"
       :options="options"
@@ -108,3 +111,25 @@ const save = async (contact) => {
     ></ContactFrom>
   </div>
 </template>
+
+<style scoped>
+.form-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.form-subtitle {
+  font-size: 14px;
+  color: var(--color-text-secondary, #616161);
+  margin: 0 0 16px 0;
+  padding-left: 16px;
+}
+
+@media (max-width: 768px) {
+  .form-page {
+    padding: 20px;
+  }
+}
+</style>

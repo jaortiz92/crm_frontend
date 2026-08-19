@@ -114,8 +114,13 @@ const save = async (invoice, file) => {
     <p>Procesando, por favor espere...</p>
     <div class="spinner"></div>
   </div>
-  <div>
-    <h2>{{ isEdit ? `Actualizar Factura: ID ${invoice.id_invoice}` : 'Crear Factura' }}</h2>
+  <div class="form-page">
+    <div class="section-header">
+      <div class="section-accent"></div>
+      <h2 class="section-title">
+        {{ isEdit ? `Actualizar Factura: ID ${invoice.id_invoice}` : 'Crear Factura' }}
+      </h2>
+    </div>
     <InvoiceFrom
       :initialInvoice="invoice"
       :options="options"
@@ -124,3 +129,18 @@ const save = async (invoice, file) => {
     ></InvoiceFrom>
   </div>
 </template>
+
+<style scoped>
+.form-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+@media (max-width: 768px) {
+  .form-page {
+    padding: 20px;
+  }
+}
+</style>

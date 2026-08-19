@@ -107,7 +107,7 @@ const edit = async (contact) => {
 
 <style scoped>
 .table-contacts {
-  width: 95%;
+  width: 100%;
   margin-right: auto;
   margin-left: auto;
   display: table;

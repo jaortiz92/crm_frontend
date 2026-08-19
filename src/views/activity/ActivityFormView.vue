@@ -76,8 +76,13 @@ const save = async (activity) => {
 </script>
 
 <template>
-  <div>
-    <h2>{{ isEdit ? `Actualizar Actividad: ID ${activity.id_activity}` : 'Crear Actividad' }}</h2>
+  <div class="form-page">
+    <div class="section-header">
+      <div class="section-accent"></div>
+      <h2 class="section-title">
+        {{ isEdit ? `Actualizar Actividad: ID ${activity.id_activity}` : 'Crear Actividad' }}
+      </h2>
+    </div>
     <ActivityFrom
       :initialActivity="activity"
       :options="options"
@@ -86,3 +91,18 @@ const save = async (activity) => {
     ></ActivityFrom>
   </div>
 </template>
+
+<style scoped>
+.form-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+@media (max-width: 768px) {
+  .form-page {
+    padding: 20px;
+  }
+}
+</style>

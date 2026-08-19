@@ -73,14 +73,17 @@ const save = async (customerTrip) => {
 </script>
 
 <template>
-  <div>
-    <h2>
-      {{
-        isEdit
-          ? `Actualizar Viaje del cliente: ID ${customerTrip.id_customer_trip}`
-          : 'Crear Viaje del cliente'
-      }}
-    </h2>
+  <div class="form-page">
+    <div class="section-header">
+      <div class="section-accent"></div>
+      <h2 class="section-title">
+        {{
+          isEdit
+            ? `Actualizar Viaje del cliente: ID ${customerTrip.id_customer_trip}`
+            : 'Crear Viaje del cliente'
+        }}
+      </h2>
+    </div>
     <CustomerTripFrom
       :initialCustomerTrip="customerTrip"
       :options="options"
@@ -89,3 +92,18 @@ const save = async (customerTrip) => {
     ></CustomerTripFrom>
   </div>
 </template>
+
+<style scoped>
+.form-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+@media (max-width: 768px) {
+  .form-page {
+    padding: 20px;
+  }
+}
+</style>

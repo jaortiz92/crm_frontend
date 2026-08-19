@@ -47,43 +47,56 @@ const updatePassword = async () => {
 </script>
 
 <template>
-  <div class="user" v-if="user">
-    <div class="user-detail">
+  <div v-if="user" class="user-page">
+    <div class="user-card-wrapper">
       <UserInfo :user="user"></UserInfo>
     </div>
+
+    <div class="actions-bar">
+      <button class="btn btn-primary" @click="edit">Editar</button>
+      <button class="btn btn-secondary" @click="createUser">Crear Usuario</button>
+      <button class="btn btn-outline" @click="updatePassword">Cambiar contraseña</button>
+    </div>
   </div>
-  <div v-else>
+
+  <div v-else class="loading">
     <p>Cargando detalles...</p>
-  </div>
-  <div class="user_summary"></div>
-  <div class="button-edit">
-    <button @click="edit">Editar</button>
-    <button @click="createUser">Crear Usuario</button>
-    <button @click="updatePassword">Cambiar contraseña</button>
   </div>
 </template>
 
 <style scoped>
-.user {
+.user-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.user-card-wrapper {
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.actions-bar {
   display: flex;
-  justify-content: center;
-  align-items: center;
-}
-.user-detail {
-  max-width: 600px;
-  min-width: 500px;
-  margin: 10px;
-  padding: 10px;
-  background-color: var(--light-border);
-  border-radius: var(--border-radius-size);
-  box-shadow: 0 2px 10px var(--shadow);
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0;
 }
 
-.button-edit button {
-  margin: 2px;
+.loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-secondary, #616161);
 }
 
-.user_additional {
-  flex-grow: 1;
+@media (max-width: 768px) {
+  .user-page {
+    padding: 20px;
+  }
+
+  .actions-bar {
+    flex-wrap: wrap;
+  }
 }
 </style>

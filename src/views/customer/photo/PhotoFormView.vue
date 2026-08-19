@@ -68,8 +68,28 @@ const save = async (photo) => {
 </script>
 
 <template>
-  <div>
-    <h2>{{ isEdit ? `Actualizar Foto: ID ${photo.id_photo}` : 'Crear Foto' }}</h2>
+  <div class="form-page">
+    <div class="section-header">
+      <div class="section-accent"></div>
+      <h2 class="section-title">
+        {{ isEdit ? `Actualizar Foto: ID ${photo.id_photo}` : 'Crear Foto' }}
+      </h2>
+    </div>
     <PhotoFrom :initialPhoto="photo" :options="options" :isEdit="isEdit" @save="save"></PhotoFrom>
   </div>
 </template>
+
+<style scoped>
+.form-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+@media (max-width: 768px) {
+  .form-page {
+    padding: 20px;
+  }
+}
+</style>

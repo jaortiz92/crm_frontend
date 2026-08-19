@@ -30,58 +30,102 @@ const save = () => {
 </script>
 
 <template>
-  <form @submit.prevent="save" class="form-photo">
-    <div class="field-input">
-      <label>Cliente</label>
-      <select v-model="photo.id_customer" required>
-        <option
-          v-for="option in options.customers"
-          :key="option.id_customer"
-          :value="option.id_customer"
-        >
-          {{ option.company_name }}
-        </option>
-      </select>
+  <form @submit.prevent="save" class="form-card">
+    <div class="form-section">
+      <h3 class="form-section-title">Información de la foto</h3>
+      <div class="field-input">
+        <label>Cliente</label>
+        <select v-model="photo.id_customer" required>
+          <option
+            v-for="option in options.customers"
+            :key="option.id_customer"
+            :value="option.id_customer"
+          >
+            {{ option.company_name }}
+          </option>
+        </select>
+      </div>
+      <div class="field-input">
+        <label>URL</label>
+        <input type="url" v-model="photo.url_photo" required />
+      </div>
     </div>
-    <div class="field-input">
-      <label>URL</label>
-      <input type="url" v-model="photo.url_photo" required />
+    <div class="button-group">
+      <button type="submit" class="btn btn-primary">
+        {{ isEdit ? `Actualizar Foto` : 'Crear Foto' }}
+      </button>
     </div>
-    <button type="submit">{{ isEdit ? `Actualizar Evaluación` : 'Crear Evaluación' }}</button>
   </form>
 </template>
 
 <style scoped>
-.form-photo {
+.form-card {
+  width: 85%;
   max-width: 600px;
   margin: 0 auto;
-  border: 1px solid var(--gray-border);
-  border-radius: 8px;
-  background-color: var(--background-light);
-  box-shadow: 0 4px 8px var(--shadow);
+  background: var(--color-surface-card, #ffffff);
+  border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
+  border-radius: var(--border-radius-size, 8px);
+  padding: 24px;
 }
 
-input,
-select,
-textarea {
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary, #070707);
+  margin: 0 0 8px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
+}
+
+.field-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-input label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #616161);
+}
+
+.field-input input,
+.field-input select {
+  width: 100%;
   max-width: none;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--color-text-primary, #070707);
+  transition: border-color 0.2s;
+  box-sizing: border-box;
 }
 
-.company-name {
-  text-align: left;
-  margin: 5px;
-  padding: 5px;
-  border: 1px solid var(--gray-border);
-  color: var(--gray-border);
+.field-input input:focus,
+.field-input select:focus {
+  outline: none;
+  border-color: var(--color-brand, #03658c);
 }
 
-@media (max-width: 480px) {
-  .form-photo {
-    padding: 10px;
-  }
+.button-group {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
+}
 
-  button {
-    font-size: 14px;
+@media (max-width: 768px) {
+  .form-card {
+    padding: 20px;
   }
 }
 </style>

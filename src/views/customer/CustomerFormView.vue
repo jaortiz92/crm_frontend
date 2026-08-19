@@ -78,10 +78,13 @@ const save = async (customer) => {
 </script>
 
 <template>
-  <div>
-    <h2>
-      {{ isEdit ? `Actualizar Cliente: ID ${customer.id_customer}` : 'Crear Cliente' }}
-    </h2>
+  <div class="form-page">
+    <div class="section-header">
+      <div class="section-accent"></div>
+      <h2 class="section-title">
+        {{ isEdit ? `Actualizar Cliente: ID ${customer.id_customer}` : 'Crear Cliente' }}
+      </h2>
+    </div>
     <CustomerFrom
       :initialCustomer="customer"
       :options="options"
@@ -90,3 +93,18 @@ const save = async (customer) => {
     ></CustomerFrom>
   </div>
 </template>
+
+<style scoped>
+.form-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+@media (max-width: 768px) {
+  .form-page {
+    padding: 20px;
+  }
+}
+</style>

@@ -105,8 +105,28 @@ const save = async (order, file) => {
     <p>Procesando, por favor espere...</p>
     <div class="spinner"></div>
   </div>
-  <div>
-    <h2>{{ isEdit ? `Actualizar Orden: ID ${order.id_order}` : 'Crear Orden' }}</h2>
+  <div class="form-page">
+    <div class="section-header">
+      <div class="section-accent"></div>
+      <h2 class="section-title">
+        {{ isEdit ? `Actualizar Orden: ID ${order.id_order}` : 'Crear Orden' }}
+      </h2>
+    </div>
     <OrderFrom :initialOrder="order" :options="options" :isEdit="isEdit" @save="save"></OrderFrom>
   </div>
 </template>
+
+<style scoped>
+.form-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+@media (max-width: 768px) {
+  .form-page {
+    padding: 20px;
+  }
+}
+</style>

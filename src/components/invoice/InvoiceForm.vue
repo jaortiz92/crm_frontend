@@ -116,131 +116,199 @@ const handleFileUpload = (event) => {
 </script>
 
 <template>
-  <form @submit.prevent="save" class="form-invoice">
-    <div class="fields">
-      <div class="detail-column">
-        <div class="field-input">
-          <label>Numero De Factura</label>
-          <input v-model="invoice.invoice_number" required invoiceStore type="text" />
-        </div>
-        <div class="field-input">
-          <label>Llave</label>
-          <select v-model="invoice.key" required>
-            <option v-for="index in 3" :key="index" :value="index">
-              {{ index }}
-            </option>
-          </select>
-        </div>
-        <div v-if="!isEdit" class="field-input">
-          <label>Cliente</label>
-          <select @change="onCustomerChange" v-model="selectedCustomerId">
-            <option :value="null">-- Seleccione un cliente --</option>
-            <option
-              v-for="option in options.customers"
-              :key="option.id_customer"
-              :value="option.id_customer"
-            >
-              {{ option.company_name }}
-            </option>
-          </select>
-        </div>
-        <div v-if="!isEdit && selectedCustomerId" class="field-input">
-          <label>Viaje del Cliente</label>
-          <select v-model="selectedCustomerTripId">
-            <option :value="null">Todos los viajes / Sin filtrar</option>
-            <option
-              v-for="option in customersTrips"
-              :key="option.id_customer_trip"
-              :value="option.id_customer_trip"
-            >
-              {{ option.collection.line.line_name }}-{{
-                option.collection.short_collection_name
-              }}
-              -> ID={{ option.id_customer_trip }}
-            </option>
-          </select>
-        </div>
-        <div v-if="!isEdit && selectedCustomerId" class="field-input">
-          <label>Seleccionar Orden</label>
-          <select v-model="invoice.id_order">
-            <option :value="null">-- Seleccione una orden --</option>
-            <option
-              v-for="option in filteredOrders"
-              :key="option.id_order"
-              :value="option.id_order"
-            >
-              ID: {{ option.id_order }} - Delivery: {{ option.delivery_date }}
-            </option>
-          </select>
+  <form @submit.prevent="save" class="form-card">
+    <div class="form-grid">
+      <div class="form-column">
+        <div class="form-section">
+          <h3 class="form-section-title">Información de la factura</h3>
+          <div class="field-input">
+            <label>Numero De Factura</label>
+            <input v-model="invoice.invoice_number" required type="text" />
+          </div>
+          <div class="field-input">
+            <label>Llave</label>
+            <select v-model="invoice.key" required>
+              <option v-for="index in 3" :key="index" :value="index">
+                {{ index }}
+              </option>
+            </select>
+          </div>
+          <div v-if="!isEdit" class="field-input">
+            <label>Cliente</label>
+            <select @change="onCustomerChange" v-model="selectedCustomerId">
+              <option :value="null">-- Seleccione un cliente --</option>
+              <option
+                v-for="option in options.customers"
+                :key="option.id_customer"
+                :value="option.id_customer"
+              >
+                {{ option.company_name }}
+              </option>
+            </select>
+          </div>
+          <div v-if="!isEdit && selectedCustomerId" class="field-input">
+            <label>Viaje del Cliente</label>
+            <select v-model="selectedCustomerTripId">
+              <option :value="null">Todos los viajes / Sin filtrar</option>
+              <option
+                v-for="option in customersTrips"
+                :key="option.id_customer_trip"
+                :value="option.id_customer_trip"
+              >
+                {{ option.collection.line.line_name }}-{{
+                  option.collection.short_collection_name
+                }}
+                -> ID={{ option.id_customer_trip }}
+              </option>
+            </select>
+          </div>
+          <div v-if="!isEdit && selectedCustomerId" class="field-input">
+            <label>Seleccionar Orden</label>
+            <select v-model="invoice.id_order">
+              <option :value="null">-- Seleccione una orden --</option>
+              <option
+                v-for="option in filteredOrders"
+                :key="option.id_order"
+                :value="option.id_order"
+              >
+                ID: {{ option.id_order }} - Delivery: {{ option.delivery_date }}
+              </option>
+            </select>
+          </div>
         </div>
       </div>
-      <div class="detail-column">
-        <div class="field-input">
-          <label>Fecha</label>
-          <input v-model="invoice.invoice_date" type="date" required />
-        </div>
-        <div class="field-input">
-          <label>ID order</label>
-          <input v-model="invoice.id_order" required invoiceStore type="number" />
-        </div>
-        <div class="field-input">
-          <label>¿Agregar detalles? </label
-          ><input v-model="details" type="checkbox" class="checkbox" />
-        </div>
-        <div v-if="details" class="field-input">
-          <label for="document">Documento:</label>
-          <input
-            type="file"
-            id="document"
-            @change="handleFileUpload"
-            accept=".xlsx,.xlsm"
-            required
-          />
+
+      <div class="form-column">
+        <div class="form-section">
+          <h3 class="form-section-title">Detalles</h3>
+          <div class="field-input">
+            <label>Fecha</label>
+            <input v-model="invoice.invoice_date" type="date" required />
+          </div>
+          <div class="field-input">
+            <label>ID order</label>
+            <input v-model="invoice.id_order" required type="number" />
+          </div>
+          <div class="field-input">
+            <label>¿Agregar detalles? </label>
+            <input v-model="details" type="checkbox" class="checkbox" />
+          </div>
+          <div v-if="details" class="field-input">
+            <label for="document">Documento:</label>
+            <input
+              type="file"
+              id="document"
+              @change="handleFileUpload"
+              accept=".xlsx,.xlsm"
+              required
+            />
+          </div>
         </div>
       </div>
     </div>
     <div class="button-group">
-      <button type="submit">{{ isEdit ? `Actualizar Factura` : 'Crear Factura' }}</button>
+      <button type="submit" class="btn btn-primary">
+        {{ isEdit ? `Actualizar Factura` : 'Crear Factura' }}
+      </button>
     </div>
   </form>
 </template>
 
 <style scoped>
-.form-invoice {
-  max-width: 800px;
-  margin: 0 auto;
-  border: 1px solid var(--gray-border);
-  border-radius: 8px;
-  background-color: var(--background-light);
-  box-shadow: 0 4px 8px var(--shadow);
+.form-card {
+  width: 85%;
+  background: var(--color-surface-card, #ffffff);
+  border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
+  border-radius: var(--border-radius-size, 8px);
+  padding: 24px;
 }
 
-.company-name {
-  text-align: left;
-  margin: 5px;
-  padding: 5px;
-  border: 1px solid var(--gray-border);
-  color: var(--gray-border);
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+
+.form-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary, #070707);
+  margin: 0 0 8px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
+}
+
+.field-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-input label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #616161);
+}
+
+.field-input input,
+.field-input select,
+.field-input textarea {
+  width: 100%;
+  max-width: none;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--color-text-primary, #070707);
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.field-input input:focus,
+.field-input select:focus,
+.field-input textarea:focus {
+  outline: none;
+  border-color: var(--color-brand, #03658c);
+}
+
+.field-input textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.field-input .checkbox {
+  width: auto;
+  margin: 0;
 }
 
 .button-group {
   display: flex;
-  gap: 10px;
   justify-content: center;
-  align-items: center;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
 }
 
-button {
-  min-width: 150px;
-}
-
-@media (max-width: 480px) {
-  .form-invoice {
-    padding: 10px;
+@media (max-width: 768px) {
+  .form-card {
+    padding: 20px;
   }
 
-  button {
-    font-size: 14px;
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
   }
 }
 </style>
