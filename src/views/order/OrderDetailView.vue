@@ -75,83 +75,149 @@ const createInvoice = async () => {
 </script>
 
 <template>
-  <div v-if="order">
-    <div class="order">
-      <div class="order-header">
-        <OrderInfo :order="order"></OrderInfo>
+  <div v-if="order" class="order-page">
+    <div class="order-card-wrapper">
+      <OrderInfo :order="order"></OrderInfo>
+    </div>
+
+    <div class="actions-bar">
+      <button
+        v-if="userStore.hasPermission('medium') || userStore.hasRole('Asesor Comercial')"
+        class="btn btn-primary"
+        @click="createAdvance"
+      >
+        Crear Anticipo
+      </button>
+      <button
+        v-if="userStore.hasPermission('mediumHigh') || userStore.hasRole('Asesor Comercial')"
+        class="btn btn-primary"
+        @click="createInvoice"
+      >
+        Crear Factura
+      </button>
+      <button
+        v-if="userStore.hasPermission('mediumHigh') || userStore.hasRole('Asesor Comercial')"
+        class="btn btn-primary"
+        @click="edit"
+      >
+        Editar Orden
+      </button>
+    </div>
+
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Anticipos</h2>
       </div>
-      <div>
-        <h2>Anticipos</h2>
+      <div class="table-wrapper">
         <AdvanceTable :advances="advances"></AdvanceTable>
-        <div
-          v-if="userStore.hasPermission('medium') | userStore.hasRole('Asesor Comercial')"
-          class="button-edit"
-        >
-          <button @click="createAdvance">Crear Anticipo</button>
-        </div>
       </div>
-      <div>
-        <h2>Facturas</h2>
+    </div>
+
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Facturas</h2>
+      </div>
+      <div class="table-wrapper">
         <InvoiceTable :invoices="invoices"></InvoiceTable>
-        <div
-          v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
-          class="button-edit"
-        >
-          <button @click="createInvoice">Crear Factura</button>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Resumen Detalle Orden</h2>
+      </div>
+      <div class="table-wrapper">
+        <OrderDetailByBrandTable
+          :orderDetailsByBrand="orderDetailsByBrand"
+        ></OrderDetailByBrandTable>
+      </div>
+      <div class="small-tables-row">
+        <div class="table-wrapper">
+          <OrderDetailBySizeTable :orderDetailsBySize="orderDetailsBySize"></OrderDetailBySizeTable>
+        </div>
+        <div class="table-wrapper">
+          <OrderDetailByDescriptionTable
+            :orderDetailsByDescription="orderDetailsByDescription"
+          ></OrderDetailByDescriptionTable>
         </div>
       </div>
-      <div class="order-detail">
-        <h2>Resumen Detalle Orden</h2>
-        <div class="tables-datail-summary">
-          <OrderDetailByBrandTable
-            :orderDetailsByBrand="orderDetailsByBrand"
-          ></OrderDetailByBrandTable>
-          <div class="small-tables">
-            <OrderDetailBySizeTable
-              :orderDetailsBySize="orderDetailsBySize"
-            ></OrderDetailBySizeTable>
-            <OrderDetailByDescriptionTable
-              :orderDetailsByDescription="orderDetailsByDescription"
-            ></OrderDetailByDescriptionTable>
-          </div>
-        </div>
-        <h2>Detalle Orden</h2>
+    </div>
+
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Detalle Orden</h2>
+      </div>
+      <div class="table-wrapper">
         <OrderDetailTable :orderDetails="orderDetails"></OrderDetailTable>
       </div>
     </div>
-    <div
-      v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Asesor Comercial')"
-      class="button-edit"
-    >
-      <button @click="edit">Editar Orden</button>
-    </div>
   </div>
-  <div v-else>
+
+  <div v-else class="loading">
     <p>Cargando detalles...</p>
   </div>
 </template>
 
 <style scoped>
-.order-header {
-  max-width: 1800px;
-  min-width: 500px;
-  margin: 10px;
-  padding: 10px;
-  background-color: var(--light-border);
-  border-radius: var(--border-radius-size);
-  box-shadow: 0 2px 10px var(--shadow);
+.order-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
 }
 
-.tables-datail-summary {
-  padding: 20px;
+.order-card-wrapper {
+  width: 100%;
+  margin-bottom: 24px;
 }
 
-.small-tables {
+.detail-section {
+  margin-bottom: 32px;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.small-tables-row {
   display: flex;
-  justify-content: center;
+  gap: 24px;
 }
 
-.tables-datail-summary div {
-  padding: 10px;
+.small-tables-row .table-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-secondary, #616161);
+}
+
+@media (max-width: 1024px) {
+  .small-tables-row {
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .order-page {
+    padding: 20px;
+  }
 }
 </style>

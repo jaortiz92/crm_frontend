@@ -8,126 +8,206 @@ const { task } = toRefs(props)
 </script>
 
 <template>
-  <div class="template-container">
-    <h2>ID Tarea {{ task.id_task }}</h2>
-    <div class="details-wrapper">
-      <div class="detail-column">
-        <div class="detail-row">
-          <p><strong>Cliente:</strong></p>
+  <div class="detail-card">
+    <h1 class="task-name">Tarea #{{ task.id_task }}</h1>
+    
+    <div class="task-description">
+      {{ task.task }}
+    </div>
+
+    <dl class="detail-grid">
+      <div class="detail-group">
+        <dt>Cliente:</dt>
+        <dd>
           <router-link
             :to="{
               name: 'CustomerDetail',
               params: { id: task.id_customer }
             }"
           >
-            <p>{{ task.customer.company_name }}</p>
+            {{ task.customer.company_name }}
           </router-link>
-        </div>
-        <div class="detail-row">
-          <p><strong>Ciudad:</strong></p>
-          <p>{{ task.customer.city.city_name }}</p>
-        </div>
-        <div class="detail-row">
-          <p>
-            <strong>Creador de la tarea:</strong>
-          </p>
-          <p>
-            {{ task.creator_tasks.first_name }}
-            {{ task.creator_tasks.last_name }}
-          </p>
-        </div>
-        <div class="detail-row">
-          <p>
-            <strong>Responsable de la tarea:</strong>
-          </p>
-          <p>{{ task.responsible_task.first_name }} {{ task.responsible_task.last_name }}</p>
-        </div>
+        </dd>
       </div>
-      <div class="detail-column">
-        <div class="detail-row">
-          <p><strong>Fecha Creación:</strong></p>
-          <p>{{ task.creation_date }}</p>
-        </div>
-        <div class="detail-row">
-          <p>
-            <strong>Fecha Ejecución:</strong>
-          </p>
-          <p v-if="task.execution_date">{{ task.execution_date }}</p>
-          <p v-else>Sin Completar</p>
-        </div>
-        <div class="detail-row">
-          <p><strong>Completado:</strong></p>
-          <p>
-            <span :class="{ checkbox: true, checked: task.completed }"></span>
-          </p>
-        </div>
+
+      <div class="detail-group">
+        <dt>Ciudad:</dt>
+        <dd>{{ task.customer.city.city_name }}</dd>
       </div>
-    </div>
-    <div class="text-row">
-      <div class="detail-column">
-        <p><strong>Tarea:</strong></p>
-        <p class="space-for-text">{{ task.task }}</p>
+
+      <div class="detail-group">
+        <dt>Creador de la tarea:</dt>
+        <dd>{{ task.creator_tasks.first_name }} {{ task.creator_tasks.last_name }}</dd>
       </div>
-      <div class="detail-column">
-        <p>
-          <strong>Comentarios:</strong>
-        </p>
-        <p class="space-for-text" v-if="task.comment">{{ task.comment }}</p>
-        <p class="space-for-text" v-else>Sin Comentarios</p>
+
+      <div class="detail-group">
+        <dt>Responsable de la tarea:</dt>
+        <dd>{{ task.responsible_task.first_name }} {{ task.responsible_task.last_name }}</dd>
       </div>
-    </div>
+
+      <div class="detail-group">
+        <dt>Fecha Creación:</dt>
+        <dd>{{ task.creation_date }}</dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Fecha Ejecución:</dt>
+        <dd v-if="task.execution_date">{{ task.execution_date }}</dd>
+        <dd v-else class="muted">Sin Completar</dd>
+      </div>
+
+      <div class="detail-group">
+        <dt>Completado:</dt>
+        <dd>
+          <span
+            :class="{
+              'badge badge--success': task.completed,
+              'badge badge--muted': !task.completed
+            }"
+          >
+            {{ task.completed ? 'Sí' : 'No' }}
+          </span>
+        </dd>
+      </div>
+
+      <div class="detail-divider" style="grid-column: 1 / -1"></div>
+
+      <div class="detail-group detail-pair--full">
+        <dt>Comentarios:</dt>
+        <dd class="text-value" v-if="task.comment">{{ task.comment }}</dd>
+        <dd class="text-value muted" v-else>Sin Comentarios</dd>
+      </div>
+    </dl>
   </div>
 </template>
 
 <style scoped>
-.template-container {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--gray-border);
-  border-radius: 8px;
+.detail-card {
+  width: 100%;
+  background: var(--color-surface-card, #ffffff);
+  border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
+  border-radius: var(--border-radius-size, 8px);
   padding: 20px;
-  max-width: 100%;
-  background-color: var(--background-light);
 }
 
-.details-wrapper {
-  display: flex;
-  flex-wrap: wrap;
+.task-name {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--color-text-primary, #070707);
+  margin: 0 0 16px 0;
+  text-align: left;
 }
 
-.detail-column:first-child {
-  border-right: 1px solid var(--gray-border);
-  padding-right: 15px;
-  margin-right: 15px;
+.task-description {
+  background: var(--color-brand-light, #d0ebda);
+  border-left: 4px solid var(--color-brand, #03658c);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  border-radius: 0 8px 8px 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--color-text-primary, #070707);
+  word-break: break-word;
 }
 
-.detail-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 5px 0;
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 20px;
+  width: 100%;
 }
 
-.detail-row p {
+.detail-group {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.detail-group dt {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #616161);
+  text-align: left;
+}
+
+.detail-group dd {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary, #070707);
   margin: 0;
-  font-size: 1rem;
+  text-align: left;
+  word-break: break-word;
 }
 
-.detail-row p:first-child {
-  font-weight: bold;
+.detail-group dd a {
+  color: var(--color-brand, #03658c);
+  text-decoration: none;
+  font-weight: 600;
 }
 
-.detail-row p:last-child {
-  text-align: right;
+.detail-group dd a:hover {
+  color: var(--color-brand-hover, #05c7f2);
+  text-decoration: underline;
 }
 
-.text-row {
-  display: flex;
-  flex-wrap: wrap;
-  border-top: 1px solid var(--gray-border);
-  margin-top: 15px;
-  padding-top: 15px;
+.detail-pair--full {
+  grid-column: 1 / -1;
 }
-.space-for-text {
-  text-align: justify;
+
+.detail-pair--full dd {
+  grid-column: 1 / -1;
+}
+
+.text-value {
+  font-weight: 400 !important;
+  line-height: 1.5;
+}
+
+.detail-divider {
+  height: 1px;
+  background: var(--color-border, rgba(97, 97, 97, 0.15));
+  width: 100%;
+  margin: 4px 0;
+}
+
+.muted {
+  color: var(--color-text-tertiary, rgba(97, 97, 97, 0.5));
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.25px;
+  border-radius: 4px;
+}
+
+.badge--success {
+  background: rgba(73, 154, 103, 0.15);
+  color: var(--color-success, #499a67);
+}
+
+.badge--muted {
+  background: rgba(97, 97, 97, 0.1);
+  color: var(--color-text-tertiary, rgba(97, 97, 97, 0.5));
+}
+
+@media (max-width: 768px) {
+  .detail-card {
+    padding: 20px;
+  }
+
+  .task-name {
+    font-size: 22px;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 }
 </style>

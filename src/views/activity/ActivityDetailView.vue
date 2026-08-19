@@ -51,47 +51,68 @@ const authorizeActivity = async (activityAutho) => {
 </script>
 
 <template>
-  <div v-if="activity">
-    <div class="activity">
-      <div class="activity-header">
-        <ActivityInfo :activity="activity"></ActivityInfo>
-      </div>
-      <div class="button-edit">
-        <button
-          v-if="
-            userStore.hasRole(['Gerente', 'Financiero', 'Administrador']) && activity.budget > 0
-          "
-          @click="showAutho = !showAutho"
-        >
-          Autorizar
-        </button>
-        <button @click="edit">Editar</button>
-      </div>
-      <div v-if="showAutho">
-        <ActivityFormAutho
-          :activity="activity"
-          @authorizeActivity="authorizeActivity"
-        ></ActivityFormAutho>
-      </div>
+  <div v-if="activity" class="activity-page">
+    <div class="activity-card-wrapper">
+      <ActivityInfo :activity="activity"></ActivityInfo>
+    </div>
+
+    <div class="actions-bar">
+      <button
+        v-if="userStore.hasRole(['Gerente', 'Financiero', 'Administrador']) && activity.budget > 0"
+        class="btn btn-outline"
+        @click="showAutho = !showAutho"
+      >
+        Autorizar
+      </button>
+      <button class="btn btn-primary" @click="edit">Editar</button>
+    </div>
+
+    <div v-if="showAutho" class="detail-section">
+      <ActivityFormAutho
+        :activity="activity"
+        @authorizeActivity="authorizeActivity"
+      ></ActivityFormAutho>
     </div>
   </div>
-  <div v-else>
+
+  <div v-else class="loading">
     <p>Cargando detalles...</p>
   </div>
 </template>
 
 <style scoped>
-.activity-header {
-  max-width: 1800px;
-  min-width: 500px;
-  margin: 10px;
-  padding: 10px;
-  background-color: var(--light-border);
-  border-radius: var(--border-radius-size);
-  box-shadow: 0 2px 10px var(--shadow);
+.activity-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
 }
 
-.button-edit button {
-  margin-left: 10px;
+.activity-card-wrapper {
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.detail-section {
+  margin-bottom: 32px;
+}
+
+.actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-secondary, #616161);
+}
+
+@media (max-width: 768px) {
+  .activity-page {
+    padding: 20px;
+  }
 }
 </style>

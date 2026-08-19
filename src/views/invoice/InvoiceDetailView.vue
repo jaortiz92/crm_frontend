@@ -52,64 +52,114 @@ const edit = async () => {
 </script>
 
 <template>
-  <div v-if="invoice">
-    <div class="invoice">
-      <div class="invoice-header">
-        <InvoiceInfo :invoice="invoice"></InvoiceInfo>
+  <div v-if="invoice" class="invoice-page">
+    <div class="invoice-card-wrapper">
+      <InvoiceInfo :invoice="invoice"></InvoiceInfo>
+    </div>
+
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Resumen Detalle Factura</h2>
       </div>
-      <div class="invoice-detail">
-        <h2>Resumen Detalle Factura</h2>
-        <div class="tables-datail-summary">
-          <InvoiceDetailByBrandTable
-            :invoiceDetailsByBrand="invoiceDetailsByBrand"
-          ></InvoiceDetailByBrandTable>
-          <div class="small-tables">
-            <InvoiceDetailBySizeTable
-              :invoiceDetailsBySize="invoiceDetailsBySize"
-            ></InvoiceDetailBySizeTable>
-            <InvoiceDetailByDescriptionTable
-              :invoiceDetailsByDescription="invoiceDetailsByDescription"
-            ></InvoiceDetailByDescriptionTable>
-          </div>
+      <div class="table-wrapper">
+        <InvoiceDetailByBrandTable
+          :invoiceDetailsByBrand="invoiceDetailsByBrand"
+        ></InvoiceDetailByBrandTable>
+      </div>
+      <div class="small-tables-row">
+        <div class="table-wrapper">
+          <InvoiceDetailBySizeTable
+            :invoiceDetailsBySize="invoiceDetailsBySize"
+          ></InvoiceDetailBySizeTable>
         </div>
-        <h2>Detalle Factura</h2>
+        <div class="table-wrapper">
+          <InvoiceDetailByDescriptionTable
+            :invoiceDetailsByDescription="invoiceDetailsByDescription"
+          ></InvoiceDetailByDescriptionTable>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Detalle Factura</h2>
+      </div>
+      <div class="table-wrapper">
         <InvoiceDetailTable :invoiceDetails="invoiceDetails"></InvoiceDetailTable>
       </div>
     </div>
+
     <div
-      v-if="userStore.hasPermission('medium') | userStore.hasRole('Asesor Comercial')"
-      class="button-edit"
+      v-if="userStore.hasPermission('medium') || userStore.hasRole('Asesor Comercial')"
+      class="actions-bar"
     >
-      <button @click="edit">Editar Factura</button>
+      <button class="btn btn-primary" @click="edit">Editar Factura</button>
     </div>
   </div>
-  <div v-else>
+
+  <div v-else class="loading">
     <p>Cargando detalles...</p>
-    <p>{{ invoiceDetails }}</p>
   </div>
 </template>
 
 <style scoped>
-.invoice-header {
-  max-width: 1800px;
-  min-width: 500px;
-  margin: 10px;
-  padding: 10px;
-  background-color: var(--light-border);
-  border-radius: var(--border-radius-size);
-  box-shadow: 0 2px 10px var(--shadow);
+.invoice-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
 }
 
-.tables-datail-summary {
-  padding: 20px;
+.invoice-card-wrapper {
+  width: 100%;
+  margin-bottom: 24px;
 }
 
-.small-tables {
+.detail-section {
+  margin-bottom: 32px;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.small-tables-row {
   display: flex;
-  justify-content: center;
+  gap: 24px;
 }
 
-.tables-datail-summary div {
-  padding: 10px;
+.small-tables-row .table-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-secondary, #616161);
+}
+
+@media (max-width: 1024px) {
+  .small-tables-row {
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .invoice-page {
+    padding: 20px;
+  }
 }
 </style>

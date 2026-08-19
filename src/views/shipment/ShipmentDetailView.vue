@@ -31,32 +31,56 @@ const edit = async () => {
 </script>
 
 <template>
-  <div v-if="shipment">
-    <div class="shipment">
-      <div class="shipment-header">
-        <ShipmentInfo :shipment="shipment"></ShipmentInfo>
-      </div>
-      <div
-        v-if="userStore.hasPermission('mediumHigh') | userStore.hasRole('Logistica')"
-        class="button-edit"
+  <div v-if="shipment" class="shipment-page">
+    <div class="shipment-card-wrapper">
+      <ShipmentInfo :shipment="shipment"></ShipmentInfo>
+    </div>
+
+    <div class="actions-bar">
+      <button
+        v-if="userStore.hasPermission('mediumHigh') || userStore.hasRole('Logistica')"
+        class="btn btn-primary"
+        @click="edit"
       >
-        <button @click="edit">Editar</button>
-      </div>
+        Editar
+      </button>
     </div>
   </div>
-  <div v-else>
+
+  <div v-else class="loading">
     <p>Cargando detalles...</p>
   </div>
 </template>
 
 <style scoped>
-.shipment-header {
-  max-width: 1800px;
-  min-width: 500px;
-  margin: 10px;
-  padding: 10px;
-  background-color: var(--light-border);
-  border-radius: var(--border-radius-size);
-  box-shadow: 0 2px 10px var(--shadow);
+.shipment-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.shipment-card-wrapper {
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-secondary, #616161);
+}
+
+@media (max-width: 768px) {
+  .shipment-page {
+    padding: 20px;
+  }
 }
 </style>

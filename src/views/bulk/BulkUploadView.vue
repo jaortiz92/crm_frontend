@@ -51,32 +51,53 @@ const goToUpload = () => {
 </script>
 
 <template>
-  <div class="menu-container">
-    <h2>Seleccione el tipo de carga masiva</h2>
-    <select v-model="selected">
-      <option value="" disabled>Seleccione una opción</option>
-      <option v-for="opt in options" :key="opt.id" :value="opt.id">
-        {{ opt.label }}
-      </option>
-    </select>
-    <button @click="goToUpload" :disabled="!selected">Continuar</button>
+  <div class="bulk-page">
+    <div class="bulk-card">
+      <div class="section-header">
+        <div class="section-accent"></div>
+        <h2 class="section-title">Seleccione el tipo de carga masiva</h2>
+      </div>
+      <select v-model="selected">
+        <option value="" disabled>Seleccione una opción</option>
+        <option v-for="opt in options" :key="opt.id" :value="opt.id">
+          {{ opt.label }}
+        </option>
+      </select>
+      <div class="actions-bar">
+        <button class="btn btn-primary" @click="goToUpload" :disabled="!selected">Continuar</button>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.menu-container {
+.bulk-page {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.bulk-card {
+  width: 100%;
   max-width: 600px;
   margin: 0 auto;
-  padding: 20px;
-  border: 1px solid var(--gray-border);
-  border-radius: 8px;
-  background-color: var(--background-light);
-  box-shadow: 0 4px 8px var(--shadow);
+  background: var(--color-surface-card, #ffffff);
+  border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
+  border-radius: var(--border-radius-size, 8px);
+  padding: 24px;
 }
-select,
-button {
-  width: 100%;
-  padding: 0.5rem;
-  margin-top: 1rem;
+
+.actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0 0 0;
+}
+
+@media (max-width: 768px) {
+  .bulk-page {
+    padding: 20px;
+  }
 }
 </style>
