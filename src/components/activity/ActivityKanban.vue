@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { defineProps, toRefs, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -587,11 +587,11 @@ watch(
 
 <style scoped>
 .kanban-wrapper {
-  background-color: #ffffff;
+  background-color: var(--color-surface-card, #ffffff);
   padding: 1.5rem;
   border-radius: 12px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--color-border);
   margin-bottom: 2rem;
   font-family: Helvetica, Arial, sans-serif;
 }
@@ -603,7 +603,7 @@ watch(
   gap: 1.25rem;
   margin-bottom: 1.5rem;
   padding-bottom: 1.25rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--color-border);
 }
 
 @media (min-width: 992px) {
@@ -621,14 +621,14 @@ watch(
 .kanban-title-section h2 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--dark-color);
+  color: var(--color-text-primary);
   margin: 0 0 0.25rem 0;
   text-align: left;
 }
 
 .kanban-title-section .subtitle {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--color-text-secondary, #616161);
   margin: 0;
 }
 
@@ -678,7 +678,7 @@ watch(
   left: 12px;
   width: 18px;
   height: 18px;
-  color: #888888;
+  color: var(--color-text-tertiary);
   pointer-events: none;
 }
 
@@ -688,7 +688,7 @@ watch(
   font-size: 0.9rem;
   border: 1.5px solid var(--light-border);
   border-radius: 8px;
-  background-color: #fafafa;
+  background-color: var(--color-surface, #f9f9f9);
   color: var(--text-black);
   outline: none;
   transition: all 0.2s ease;
@@ -700,7 +700,7 @@ watch(
 
 .search-input:focus {
   border-color: var(--normal-color);
-  background-color: #ffffff;
+  background-color: var(--color-surface-card, #ffffff);
   box-shadow: 0 0 0 3px rgba(20, 161, 217, 0.15);
 }
 
@@ -709,7 +709,7 @@ watch(
   right: 10px;
   background: none;
   border: none;
-  color: #888888;
+  color: var(--color-text-tertiary);
   font-size: 1.25rem;
   cursor: pointer;
   padding: 2px 6px;
@@ -722,8 +722,8 @@ watch(
 }
 
 .clear-search-btn:hover {
-  background-color: #e5e5e5;
-  color: #333;
+  background-color: var(--color-border-strong);
+  color: var(--color-text-primary, #070707);
 }
 
 /* Filters row */
@@ -755,7 +755,7 @@ watch(
   font-size: 0.85rem;
   border: 1.5px solid var(--light-border);
   border-radius: 8px;
-  background-color: #ffffff;
+  background-color: var(--color-surface-card, #ffffff);
   color: var(--text-black);
   outline: none;
   cursor: pointer;
@@ -779,7 +779,7 @@ watch(
   padding: 8px 14px;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-white, #eeeeee);
   background-color: var(--normal-color);
   border: none;
   border-radius: 8px;
@@ -811,7 +811,7 @@ watch(
 }
 
 .kanban-board-scroll::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--color-surface, #f9f9f9);
   border-radius: 10px;
 }
 
@@ -835,7 +835,7 @@ watch(
 .kanban-column {
   width: 250px;
   min-width: 250px;
-  background-color: #f3f6f8;
+  background-color: var(--color-surface, #f9f9f9);
   border-radius: 10px;
   padding: 0.75rem;
   display: flex;
@@ -850,13 +850,13 @@ watch(
   min-width: 50px;
   padding: 0.75rem 0.25rem;
   cursor: pointer;
-  background-color: #e9ecef;
+  background-color: var(--background-light);
 }
 
 /* Header style with top line indicator */
 .kanban-column-header {
   border-top: 3px solid var(--normal-color);
-  background-color: #ffffff;
+  background-color: var(--color-surface-card, #ffffff);
   border-radius: 6px;
   margin-bottom: 0.75rem;
   padding: 10px 8px;
@@ -884,7 +884,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #777;
+  color: var(--color-text-secondary);
 }
 
 .icon-chevron {
@@ -923,7 +923,7 @@ watch(
 .client-count-badge {
   font-size: 0.7rem;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-white, #eeeeee);
   background-color: var(--dark-color);
   padding: 2px 8px;
   border-radius: 12px;
@@ -947,7 +947,7 @@ watch(
   height: 26px;
   border-radius: 50%;
   background-color: var(--dark-color);
-  color: #ffffff;
+  color: var(--text-white, #eeeeee);
   font-size: 0.75rem;
   font-weight: 700;
   display: flex;
@@ -958,8 +958,8 @@ watch(
 }
 
 .collapsed-badge.badge-zero {
-  background-color: #c2cfd6;
-  color: #555;
+  background-color: var(--color-border-strong);
+  color: var(--color-text-secondary);
   box-shadow: none;
 }
 
@@ -985,7 +985,7 @@ watch(
 .collapsed-column-indicator:hover .collapsed-badge {
   transform: scale(1.1);
   background-color: var(--normal-color);
-  color: #ffffff;
+  color: var(--text-white, #eeeeee);
 }
 
 /* Kanban Cards Container */
@@ -1019,7 +1019,7 @@ watch(
 
 /* Premium Card Design */
 .kanban-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface-card, #ffffff);
   border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.03);
@@ -1054,24 +1054,24 @@ watch(
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px dashed #f0f0f0;
+  border-bottom: 1px dashed var(--color-border);
   padding-bottom: 4px;
 }
 
 .drag-handle {
-  color: #c1c1c1;
+  color: var(--color-text-tertiary);
   display: flex;
   align-items: center;
 }
 
 .kanban-card:hover .drag-handle {
-  color: #888888;
+  color: var(--color-text-tertiary);
 }
 
 .activity-id {
   font-size: 0.65rem;
   font-weight: 700;
-  color: #999;
+  color: var(--color-text-tertiary);
 }
 
 /* Card Sections */
@@ -1085,13 +1085,13 @@ watch(
 }
 
 .card-section:hover {
-  background-color: #f7f9fa;
+  background-color: var(--color-surface);
 }
 
 .icon-svg {
   width: 14px;
   height: 14px;
-  color: #666;
+  color: var(--color-text-secondary, #616161);
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -1139,20 +1139,19 @@ watch(
 .trip-badge {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--dark-color-opposite-two);
-  background-color: #ebedfa;
+  background-color: var(--color-brand-light);
   padding: 2px 6px;
   border-radius: 4px;
   line-height: 1.2;
 }
 
 .trip-section:hover .trip-badge {
-  background-color: #dbe0fa;
+  background-color: var(--color-brand-light);
 }
 
 /* Info Section (Dates & Responsable) */
 .info-section {
-  border-top: 1px solid #f6f6f6;
+  border-top: 1px solid var(--color-border);
   padding-top: 6px;
   margin-top: 2px;
   cursor: pointer;
@@ -1161,7 +1160,7 @@ watch(
 }
 
 .info-section:hover {
-  background-color: #fafafa;
+  background-color: var(--color-surface, #f9f9f9);
 }
 
 .info-row {
@@ -1169,12 +1168,12 @@ watch(
   align-items: center;
   gap: 6px;
   font-size: 0.72rem;
-  color: #555555;
+  color: var(--color-text-secondary);
   width: 100%;
 }
 
 .info-row strong {
-  color: #333333;
+  color: var(--color-text-primary);
 }
 
 .date-overdue {
@@ -1203,6 +1202,6 @@ watch(
 
 .user-name {
   font-weight: 600;
-  color: #444;
+  color: var(--color-text-secondary);
 }
 </style>

@@ -56,7 +56,8 @@ const edit = () => {
 
 /* Contenedor del modal */
 .modal-container {
-  background-color: var(--text-white);
+  background-color: var(--color-surface-card, #ffffff);
+  color: var(--color-text-primary, #070707);
   padding: 20px;
   border-radius: 10px;
   max-width: 600px;

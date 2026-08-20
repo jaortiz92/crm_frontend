@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref, computed, defineProps, toRefs, watch } from 'vue'
 import { formatters } from '@/plugins/formatters.js'
 
@@ -812,7 +812,7 @@ const showAll = () => {
 
 <style scoped>
 .summary-panel-wrapper {
-  background-color: #ffffff;
+  background-color: var(--color-surface-card, #ffffff);
   padding: 1.5rem;
   border-radius: 12px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
@@ -846,14 +846,14 @@ const showAll = () => {
 .summary-title-section h3 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--dark-color);
+  color: var(--color-text-primary);
   margin: 0 0 0.25rem 0;
   text-align: left;
 }
 
 .summary-title-section .subtitle {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--color-text-secondary, #616161);
   margin: 0;
 }
 
@@ -893,7 +893,7 @@ const showAll = () => {
   font-size: 0.85rem;
   border: 1.5px solid var(--light-border);
   border-radius: 8px;
-  background-color: #ffffff;
+  background-color: var(--color-surface-card, #ffffff);
   color: var(--text-black);
   outline: none;
   cursor: pointer;
@@ -929,7 +929,7 @@ const showAll = () => {
   gap: 1rem;
   padding: 1.25rem;
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--color-surface-card, #ffffff);
   border: 1px solid rgba(0, 0, 0, 0.05);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
   transition: all 0.25s ease;
@@ -990,7 +990,7 @@ const showAll = () => {
 .kpi-title {
   font-size: 0.75rem;
   font-weight: 700;
-  color: #777777;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1005,7 +1005,7 @@ const showAll = () => {
 /* Responsive Table Container */
 .summary-table-section {
   border-radius: 10px;
-  border: 1px solid #edf2f7;
+  border: 1px solid var(--color-border);
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
@@ -1021,7 +1021,7 @@ const showAll = () => {
 }
 
 .table-responsive-container::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--color-surface);
 }
 
 .table-responsive-container::-webkit-scrollbar-thumb {
@@ -1090,7 +1090,6 @@ const showAll = () => {
 .collection-pill {
   font-size: 0.72rem;
   font-weight: 700;
-  color: var(--dark-color-opposite-two);
   background-color: rgba(10, 32, 152, 0.08);
   padding: 4px 8px;
   border-radius: 6px;
@@ -1116,8 +1115,8 @@ const showAll = () => {
   flex-direction: column;
   gap: 1rem;
   padding: 1rem 1.25rem;
-  background-color: #ffffff;
-  border-top: 1px solid #edf2f7;
+  background-color: var(--color-surface-card, #ffffff);
+  border-top: 1px solid var(--color-border);
   align-items: center;
 }
 
@@ -1130,7 +1129,7 @@ const showAll = () => {
 
 .pagination-info {
   font-size: 0.8rem;
-  color: #666666;
+  color: var(--color-text-secondary);
 }
 
 .buttons-to-show {
@@ -1144,7 +1143,7 @@ const showAll = () => {
   align-items: center;
   gap: 6px;
   border: 1.5px solid var(--light-border);
-  background-color: #ffffff;
+  background-color: var(--color-surface-card, #ffffff);
   color: var(--text-gray);
   font-size: 0.8rem;
   font-weight: 700;
@@ -1155,8 +1154,8 @@ const showAll = () => {
 }
 
 .button-outline:hover {
-  background-color: #f7f9fa;
-  border-color: #999;
+  background-color: var(--color-surface);
+  border-color: var(--color-text-tertiary);
 }
 
 .btn-icon {
@@ -1188,7 +1187,7 @@ const showAll = () => {
   justify-content: center;
   padding: 3rem 1.5rem;
   text-align: center;
-  background-color: #fafbfd;
+  background-color: var(--color-surface);
   border-radius: 12px;
   border: 1.5px dashed var(--light-border);
 }
@@ -1197,8 +1196,8 @@ const showAll = () => {
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background-color: #f1f5f9;
-  color: #94a3b8;
+  background-color: var(--color-surface);
+  color: var(--color-text-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1219,7 +1218,7 @@ const showAll = () => {
 
 .empty-summary-state p {
   font-size: 0.82rem;
-  color: #666;
+  color: var(--color-text-secondary, #616161);
   margin: 0;
   max-width: 400px;
 }

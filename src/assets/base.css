@@ -41,6 +41,50 @@
   --color-danger: #c21a1a;
 }
 
+/* === DARK MODE === */
+:root[data-theme="dark"] {
+  /* --- Legacy vars --- */
+  --gray-border: #3d4f63;
+  --light-border: #2a3a4e;
+  --text-black: #f0f4f8;
+  --text-gray: #c8d4e0;
+  --text-white: #e2e8f0;
+  --background: #0d3b5c;
+  --background-white: #0f1d2e;
+  --background-light: #1a2d42;
+  --background-transparency: rgba(5, 12, 25, 0.85);
+  --normal-color: #1a8abf;
+  --light-color: #22b8e8;
+  --dark-color: #0a4d7a;
+  --normal-color-opposite-one: #5aad7a;
+  --normal-color-opposite-two: #5b6ee0;
+  --light-color-opposite-one: #1e3a2a;
+  --light-color-opposite-two: #4a5ac7;
+  --dark-color-opposite-one: #499a67;
+  --dark-color-opposite-two: #3d52c9;
+  --red-color: #e04545;
+  --shadow: rgba(0, 0, 0, 0.4);
+  --border-radius-size: 8px;
+
+  /* --- Semantic tokens --- */
+  --color-surface: #0f1d2e;
+  --color-surface-card: #132238;
+  --color-border: rgba(100, 150, 200, 0.15);
+  --color-border-strong: rgba(100, 150, 200, 0.3);
+  --color-text-primary: #f0f4f8;
+  --color-text-secondary: #a0b0c0;
+  --color-text-tertiary: rgba(160, 176, 192, 0.6);
+
+  --color-brand: #1a8abf;
+  --color-brand-hover: #22b8e8;
+  --color-brand-light: #1a3a4a;
+  --color-accent: #5b6ee0;
+
+  --color-success: #5aad7a;
+  --color-warning: #f0b429;
+  --color-danger: #e04545;
+}
+
 #app {
   font-family: Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;

@@ -63,7 +63,6 @@ const handleCheckboxChange = (key) => {
 
 <style scoped>
 .filter-card {
-  width: 100%;
   background: var(--color-surface-card, #ffffff);
   border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
   border-radius: var(--border-radius-size, 8px);

@@ -1,13 +1,20 @@
 <script setup>
 import { useUserStore } from '@/stores/userStore.js'
+import { useThemeStore } from '@/stores/themeStore'
 import { useRouter } from 'vue-router'
 import { computed, ref } from 'vue'
+import ThemeToggle from '@/components/ThemeToggle.vue'
+import logoLight from '@/assets/logo.svg'
+import logoDark from '@/assets/logo-dark.svg'
 
 const router = useRouter()
 const userStore = useUserStore()
+const themeStore = useThemeStore()
 const menuOpen = ref(false)
 const openDropdown = ref(null)
 const userMenuOpen = ref(false)
+
+const logoSrc = computed(() => (themeStore.isDark ? logoDark : logoLight))
 
 const logout = async () => {
   userStore.logout()
@@ -96,7 +103,7 @@ const visibleGroups = computed(() => {
 <template>
   <div class="header">
     <div :class="{ 'logo-logged': hasToken, 'logo-login': !hasToken }">
-      <img src="@/assets/logo.svg" alt="Logo" />
+      <img :src="logoSrc" alt="Logo" />
     </div>
     <button class="hamburger" @click="toggleMenu" aria-label="Menú de navegación" v-if="hasToken">
       <svg
@@ -171,6 +178,9 @@ const visibleGroups = computed(() => {
                 <RouterLink :to="{ name: 'UserDetail' }" @click="closeAllMenus"
                   >Mi Perfil</RouterLink
                 >
+              </li>
+              <li class="button-nav theme-toggle-item">
+                <ThemeToggle />
               </li>
               <li class="button-nav logout"><div @click="logout">Cerrar Sesion</div></li>
             </ul>
@@ -391,5 +401,17 @@ a:hover {
 .button-nav.router-link-active,
 a.router-link-active {
   font-weight: bold;
+}
+
+.theme-toggle-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  cursor: default;
+}
+
+.theme-toggle-item:hover {
+  background-color: none;
 }
 </style>

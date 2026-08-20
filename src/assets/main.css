@@ -387,3 +387,114 @@ tbody tr:hover {
     transform: rotate(360deg);
   }
 }
+
+/* ============================================
+   DARK MODE OVERRIDES - Global Styles
+   ============================================ */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* --- Body / App background --- */
+:root[data-theme="dark"] body {
+  background-color: var(--color-surface);
+}
+
+/* --- Navigation --- */
+:root[data-theme="dark"] nav {
+  background-color: var(--background);
+}
+
+/* --- Forms --- */
+:root[data-theme="dark"] form {
+  border-color: var(--gray-border);
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea {
+  background-color: var(--color-surface-card);
+  color: var(--color-text-primary);
+  border-color: var(--gray-border);
+}
+
+:root[data-theme="dark"] input:focus,
+:root[data-theme="dark"] select:focus,
+:root[data-theme="dark"] textarea:focus {
+  border-color: var(--light-color);
+}
+
+:root[data-theme="dark"] input:disabled,
+:root[data-theme="dark"] select:disabled,
+:root[data-theme="dark"] textarea:disabled {
+  background-color: var(--background-light);
+  color: var(--color-text-secondary);
+}
+
+/* --- Tables --- */
+:root[data-theme="dark"] table {
+  border-color: var(--color-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme="dark"] thead {
+  background-color: var(--dark-color);
+}
+
+:root[data-theme="dark"] th {
+  color: #f0f4f8;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] td {
+  color: var(--text-black);
+  border-bottom-color: var(--color-border);
+}
+
+:root[data-theme="dark"] tbody tr {
+  background-color: var(--color-surface-card);
+}
+
+:root[data-theme="dark"] tbody tr:nth-child(even) {
+  background-color: #0f2438;
+}
+
+:root[data-theme="dark"] tbody tr:hover {
+  background-color: rgba(26, 138, 191, 0.15);
+}
+
+/* --- Buttons (global rule) --- */
+:root[data-theme="dark"] button {
+  background-color: var(--dark-color-opposite-two);
+  color: var(--text-white);
+}
+
+:root[data-theme="dark"] button:hover {
+  background-color: var(--light-color-opposite-two);
+}
+
+:root[data-theme="dark"] button:disabled {
+  background-color: var(--background-light);
+  color: var(--color-text-secondary);
+}
+
+/* --- Loading overlay --- */
+:root[data-theme="dark"] .global-loading-overlay {
+  background: var(--background-transparency);
+}
+
+/* --- Section title --- */
+:root[data-theme="dark"] .section-title {
+  color: var(--color-text-primary);
+}
+
+/* --- Title --- */
+:root[data-theme="dark"] .title {
+  color: var(--dark-color-opposite-one);
+}
+
+/* --- Checkbox --- */
+:root[data-theme="dark"] .checkbox {
+  border-color: var(--gray-border);
+}
