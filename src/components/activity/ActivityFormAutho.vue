@@ -1,7 +1,6 @@
 <script setup>
 import { defineProps, defineEmits, toRefs } from 'vue'
 import { basicModels } from '@/plugins/basicModels'
-import { formatters } from '@/plugins/formatters'
 import FormattedNumberInput from '@/components/form/FormattedNumberInput.vue'
 
 const props = defineProps({

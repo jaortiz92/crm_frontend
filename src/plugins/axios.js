@@ -1,8 +1,20 @@
 import axios from 'axios'
 import { useUserStore } from '@/stores/userStore'
 
+/**
+ * Normaliza VITE_API_URL: un valor relativo SIN barra inicial (p. ej. "api")
+ * lo el navegador resuelve contra el path de la página, rompiendo todas las
+ * llamadas en rutas anidadas (p. ej. /budget/planning -> /budget/api/...).
+ * Se convierte a ruta absoluta de origen ("/api"); URLs http(s):// intactas.
+ */
+function normalizeApiBaseUrl(rawUrl) {
+  if (!rawUrl) return rawUrl
+  if (/^\//.test(rawUrl) || /^[a-z][a-z\d+\-.]*:\/\//i.test(rawUrl)) return rawUrl
+  return `/${rawUrl}`
+}
+
 const axiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: normalizeApiBaseUrl(import.meta.env.VITE_API_URL),
   timeout: 20000, // 20 seconds
   headers: {
     'Content-Type': 'application/json'

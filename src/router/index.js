@@ -47,6 +47,34 @@ import InvoicesWithoutDetailsQueryView from '@/views/query/formats/InvoicesWitho
 import CustomerTripsWithoutOrdersQueryView from '@/views/query/formats/CustomerTripsWithoutOrdersQueryView.vue'
 import DeletionsView from '@/views/deletions/DeletionsView.vue'
 
+/**
+ * Roles con acceso al Módulo Presupuestal (PQ-1): no existen roles literales
+ * "gerencia"/"contabilidad" en el CRM; los nombres reales en la BD son
+ * 'Gerente' (gerencia) y 'Financiero' (contabilidad). La escala de acceso
+ * (`hasPermission`) cubre además a 'Administrador' (all ≥ high).
+ */
+export const BUDGET_UPLOAD_ROLES = ['Gerente', 'Financiero']
+
+/**
+ * Roles que pueden designar la Meta Activa del año (FE-S4-BUDGET-PLANNING
+ * §3.3, ASM-9): solo 'Gerente' por nombre + la escala 'high' (Administrador
+ * pasa por hasPermission, verificado en `userStore.hasPermission`: jerarquía
+ * alto/all). 'Financiero' NO aparece: carga/clona/edita, pero el backend es la
+ * autoridad del 403 si force el set-target por API.
+ */
+export const BUDGET_TARGET_ROLES = ['Gerente']
+
+const canAccessBudgetUpload = () => {
+  const userStore = useUserStore()
+  return userStore.hasPermission('high') || userStore.hasRole(BUDGET_UPLOAD_ROLES)
+}
+
+/** Predicado exportado para vistas/hijos (mismo patrón que el gate de rutas). */
+export const canSetBudgetTarget = () => {
+  const userStore = useUserStore()
+  return userStore.hasPermission('high') || userStore.hasRole(BUDGET_TARGET_ROLES)
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -333,6 +361,66 @@ const router = createRouter({
       name: 'ActivityTypeManager',
       component: ActivityTypeManagerView,
       meta: { requiresAuth: true }
+    },
+    {
+      // Rama del Módulo Presupuestal: layout = App.vue global (el proyecto no
+      // usa layouts anidados); hija default 'upload' => Centro de Ingesta.
+      path: '/budget',
+      meta: { requiresAuth: true },
+      children: [
+        {
+          path: '',
+          redirect: { name: 'BudgetUpload' }
+        },
+        {
+          path: 'upload',
+          name: 'BudgetUpload',
+          component: () => import('@/views/budget/BudgetUploadsView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => {
+            // Gateo por rol (PQ-1): solo gerencia/contabilidad (+ high/all);
+            // el acceso directo no autorizado se redirige a Home.
+            if (canAccessBudgetUpload()) {
+              next()
+            } else {
+              next('/')
+            }
+          }
+        },
+        {
+          // Hermana del Centro de Ingesta (FE-S3-RULES §3.1): reutiliza el
+          // mismo gate de roles; el redirect hijo '' => BudgetUpload no cambia.
+          path: 'rules',
+          name: 'BudgetRules',
+          component: () => import('@/views/budget/BudgetRulesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => {
+            next(canAccessBudgetUpload() ? undefined : '/')
+          }
+        },
+        {
+          // Planeación y Escenarios (FE-S4-BUDGET-PLANNING §3.1): nieta de
+          // /budget tras 'rules'; reutiliza el gate canAccessBudgetUpload.
+          path: 'planning',
+          name: 'BudgetPlanning',
+          component: () => import('@/views/budget/planning/PlanningDashboard.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => {
+            next(canAccessBudgetUpload() ? undefined : '/')
+          }
+        },
+        {
+          // Editor del escenario (grid + pivote). :idBudget es numérico; un
+          // NaN se resuelve en la vista (toast + replace a BudgetPlanning).
+          path: 'planning/:idBudget',
+          name: 'BudgetPlanningGrid',
+          component: () => import('@/views/budget/planning/BudgetGridEditor.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => {
+            next(canAccessBudgetUpload() ? undefined : '/')
+          }
+        }
+      ]
     }
 
     /*    {

@@ -4,6 +4,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useRouter } from 'vue-router'
 import { computed, ref } from 'vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import { BUDGET_UPLOAD_ROLES } from '@/router/index.js'
 import logoLight from '@/assets/logo.svg'
 import logoDark from '@/assets/logo-dark.svg'
 
@@ -79,6 +80,40 @@ const navGroups = [
     ]
   },
   {
+    name: 'budget',
+    label: 'Modulo Presupuestal',
+    accentColor: '#1e8e5a',
+    items: [
+      {
+        label: 'Centro de Ingesta',
+        to: '/budget/upload',
+        // Gateo por escala de acceso + nombres de rol reales (PQ-1):
+        // hasPermission('high') deja pasar a 'Administrador' (all); los roles
+        // 'Gerente' y 'Financiero' (gerencia/contabilidad) pasan por nombre.
+        permission: 'high',
+        roles: BUDGET_UPLOAD_ROLES
+      },
+      {
+        // Reglas Financieras (FE-S3-RULES §3.2): mismo gate que el Centro de
+        // Ingesta; si el producto exige roles propios, se cambia en un solo
+        // punto (R-2).
+        label: 'Reglas Financieras',
+        to: '/budget/rules',
+        permission: 'high',
+        roles: BUDGET_UPLOAD_ROLES
+      },
+      {
+        // Planeación y Escenarios (FE-S4-BUDGET-PLANNING §3.2): mismo gate de
+        // acceso al módulo que las hermanas. El item "Marcar Meta Activa" usa
+        // un gate mas estricto (BUDGET_TARGET_ROLES) dentro de la vista.
+        label: 'Planeación y Escenarios',
+        to: '/budget/planning',
+        permission: 'high',
+        roles: BUDGET_UPLOAD_ROLES
+      }
+    ]
+  },
+  {
     name: 'admin',
     label: 'Administración',
     accentColor: '#c21a1a',
@@ -94,7 +129,12 @@ const visibleGroups = computed(() => {
   return navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => userStore.hasPermission(item.permission))
+      items: group.items.filter((item) => {
+        if (userStore.hasPermission(item.permission)) return true
+        // Gateo adicional por nombre de rol para items que lo declaren
+        // (Módulo Presupuestal: gerencia/contabilidad con access < high).
+        return item.roles?.length ? userStore.hasRole(item.roles) : false
+      })
     }))
     .filter((group) => group.items.length > 0)
 })
