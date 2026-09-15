@@ -1,25 +1,38 @@
 <script setup>
 /**
- * BudgetLineGrid — "Editor de Celdas" (FE-S4 §8.2 tab 2, PRINCIPAL).
+ * BudgetLineGrid — "Editor de Celdas" (FE-S4 §8.2 tab 2 + FE-S4D-BUDGET-LINES
+ * §3: DOS secciones apiladas Ingresos/Gastos con CRUD por fila).
  *
- * 1 fila = 1 `budget_line` leída de la caché del store (jamía de otra fuente:
- * por eso tras un PUT exitoso la Vista Ejecutiva se recalcula sola, AC-FE-6).
- * Solo la celda MONTO es editable: doble clic o `Enter` sobre la celda
- * (NFR-F5: `tabindex=0` + `aria-label`) → input numérico → `Enter`/blur
- * dispara UN solo `PUT /budget/planning/cell/{idBudgetLine}` (NFR-F2) con
- * micro-estados `guardando… → ✓ (~1.5 s) → normal`; en error hay
- * ROLLBACK visual al valor anterior (el valor mostrado sale de la caché +
- * override transitorio) y el mensaje queda bajo la celda (422 inline, §9).
+ * 1 fila = 1 `budget_line` leída de la caché del store (la ÚNICA fuente: por
+ * eso tras un POST/PUT/DELETE de líneas la Vista Ejecutiva/Flujo se recalcula
+ * sola, AC-FE-6). La división es por `line.line_type` (§3.1); `sortKey`,
+ * `sortAsc`, filtros y `visibleCount` son INDEPENDIENTES por sección (AC-FD-9),
+ * memoizados con `computed` (NFR-FD-4).
  *
- * Validación pre-red (ASM-12): numérico, `>= 0`, finito; inválido → borde
- * rojo y NUNCA dispara el PUT. Filas `behavior_type !== 'fixed'`: monto de
- * solo lectura con tooltip (BR-CEL-01 backend también lo impediría).
+ * El stack de edición de celda queda VERBATIM (FD-7/R-FD-1): doble clic o
+ * `Enter` sobre MONTO (NFR-F5: `tabindex=0` + `aria-label`) → input →
+ * `Enter`/blur dispara UN solo `PUT /budget/planning/cell/{id}` con
+ * micro-estados `guardando… → ✓ (~1.5 s) → normal`, guard single-flight por
+ * `cellSaving[id_budget_line]` (AC-FE-8) y ROLLBACK visual en error (422
+ * inline, 404 con mensaje de recarga, §9). El guard vive por LÍNEA, no por
+ * sección: funciona idéntico en ambas (AC-FD-2).
  *
- * CERO dependencias: tabla HTML + estado de edición local (patrón del repo).
- * PQ-F5: sin virtualización; slice "Mostrar 500 más" para escenarios largos.
+ * Nuevo (FE-S4D): columna Acciones (✏️ `LineFormModal` crear/editar · 🗑
+ * `LineDeleteModal`), botón "+ Añadir ingreso/gasto" SIEMPRE habilitado por
+ * sección, subtotales de cabecera sobre TODAS las líneas del tipo (ignoran el
+ * filtro, AC-FD-9) con `aria-live="polite"` (NFR-FD-3), `tfoot` Σ sobre el
+ * slice visible y estados vacíos propios. Los mutadores del modal llaman a las
+ * acciones del store (dueñas de `lineSaving`); el grid toasteará el éxito
+ * (`saved`/`deleted`) y monta ambos modales (dueño: este componente).
+ *
+ * CERO dependencias: tabla HTML + estado local (patrón del repo). PQ-F5: sin
+ * virtualización; slice "Mostrar 500 más" por sección.
  */
 import { computed, nextTick, onBeforeUnmount, reactive, ref } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { alertService } from '@/services/alertService.js'
+import LineFormModal from './LineFormModal.vue'
+import LineDeleteModal from './LineDeleteModal.vue'
 import {
   BEHAVIOR_LABELS,
   LINE_TYPE_LABELS,
@@ -34,10 +47,11 @@ const props = defineProps({
 
 const budgetPlanningStore = useBudgetPlanningStore()
 
-/** Paso de paginación manual por slice (PQ-F5). */
+/** Paso de paginación manual por slice (PQ-F5), independiente por sección. */
 const PAGE_SLICE = 500
 
-const visibleCount = ref(PAGE_SLICE)
+/* --------------------- edición de celda (stack FE-S4, verbatim) ------------ */
+
 const editingId = ref(null)
 const editValue = ref('')
 const editInvalid = ref(false)
@@ -57,10 +71,6 @@ const lines = computed(() =>
 )
 
 /* --------------------------------- orden ----------------------------------- */
-
-/** Columna activa ('' = orden original del backend) y dirección. */
-const sortKey = ref('')
-const sortAsc = ref(true)
 
 /** Columnas ordenables por encabezado (orden = presentación de la tabla). */
 const SORT_COLUMNS = [
@@ -94,26 +104,46 @@ const SORT_ARROW_DOWN_PATH =
   'M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z'
 
 /** Clic en encabezado: misma columna invierte dirección; nueva columna → asc. */
-function sortBy(key) {
-  if (sortKey.value === key) {
-    sortAsc.value = !sortAsc.value
+function sortBy(state, key) {
+  if (state.sortKey === key) {
+    state.sortAsc = !state.sortAsc
     return
   }
-  sortKey.value = key
-  sortAsc.value = true
+  state.sortKey = key
+  state.sortAsc = true
 }
 
-const ariaSort = (key) => {
-  if (sortKey.value !== key) return undefined
-  return sortAsc.value ? 'ascending' : 'descending'
+const ariaSort = (state, key) => {
+  if (state.sortKey !== key) return undefined
+  return state.sortAsc ? 'ascending' : 'descending'
 }
 
-/** Orden reactivo sobre la caché (desempate por id: ordenación estable). */
-const sortedLines = computed(() => {
-  const rows = lines.value
-  const accessor = SORT_ACCESSORS[sortKey.value]
+/* ------------------------ secciones Ingresos/Gastos ------------------------ */
+
+/**
+ * Estado de filtro/orden/slice POR SECCIÓN (AC-FD-9: `sortKey/sortAsc/
+ * visibleCount` ya no son globales). `query` casa código+nombre del CECO o
+ * concepto/descripción (case-insensitive); `idCollection` '' = todas.
+ */
+const sectionState = reactive({
+  income: { query: '', idCollection: '', sortKey: '', sortAsc: true, visibleCount: PAGE_SLICE },
+  expense: { query: '', idCollection: '', sortKey: '', sortAsc: true, visibleCount: PAGE_SLICE }
+})
+
+function sumAmount(rows) {
+  let total = 0
+  for (const line of rows) {
+    const amount = Number(line.projected_amount)
+    if (Number.isFinite(amount)) total += amount
+  }
+  return total
+}
+
+/** Comparador original del FE-S4, ahora parametrizado por sección (FD-7). */
+function sortRows(rows, sortKey, sortAsc) {
+  const accessor = SORT_ACCESSORS[sortKey]
   if (!accessor) return rows
-  const direction = sortAsc.value ? 1 : -1
+  const direction = sortAsc ? 1 : -1
   return [...rows].sort((a, b) => {
     const valA = accessor(a)
     const valB = accessor(b)
@@ -124,19 +154,141 @@ const sortedLines = computed(() => {
     if (cmp !== 0) return cmp * direction
     return a.id_budget_line - b.id_budget_line
   })
-})
+}
 
-const visibleLines = computed(() => sortedLines.value.slice(0, visibleCount.value))
+/**
+ * Vista de sección 100 % memoizada sobre la caché del store (NFR-FD-4):
+ * `all` = todas las del tipo (cabecera/subtotal, ignora filtros — AC-FD-9);
+ * `visible` = filtro → orden → slice (tabla y `tfoot`).
+ */
+function buildSection(type) {
+  const state = sectionState[type]
+  const all = computed(() => lines.value.filter((line) => line.line_type === type))
+  const filtered = computed(() => {
+    const query = state.query.trim().toLowerCase()
+    const collectionId = state.idCollection ? Number(state.idCollection) : null
+    return all.value.filter((line) => {
+      if (collectionId !== null && (line.id_collection ?? null) !== collectionId) return false
+      if (!query) return true
+      const haystack = `${budgetPlanningStore.costCenterLabel(line.id_cost_center)} ${
+        line.description ?? ''
+      }`.toLowerCase()
+      return haystack.includes(query)
+    })
+  })
+  const sorted = computed(() => sortRows(filtered.value, state.sortKey, state.sortAsc))
+  const visible = computed(() => sorted.value.slice(0, state.visibleCount))
+  const subtotal = computed(() => sumAmount(all.value))
+  const visibleSubtotal = computed(() => sumAmount(visible.value))
+  const hasMore = computed(() => sorted.value.length > visible.value.length)
+  return { state, all, filtered, sorted, visible, subtotal, visibleSubtotal, hasMore }
+}
 
-const totalLines = computed(() => lines.value.length)
-const hasMore = computed(() => totalLines.value > visibleLines.value.length)
+/** Strings literales §3.1/§3.2 de FE-S4D (no traducir ni parafrasear). */
+const SECTIONS = reactive(
+  [
+    {
+      type: 'income',
+      title: 'Ingresos',
+      chipClass: 'gl-chip-income',
+      addLabel: '+ Añadir ingreso',
+      tableLabel: 'Líneas de ingresos del escenario',
+      emptyText: "Sin ingresos en este escenario. Usa '+ Añadir ingreso'."
+    },
+    {
+      type: 'expense',
+      title: 'Gastos',
+      chipClass: 'gl-chip-expense',
+      addLabel: '+ Añadir gasto',
+      tableLabel: 'Líneas de gastos del escenario',
+      emptyText: "Sin gastos en este escenario. Usa '+ Añadir gasto'."
+    }
+  ].map((meta) => {
+    const vm = buildSection(meta.type)
+    return { ...meta, state: vm.state, vm }
+  })
+)
+
+const HINT_TEXT =
+  'Doble clic en un monto para editarlo; ✏️ para el resto de campos. Las variables corríjalas con ✏️ (tasa/fechas).'
+
+/* ---------------------------- modales (dueño) ------------------------------ */
+
+const formOpen = ref(false)
+const formMode = ref('create')
+const formType = ref('income')
+const formLine = ref(null)
+const deleteOpen = ref(false)
+const deleteLineRef = ref(null)
+/** Última acción de modal abierta ('create' | 'edit') para el toast de éxito. */
+const lastFormAction = ref('create')
+
+/** `line_type` FIJADO por la sección (FD-6): el modal no muestra selector. */
+function openCreate(section) {
+  formMode.value = 'create'
+  formType.value = section.type
+  formLine.value = null
+  lastFormAction.value = 'create'
+  formOpen.value = true
+}
+
+function openEdit(line) {
+  formMode.value = 'edit'
+  formType.value = line.line_type
+  formLine.value = line
+  lastFormAction.value = 'edit'
+  formOpen.value = true
+}
+
+function openDelete(line) {
+  deleteLineRef.value = line
+  deleteOpen.value = true
+}
+
+/**
+ * Éxito del modal crear/editar. FE-S7 §3 (BE-S7 §2, D-S7-6): el toast de
+ * desdoble de FE-S5 (FD5-5) se ELIMINA — el 201 volvió a ser `BudgetLine`
+ * puro (un gasto fijo entra en una sola línea con su `payment_date`,
+ * AC-S7-FE-5) y el modal ya solo emite `saved(line)`; el argumento queda
+ * fuera porque el cuerpo no lo consume (`no-unused-vars`). El store ya
+ * actualizó la caché in-place: sección y Σ se recalculan solos por
+ * reactividad (AC-FE-6). AC-FD-11 intacto: el modal se cerró con
+ * `resetForm()` propio, sin estado residual al reabrir.
+ */
+function onLineSaved() {
+  formOpen.value = false
+  formLine.value = null
+  alertService.generalSucces(
+    lastFormAction.value === 'edit' ? 'Línea actualizada.' : 'Línea añadida al escenario.'
+  )
+}
+
+function onLineDeleted() {
+  deleteOpen.value = false
+  deleteLineRef.value = null
+  alertService.generalSucces('Línea eliminada del escenario.')
+}
+
+/**
+ * Fila bloqueada para ✏️/🗑 mientras tenga CUALQUIER mutación en vuelo: su PUT
+ * de celda (`cellSaving`, AC-FD-10) o su POST/PUT/DELETE de línea
+ * (`lineSaving`, dueño: las acciones del store).
+ */
+function lineBusy(idBudgetLine) {
+  return (
+    Boolean(budgetPlanningStore.cellSaving[idBudgetLine]) ||
+    Boolean(budgetPlanningStore.lineSaving[idBudgetLine])
+  )
+}
+
+/* --------------------- edición de celda (stack FE-S4, verbatim) ------------ */
 
 /** Celda bloqueada mientras su PUT está en vuelo (guard por línea, AC-FE-8). */
 function cellBusy(idBudgetLine) {
   return Boolean(budgetPlanningStore.cellSaving[idBudgetLine])
 }
 
-/** §8.2: solo líneas `fixed` editables por celda (las variables se corrigen recargando). */
+/** §8.2: solo líneas `fixed` editables por celda (las variables llevan tasa). */
 function isEditable(line) {
   return line.behavior_type === 'fixed'
 }
@@ -153,12 +305,10 @@ function cellLabel(line) {
 function cellTitle(line) {
   const id = line.id_budget_line
   if (cellStatus[id] === 'error' && cellMessages[id]) return cellMessages[id]
-  if (!isEditable(line)) return 'línea variable: edítela recargando el escenario'
+  if (!isEditable(line)) return 'línea variable: edítela con ✏️ (tasa/fechas)'
   if (cellStatus[id] === 'saved') return 'Guardado ✓'
   return 'Doble clic o Enter para editar el monto'
 }
-
-/* --------------------------------- edición -------------------------------- */
 
 async function startEdit(line) {
   if (!isEditable(line) || cellBusy(line.id_budget_line)) return
@@ -274,154 +424,247 @@ onBeforeUnmount(clearTimers)
 
 <template>
   <div class="gl-zone">
-    <div class="gl-toolbar">
-      <p class="gl-hint">
-        Doble clic (o foco + Enter) sobre un <strong>Monto</strong> para editarlo; Enter o salir del
-        campo guarda esa celda. Las líneas variables se corrigen recargando el escenario.
-      </p>
-      <p class="gl-count" aria-live="polite">
-        {{ Math.min(visibleCount, totalLines) }} de {{ totalLines }} líneas
-      </p>
-    </div>
+    <section
+      v-for="section in SECTIONS"
+      :key="section.type"
+      class="gl-group"
+      :data-type="section.type"
+    >
+      <header class="gl-group-header">
+        <div class="gl-group-heading">
+          <span class="gl-chip" :class="section.chipClass">{{ section.title }}</span>
+          <span class="gl-group-sub" aria-live="polite">
+            {{ section.vm.all.length }} líneas · Σ {{ formatMoney(section.vm.subtotal) }}
+          </span>
+        </div>
+        <p class="gl-count" aria-live="polite">
+          {{ section.vm.visible.length }} de {{ section.vm.filtered.length }} líneas
+        </p>
+      </header>
 
-    <div class="gl-scroll">
-      <table class="gl-table" aria-label="Editor de celdas del escenario">
-        <thead>
-          <tr>
-            <th
-              v-for="column in SORT_COLUMNS"
-              :key="column.key"
-              class="sortable-th"
-              :class="{ 'gl-col-money': column.key === 'projected_amount' }"
-              :aria-sort="ariaSort(column.key)"
-              @click="sortBy(column.key)"
-            >
-              <div class="th-content">
-                <span>{{ column.label }}</span>
-                <svg
-                  v-if="sortKey === column.key"
-                  class="sort-arrow"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
+      <p class="gl-hint">{{ HINT_TEXT }}</p>
+
+      <div class="gl-section-toolbar">
+        <input
+          v-model="section.state.query"
+          class="gl-filter-input"
+          type="text"
+          autocomplete="off"
+          placeholder="Filtrar por CECO o concepto…"
+          :aria-label="`Filtrar ${section.title} por CECO o concepto`"
+        />
+        <select
+          v-model="section.state.idCollection"
+          class="gl-filter-select"
+          :aria-label="`Filtrar ${section.title} por temporada`"
+        >
+          <option value="">Todas las temporadas</option>
+          <option
+            v-for="collection in budgetPlanningStore.collections"
+            :key="collection.id_collection"
+            :value="String(collection.id_collection)"
+          >
+            {{ collection.short_collection_name }}
+          </option>
+        </select>
+        <button type="button" class="btn btn-primary btn-sm gl-add" @click="openCreate(section)">
+          {{ section.addLabel }}
+        </button>
+      </div>
+
+      <p v-if="!section.vm.all.length" class="gl-empty">{{ section.emptyText }}</p>
+
+      <div v-else class="gl-scroll">
+        <table class="gl-table" :aria-label="section.tableLabel">
+          <thead>
+            <tr>
+              <th
+                v-for="column in SORT_COLUMNS"
+                :key="column.key"
+                class="sortable-th"
+                :class="{ 'gl-col-money': column.key === 'projected_amount' }"
+                :aria-sort="ariaSort(section.state, column.key)"
+                @click="sortBy(section.state, column.key)"
+              >
+                <div class="th-content">
+                  <span>{{ column.label }}</span>
+                  <svg
+                    v-if="section.state.sortKey === column.key"
+                    class="sort-arrow"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      clip-rule="evenodd"
+                      :d="section.state.sortAsc ? SORT_ARROW_UP_PATH : SORT_ARROW_DOWN_PATH"
+                    />
+                  </svg>
+                </div>
+              </th>
+              <th class="gl-col-actions">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="line in section.vm.visible" :key="line.id_budget_line">
+              <td
+                class="gl-cell-ceco"
+                :title="budgetPlanningStore.costCenterLabel(line.id_cost_center)"
+              >
+                {{ budgetPlanningStore.costCenterLabel(line.id_cost_center) }}
+              </td>
+              <td class="gl-cell-date">{{ line.budget_date }}</td>
+              <td class="gl-cell-date">{{ line.payment_date || '—' }}</td>
+              <td class="gl-cell-desc" :title="line.description || ''">
+                {{ line.description || '—' }}
+              </td>
+              <td>
+                <span
+                  class="gl-chip"
+                  :class="line.line_type === 'income' ? 'gl-chip-income' : 'gl-chip-expense'"
+                >
+                  {{ LINE_TYPE_LABELS[line.line_type] || line.line_type }}
+                </span>
+                <span
+                  v-if="line.behavior_type !== 'fixed'"
+                  class="gl-chip gl-chip-var"
+                  :title="`Comportamiento: ${BEHAVIOR_LABELS[line.behavior_type] || line.behavior_type}`"
+                >
+                  {{ BEHAVIOR_LABELS[line.behavior_type] || line.behavior_type }}
+                </span>
+              </td>
+              <td>{{ budgetPlanningStore.collectionLabel(line.id_collection) }}</td>
+              <td
+                class="gl-cell-money"
+                :class="{
+                  'is-editable': isEditable(line),
+                  'is-readonly': !isEditable(line),
+                  'is-saving': cellStatus[line.id_budget_line] === 'saving',
+                  'is-saved': cellStatus[line.id_budget_line] === 'saved',
+                  'is-error': cellStatus[line.id_budget_line] === 'error'
+                }"
+                :tabindex="isEditable(line) ? 0 : -1"
+                :aria-label="cellLabel(line)"
+                :aria-describedby="`cell-note-${line.id_budget_line}`"
+                :title="cellTitle(line)"
+                role="gridcell"
+                @dblclick="startEdit(line)"
+                @keydown="onCellKeydown($event, line)"
+              >
+                <input
+                  v-if="editingId === line.id_budget_line"
+                  :id="`cell-input-${line.id_budget_line}`"
+                  v-model="editValue"
+                  class="gl-input"
+                  :class="{ 'is-invalid': editInvalid }"
+                  type="text"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  aria-label="Nuevo monto de la celda"
+                  :aria-invalid="editInvalid ? 'true' : 'false'"
+                  @keydown.enter.prevent="commitEdit(line)"
+                  @keydown.esc.prevent="cancelEdit"
+                  @blur="commitEdit(line)"
+                />
+                <span v-else class="gl-amount">{{ formatMoney(displayAmount(line)) }}</span>
+                <span
+                  v-if="cellStatus[line.id_budget_line] === 'saving'"
+                  class="gl-state gl-state-saving"
                   aria-hidden="true"
                 >
-                  <path
-                    fill-rule="evenodd"
-                    clip-rule="evenodd"
-                    :d="sortAsc ? SORT_ARROW_UP_PATH : SORT_ARROW_DOWN_PATH"
-                  />
-                </svg>
-              </div>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="line in visibleLines" :key="line.id_budget_line">
-            <td
-              class="gl-cell-ceco"
-              :title="budgetPlanningStore.costCenterLabel(line.id_cost_center)"
-            >
-              {{ budgetPlanningStore.costCenterLabel(line.id_cost_center) }}
-            </td>
-            <td class="gl-cell-date">{{ line.budget_date }}</td>
-            <td class="gl-cell-date">{{ line.payment_date || '—' }}</td>
-            <td class="gl-cell-desc" :title="line.description || ''">
-              {{ line.description || '—' }}
-            </td>
-            <td>
-              <span
-                class="gl-chip"
-                :class="line.line_type === 'income' ? 'gl-chip-income' : 'gl-chip-expense'"
-              >
-                {{ LINE_TYPE_LABELS[line.line_type] || line.line_type }}
-              </span>
-              <span
-                v-if="line.behavior_type !== 'fixed'"
-                class="gl-chip gl-chip-var"
-                :title="`Comportamiento: ${BEHAVIOR_LABELS[line.behavior_type] || line.behavior_type}`"
-              >
-                {{ BEHAVIOR_LABELS[line.behavior_type] || line.behavior_type }}
-              </span>
-            </td>
-            <td>{{ budgetPlanningStore.collectionLabel(line.id_collection) }}</td>
-            <td
-              class="gl-cell-money"
-              :class="{
-                'is-editable': isEditable(line),
-                'is-readonly': !isEditable(line),
-                'is-saving': cellStatus[line.id_budget_line] === 'saving',
-                'is-saved': cellStatus[line.id_budget_line] === 'saved',
-                'is-error': cellStatus[line.id_budget_line] === 'error'
-              }"
-              :tabindex="isEditable(line) ? 0 : -1"
-              :aria-label="cellLabel(line)"
-              :aria-describedby="`cell-note-${line.id_budget_line}`"
-              :title="cellTitle(line)"
-              role="gridcell"
-              @dblclick="startEdit(line)"
-              @keydown="onCellKeydown($event, line)"
-            >
-              <input
-                v-if="editingId === line.id_budget_line"
-                :id="`cell-input-${line.id_budget_line}`"
-                v-model="editValue"
-                class="gl-input"
-                :class="{ 'is-invalid': editInvalid }"
-                type="text"
-                inputmode="decimal"
-                autocomplete="off"
-                aria-label="Nuevo monto de la celda"
-                :aria-invalid="editInvalid ? 'true' : 'false'"
-                @keydown.enter.prevent="commitEdit(line)"
-                @keydown.esc.prevent="cancelEdit"
-                @blur="commitEdit(line)"
-              />
-              <span v-else class="gl-amount">{{ formatMoney(displayAmount(line)) }}</span>
-              <span
-                v-if="cellStatus[line.id_budget_line] === 'saving'"
-                class="gl-state gl-state-saving"
-                aria-hidden="true"
-              >
-                guardando…
-              </span>
-              <span
-                v-else-if="cellStatus[line.id_budget_line] === 'saved'"
-                class="gl-state gl-state-saved"
-                aria-hidden="true"
-              >
-                ✓
-              </span>
-              <span
-                v-if="editInvalid && editingId === line.id_budget_line"
-                class="gl-state gl-state-error"
-              >
-                !
-              </span>
-              <p :id="`cell-note-${line.id_budget_line}`" class="gl-cell-note" aria-live="polite">
-                <template v-if="editingId === line.id_budget_line && editInvalid">
-                  {{ editMessage }}
-                </template>
-                <template v-else-if="cellStatus[line.id_budget_line] === 'error'">
-                  {{ cellMessages[line.id_budget_line] }}
-                </template>
-              </p>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+                  guardando…
+                </span>
+                <span
+                  v-else-if="cellStatus[line.id_budget_line] === 'saved'"
+                  class="gl-state gl-state-saved"
+                  aria-hidden="true"
+                >
+                  ✓
+                </span>
+                <span
+                  v-if="editInvalid && editingId === line.id_budget_line"
+                  class="gl-state gl-state-error"
+                >
+                  !
+                </span>
+                <p :id="`cell-note-${line.id_budget_line}`" class="gl-cell-note" aria-live="polite">
+                  <template v-if="editingId === line.id_budget_line && editInvalid">
+                    {{ editMessage }}
+                  </template>
+                  <template v-else-if="cellStatus[line.id_budget_line] === 'error'">
+                    {{ cellMessages[line.id_budget_line] }}
+                  </template>
+                </p>
+              </td>
+              <td class="gl-cell-actions">
+                <button
+                  type="button"
+                  class="btn-icon-sm"
+                  title="Editar línea"
+                  :disabled="lineBusy(line.id_budget_line)"
+                  :aria-label="`Editar línea ${budgetPlanningStore.costCenterLabel(line.id_cost_center)} ${line.budget_date}`"
+                  @click="openEdit(line)"
+                >
+                  ✏️
+                </button>
+                <button
+                  type="button"
+                  class="btn-icon-sm"
+                  title="Eliminar línea"
+                  :disabled="lineBusy(line.id_budget_line)"
+                  :aria-label="`Eliminar línea ${budgetPlanningStore.costCenterLabel(line.id_cost_center)} ${line.budget_date}`"
+                  @click="openDelete(line)"
+                >
+                  🗑
+                </button>
+              </td>
+            </tr>
+            <tr v-if="!section.vm.visible.length" class="gl-row-nomatch">
+              <td :colspan="SORT_COLUMNS.length + 1" class="gl-no-match">
+                Sin coincidencias con los filtros aplicados.
+              </td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="6" class="gl-foot-label">Σ visible</th>
+              <td class="gl-cell-money" aria-live="polite">
+                {{ formatMoney(section.vm.visibleSubtotal) }}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
 
-    <p v-if="!totalLines" class="gl-empty">
-      Este escenario no tiene líneas. Cree el Presupuesto Base desde el dashboard con la carga anual
-      SIIGO.
-    </p>
+      <div v-if="section.vm.hasMore" class="gl-more">
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          @click="section.state.visibleCount += PAGE_SLICE"
+        >
+          Mostrar 500 más
+        </button>
+      </div>
+    </section>
 
-    <div v-if="hasMore" class="gl-more">
-      <button type="button" class="btn btn-secondary btn-sm" @click="visibleCount += PAGE_SLICE">
-        Mostrar 500 más
-      </button>
-    </div>
+    <LineFormModal
+      :open="formOpen"
+      :mode="formMode"
+      :line="formLine"
+      :scenario="scenario"
+      :line-type="formType"
+      @saved="onLineSaved"
+      @close="formOpen = false"
+    />
+    <LineDeleteModal
+      :open="deleteOpen"
+      :line="deleteLineRef"
+      @deleted="onLineDeleted"
+      @close="deleteOpen = false"
+    />
   </div>
 </template>
 
@@ -429,15 +672,35 @@ onBeforeUnmount(clearTimers)
 .gl-zone {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
 }
 
-.gl-toolbar {
+/* Sección (Ingresos/Gastos): contenedor apilado (§3.1). */
+.gl-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gl-group-header {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   align-items: baseline;
   justify-content: space-between;
+}
+
+.gl-group-heading {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.gl-group-sub {
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary, #555555);
 }
 
 .gl-hint {
@@ -453,6 +716,39 @@ onBeforeUnmount(clearTimers)
   color: var(--color-text-muted, #8a8a8a);
 }
 
+.gl-section-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.gl-filter-input,
+.gl-filter-select {
+  width: auto;
+  max-width: 240px;
+  min-width: 150px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 6px;
+  background-color: var(--color-surface-card, #ffffff);
+  font-size: 0.78rem;
+  color: var(--color-text-primary, #070707);
+  box-sizing: border-box;
+}
+
+.gl-filter-input:focus,
+.gl-filter-select:focus {
+  border-color: var(--color-brand, #03658c);
+  outline: 2px solid rgba(3, 101, 140, 0.25);
+}
+
+/* "+ Añadir ingreso/gasto": NUNCA deshabilitado, ni con sección vacía (§3.1). */
+.gl-add {
+  margin-left: auto;
+}
+
 .gl-scroll {
   max-height: 62vh;
   overflow: auto;
@@ -462,7 +758,7 @@ onBeforeUnmount(clearTimers)
 }
 
 .gl-table {
-  min-width: 1040px;
+  min-width: 1140px;
   border: none;
   border-radius: 0;
   box-shadow: none;
@@ -497,6 +793,39 @@ onBeforeUnmount(clearTimers)
   width: 14px;
   height: 14px;
   color: var(--color-brand, #03658c);
+}
+
+/*
+ * Regla aprendida (FE-S4C §6.2, misma que `cf-table`/`pv-table`): el
+ * `th { color: #ffffff }` global de `main.css` debe sobreescribirse en los
+ * `th` que pintan sobre superficie clara ⇒ la nueva columna Acciones y la
+ * etiqueta del `tfoot` usan `--color-text-primary` (se adapta sola al tema
+ * oscuro).
+ */
+.gl-table thead th.gl-col-actions,
+.gl-table tfoot th.gl-foot-label {
+  color: var(--color-text-primary, #070707);
+}
+
+.gl-col-actions {
+  min-width: 96px;
+  text-align: center;
+}
+
+.gl-table tfoot th.gl-foot-label,
+.gl-table tfoot td {
+  font-weight: 700;
+  background-color: var(--color-surface, #f7f7f7);
+}
+
+:root[data-theme='dark'] .gl-table tfoot th.gl-foot-label,
+:root[data-theme='dark'] .gl-table tfoot td {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.gl-foot-label {
+  font-size: 0.72rem;
+  text-align: right;
 }
 
 .gl-cell-ceco,
@@ -643,6 +972,52 @@ onBeforeUnmount(clearTimers)
 
 :root[data-theme='dark'] .gl-cell-note {
   color: #ff8f8f;
+}
+
+/* Columna Acciones (FE-S4D §3.1): botones ✏️/🗑 por fila. */
+.gl-cell-actions {
+  width: 96px;
+  white-space: nowrap;
+}
+
+.btn-icon-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 2px;
+  padding: 0;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 6px;
+  background-color: transparent;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--color-text-primary, #070707);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.btn-icon-sm:hover:not(:disabled) {
+  background-color: rgba(3, 101, 140, 0.08);
+}
+
+.btn-icon-sm:focus-visible {
+  outline: 2px solid var(--color-brand, #03658c);
+  outline-offset: 1px;
+}
+
+.btn-icon-sm:disabled {
+  cursor: not-allowed;
+  background-color: transparent;
+  opacity: 0.4;
+}
+
+.gl-no-match {
+  padding: 16px;
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #8a8a8a);
 }
 
 .gl-empty {

@@ -1,24 +1,38 @@
 <script setup>
 /**
  * BudgetRulesView — Gestión de Reglas Financieras (`/budget/rules`), spec
- * FE-S3-RULES §8. Vista: cabecera + tabs custom "pill" (A2, sin Vuetify) +
- * un panel por pilar (Costos por Línea / Comisiones de Venta) con barra de
- * filtros, tabla reutilizable y modal crear/editar.
+ * FE-S3-RULES §8 + FE-S5-PAYABLE-TERMS §3.1. Vista: cabecera + tabs custom
+ * "pill" (A2, sin Vuetify) + un panel por pilar (Costos por Línea / Comisiones
+ * de Venta) con barra de filtros, tabla reutilizable y modal crear/editar, más
+ * el tercer tab 'payable' (Términos de pago, panel propio).
  *
  * El estado vive en `budgetRulesStore` (caché §6) y los FILTROS en la vista,
  * por kind y sin compartirse (§8.3). Ni el cambio de tab ni los filtros
- * disparan HTTP (NFR-2): `commission` se carga perezosamente una sola vez
- * en su primera activación (A15).
+ * disparan HTTP (NFR-2): `commission` y `payable` se cargan perezosamente una
+ * sola vez en SU primera activación (A15 / FE-S5 §3.1). `activeTab` sigue
+ * arrancando en 'cost': la pestaña nueva va al final (FE-S5 §3.1).
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import RatesDataTable from '@/components/budget/rates/RatesDataTable.vue'
 import RateEditorModal from '@/components/budget/rates/RateEditorModal.vue'
+import PayableTermsPanel from '@/components/budget/rates/PayableTermsPanel.vue'
 import { RATE_KINDS } from '@/components/budget/rates/ratesConfig.js'
 import { useBudgetRulesStore } from '@/stores/budgetRulesStore.js'
 import { useUserStore } from '@/stores/userStore.js'
 import { alertService } from '@/services/alertService.js'
 
-const TAB_ORDER = ['cost', 'commission']
+/** Pilares de tasas: paneles FE-S3 con `ratesConfig.js` como única fuente. */
+const RATE_TABS = ['cost', 'commission']
+
+/** Orden de los tres tabs (FE-S5 §3.1): `payable` se renderiza aparte. */
+const TAB_ORDER = ['cost', 'commission', 'payable']
+
+/** Etiquetas del pill: las dos tasas salen de `RATE_KINDS` (sin tocarla). */
+const TAB_LABELS = {
+  cost: RATE_KINDS.cost.tabLabel,
+  commission: RATE_KINDS.commission.tabLabel,
+  payable: 'Términos de pago'
+}
 
 const budgetRulesStore = useBudgetRulesStore()
 const userStore = useUserStore()
@@ -52,12 +66,20 @@ onMounted(async () => {
 
 /**
  * Activa un tab. La primera activación de 'commission' dispara el único
- * `GET /budget/commission-rates/` (re-pulsear la tab es no-op, AC-04/A15).
- * @param {'cost'|'commission'} kind
+ * `GET /budget/commission-rates/` (re-pulsear la tab es no-op, AC-04/A15) y
+ * la de 'payable' hace lo propio con el catálogo `GET /budget/line-payable-term/`
+ * (lazy FE-S5 §3.1, jamás en `onMounted`).
+ * @param {'cost'|'commission'|'payable'} kind
  */
 function activateTab(kind) {
-  if (!RATE_KINDS[kind] || activeTab.value === kind) return
+  if (!TAB_ORDER.includes(kind) || activeTab.value === kind) return
   activeTab.value = kind
+  if (kind === 'payable') {
+    if (!budgetRulesStore.payableTermsLoaded) {
+      budgetRulesStore.fetchPayableTerms()
+    }
+    return
+  }
   if (budgetRulesStore.rates[kind] === null) {
     budgetRulesStore.fetchRates(kind)
   }
@@ -149,8 +171,9 @@ async function onRestore(kind, row) {
 
     <p class="page-description">
       Administre las tasas que alimentan el motor financiero: costo de ventas (COGS) y comisión
-      comercial, por línea de producto o globales. La historia no se borra: las reglas se archivan y
-      quedan auditables con su nombre, vigencia y estado.
+      comercial, por línea de producto o globales, y los términos de pago a proveedores por línea
+      (fechas de salida del efectivo). La historia no se borra: las reglas se archivan y quedan
+      auditables con su nombre, vigencia y estado.
     </p>
 
     <div class="rates-tabs" role="tablist" aria-label="Pilares de reglas financieras">
@@ -168,12 +191,12 @@ async function onRestore(kind, row) {
         @click="activateTab(kind)"
         @keydown="onTabKeydown($event, index)"
       >
-        {{ RATE_KINDS[kind].tabLabel }}
+        {{ TAB_LABELS[kind] }}
       </button>
     </div>
 
     <div
-      v-for="kind in TAB_ORDER"
+      v-for="kind in RATE_TABS"
       :id="`rates-panel-${kind}`"
       :key="kind"
       v-show="activeTab === kind"
@@ -270,9 +293,21 @@ async function onRestore(kind, row) {
       </template>
     </div>
 
+    <!-- FE-S5 §3.1/§3.2: el panel de términos SOLO se monta con su tab activo
+         (lazy: el catálogo ya lo trajo `activateTab` en la primera activación) -->
+    <div
+      v-if="activeTab === 'payable'"
+      id="rates-panel-payable"
+      class="rates-panel"
+      role="tabpanel"
+      aria-labelledby="rates-tab-payable"
+    >
+      <PayableTermsPanel />
+    </div>
+
     <RateEditorModal
       :open="modalOpen"
-      :kind="activeTab"
+      :kind="activeTab === 'payable' ? 'cost' : activeTab"
       :rate="editingRate"
       @saved="closeModal"
       @close="closeModal"

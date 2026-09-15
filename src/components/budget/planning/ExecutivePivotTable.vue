@@ -27,7 +27,11 @@
  *    → exclusión anual con advertencia, evaluada contra el ÚLTIMO DÍA local
  *    de cada mes del `budget_year` (réplica del patrón Q6 de
  *    `budgetEngine.get_pnl`: pool vigente ordenado por `id_line_cost_rate`
- *    DESC, `setdefault` por línea, primera global = mayor id).
+ *    DESC, `setdefault` por línea, primera global = mayor id). FE-S7 §4:
+ *    ese pool/scan se EXTRAJO a `planningFormat.js`
+ *    (`buildCogsRatePool`/`resolveCogsPctByLine`) como fuente única con la
+ *    derivación de pago a proveedores de la Vista Flujo — comportamiento
+ *    de esta vista idéntico (AC-PYG-1..12).
  *  - D-4 (§3.2): tasas cacheadas por sesión en `budgetPlanningStore`
  *    (`ensureCatalogs`), fallo silencioso → `lineCostRatesError`.
  *  - D-5 (§4): orden Ingresos → Costo de ventas → Gastos fijos → Gastos
@@ -53,9 +57,11 @@ import {
   BEHAVIOR_LABELS,
   LINE_TYPE_LABELS,
   MONTH_LABELS,
+  buildCogsRatePool,
   formatMoney,
   formatVariableRate,
-  monthIndexOf
+  monthIndexOf,
+  resolveCogsPctFromPool
 } from './planningFormat.js'
 
 const props = defineProps({
@@ -209,8 +215,9 @@ const monthEndISO = computed(() => {
 
 /**
  * Catálogo cacheado (§3.2: el store ya filtra `is_active === true`); se
- * re-filtra defensivamente aquí. `lineCostRatesError`/`Loaded` diferencian
- * la degradación (§5.1/§5.2) sin disparar jamás un request nuevo (NFR-CY-1).
+ * re-filtra defensivamente dentro del resolvedor compartido.
+ * `lineCostRatesError`/`Loaded` diferencian la degradación (§5.1/§5.2) sin
+ * disparar jamás un request nuevo (NFR-CY-1).
  */
 const activeCostRates = computed(() =>
   (Array.isArray(budgetPlanningStore.lineCostRates)
@@ -221,35 +228,18 @@ const activeCostRates = computed(() =>
 
 /**
  * Resolución por mes (réplica mensual del Q6 de `budgetEngine.get_pnl`):
- * pool vigente al cierre del mes (comparación lexicográfica de ISOs con
- * padding) ordenado por `id_line_cost_rate` DESC → la primera coincidencia
- * de cada línea gana (semántica `setdefault` = mayor id) y la primera
- * coincidencia global (`id_line == null`) es el respaldo (mayor id global).
+ * FE-S7 §4 extrajo el pool+scan a `buildCogsRatePool`/`resolveCogsPctByLine`
+ * en `planningFormat.js` (pool vigente al cierre del mes, comparación
+ * lexicográfica de ISOs con padding, orden `id_line_cost_rate` DESC → la
+ * primera coincidencia de cada línea gana —semántica `setdefault` = mayor
+ * id— y la primera coincidencia global (`id_line == null`) es el respaldo).
+ * Aquí queda SOLO el pool por mes, que `costDegradation` consulta para el
+ * "¿cubre alguna tasa el año?"; los pct de celda se resuelven con
+ * `resolveCogsPctByLine` (misma cadena línea → global → `null`, cero
+ * cambio de comportamiento — AC-PYG-1..12 intactos).
  */
 const monthlyRates = computed(() =>
-  monthEndISO.value.map((monthEnd) => {
-    const candidates = activeCostRates.value
-      .filter(
-        (rate) =>
-          typeof rate.date_from === 'string' &&
-          typeof rate.date_to === 'string' &&
-          rate.date_from <= monthEnd &&
-          monthEnd <= rate.date_to
-      )
-      .sort((a, b) => Number(b.id_line_cost_rate ?? 0) - Number(a.id_line_cost_rate ?? 0))
-    const byLine = new Map()
-    let globalPct = null
-    for (const rate of candidates) {
-      const pct = Number(rate.cogs_pct)
-      if (!Number.isFinite(pct)) continue
-      if (rate.id_line === null || rate.id_line === undefined) {
-        if (globalPct === null) globalPct = pct
-      } else if (!byLine.has(rate.id_line)) {
-        byLine.set(rate.id_line, pct)
-      }
-    }
-    return { byLine, globalPct }
-  })
+  monthEndISO.value.map((monthEnd) => buildCogsRatePool(activeCostRates.value, monthEnd))
 )
 
 /**
@@ -298,9 +288,12 @@ const costPivot = computed(() => {
     const pcts = []
     let total = 0
     for (let m = 0; m < 12; m += 1) {
-      const pool = pools[m]
-      const pct =
-        lineId !== null && pool.byLine.has(lineId) ? pool.byLine.get(lineId) : pool.globalPct
+      // FE-S7 §4: la cadena línea → global → `null` vive ahora en el
+      // resolvedor compartido (`resolveCogsPctFromPool`, el MISMO cuerpo que
+      // usa `resolveCogsPctByLine` en la Vista Flujo) sobre los pools
+      // memoizados de `monthlyRates` — resultado idéntico al del scan inline
+      // pre-refactor (AC-PYG-1..12), cero rebuilds del catálogo por celda.
+      const pct = resolveCogsPctFromPool(pools[m], lineId)
       if (pct === null) continue
       months[m] = (incomeRow.months[m] * pct) / 100
       total += months[m]

@@ -16,6 +16,38 @@ import axiosInstance from '@/plugins/axios'
  *  - `PUT  /budget/planning/cell/{idBudgetLine}` JSON (5.3)
  *  - `PUT  /budget/planning/{id}/set-target` sin cuerpo (5.6)
  *
+ * Rutas FE-S4D-BUDGET-LINES (autoridad: `backend.02_13` §3; verificadas contra
+ * los decoradores reales de `app/api/budget/planning.py`):
+ *  - `POST   /budget/planning/{idBudget}/line`      JSON `PlanningLineCreate` (201)
+ *  - `PUT    /budget/planning/line/{idBudgetLine}`  JSON `PlanningLineUpdate` (parcial)
+ *  - `DELETE /budget/planning/line/{idBudgetLine}`  sin cuerpo → `{deleted_id}`
+ * SIN slash final: no son rutas de colección con `@router.get("/")` (spec FE §5).
+ *
+ * Rutas frontend.03_07 (autoridad: `backend.02_14` D-3/FD-1):
+ *  - `DELETE /budget/{idBudget}`  endpoint LEGACY del CRUD de presupuestos:
+ *    borrado FÍSICO de escenarios borrador (400 si el estado cambió en vuelo,
+ *    404 si ya no existe). NO existe `/budget/planning/{id}` DELETE: no
+ *    inventar rutas. También ruta unitaria ⇒ SIN slash final.
+ *
+ * Rutas FE-S6-CARRYOVER (autoridad: `backend.02_16` §5; verificadas contra el
+ * OpenAPI vivo de `:8003` el 2026-09-14 — `GET → PlanningCarryoverResult`,
+ * `PUT body PlanningCarryoverFlag → 200 BudgetFull`):
+ *  - `GET /budget/planning/{idBudget}/carryover`   consulta del arrastre N−1
+ *  - `PUT /budget/planning/{idBudget}/carryover`   toggle persistido (idempotente)
+ * Rutas de detalle ⇒ SIN slash final (misma convención verificada arriba).
+ * BE-S7 (`backend.02_17` §4) extendió el GET del arrastre: las `lines[]`
+ * ganan `origin: "line" | "cogs"` y las derivadas traen `id_budget_line: null`.
+ *
+ * Rutas FE-S7-COGS-PAYFLOW (autoridad: `backend.02_17` §2 — catálogo
+ * re-semantizado D-S7-1; verificado contra el OpenAPI vivo de `:8003`):
+ *  - `GET /budget/line-payable-term/`  términos de pago al PROVEEDOR del
+ *    costo de ventas por Línea: `[{ id_line_payable_term, id_line,
+ *    payment_pct (0–1), payment_days (negativo = antes de la ancla) }]`.
+ * RUTA DE COLECCIÓN ⇒ CON slash final (307 sin él, mismo detalle verificado
+ * para `/budget/planning/`). El mismo catálogo lo administra
+ * `budgetRulesService` en Reglas Financieras; aquí SOLO se cachea para la
+ * derivación de la Vista Flujo (D-S7-2).
+ *
  * Slash final obligatorio en la ruta de colección `/budget/planning/` (sin
  * él FastAPI responde 307 — mismo detalle verificado en `budgetRulesService`).
  *
@@ -133,6 +165,47 @@ export const budgetPlanningService = {
   },
 
   /**
+   * Crea UNA línea del escenario (FE-S4D §5 / BE-S4D §3.1):
+   * `POST /budget/planning/{idBudget}/line`. `data` es el payload
+   * `PlanningLineCreate` ya construido por el modal (snake_case exacto:
+   * `id_cost_center, line_type, budget_date, payment_date|null,
+   * id_collection|null, projected_amount, description|null, behavior_type,
+   * variable_rate|null`). Errores mapeados en store/modal (§6): 404 FK,
+   * 400 BR-LINE-04 (año), 422 schema.
+   * @param {number|string} idBudget
+   * @param {Object} data
+   * @returns {Promise<import('axios').AxiosResponse<object>>} 201 línea completa
+   */
+  createLine(idBudget, data) {
+    return axiosInstance.post(`/budget/planning/${idBudget}/line`, data)
+  },
+
+  /**
+   * Edita los campos estructurales de UNA línea (FE-S4D §5 / BE-S4D §3.2):
+   * `PUT /budget/planning/line/{idBudgetLine}`. Contrato PARCIAL
+   * (`PlanningLineUpdate`): solo campos editables modificados; omitido =
+   * keep (y `null` también = keep ⇒ borrar valores opcionales no soportado).
+   * `line_type`/`behavior_type` NUNCA se envían (BR-LINE-06).
+   * @param {number|string} idLine
+   * @param {Object} data
+   * @returns {Promise<import('axios').AxiosResponse<object>>} 200 línea completa
+   */
+  updateLine(idLine, data) {
+    return axiosInstance.put(`/budget/planning/line/${idLine}`, data)
+  },
+
+  /**
+   * Elimina FÍSICAMENTE UNA línea (FE-S4D §5 / BE-S4D §3.3):
+   * `DELETE /budget/planning/line/{idBudgetLine}` → `{ deleted_id }`.
+   * Sin cascadas ni lock por status (D-2/BR-LINE-05).
+   * @param {number|string} idLine
+   * @returns {Promise<import('axios').AxiosResponse<{deleted_id: number}>>}
+   */
+  deleteLine(idLine) {
+    return axiosInstance.delete(`/budget/planning/line/${idLine}`)
+  },
+
+  /**
    * Designa la Meta Activa del año; desactiva al anterior en la misma
    * transacción (BR-TGT-01). Restringido backend a Gerencia/Sistema (ASM-9):
    * 403 con `Financiero`.
@@ -141,5 +214,72 @@ export const budgetPlanningService = {
    */
   setTarget(idBudget) {
     return axiosInstance.put(`/budget/planning/${idBudget}/set-target`)
+  },
+
+  /**
+   * Consulta del arrastre de saldos N−1 (FE-S6 §3 / BE-S6 §5.1):
+   * `GET /budget/planning/{idBudget}/carryover` → `PlanningCarryoverResult`
+   * `{ enabled, source|null, lines[], unavailable_reason|null }`. Con el flag
+   * OFF el backend responde `enabled:false, source:null, lines:[]` sin
+   * consultar más (BR-CO-01); `lines` solo contienen filas FIJAS de la fuente
+   * con fecha efectiva (`payment_date || budget_date`) en el año del escenario
+   * (BR-CO-03), orden `coalesce(payment_date, budget_date) ASC,
+   * id_budget_line ASC`. 404 `"Budget {id} not found"` si el escenario no
+   * existe (aunque esté deshabilitado).
+   * @param {number|string} idBudget
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  fetchCarryover(idBudget) {
+    return axiosInstance.get(`/budget/planning/${idBudget}/carryover`)
+  },
+
+  /**
+   * Toggle persistido del arrastre (FE-S6 §3 / BE-S6 §5.2):
+   * `PUT /budget/planning/{idBudget}/carryover` con body
+   * `PlanningCarryoverFlag` (`{ include_carryover: <bool> }`, snake_case
+   * exacto). 200 = el DETALLE COMPLETO (`BudgetFull` + `parent_budget_name` +
+   * `budget_lines`) ya con `include_carryover` nuevo — el store lo fusiona
+   * con la caché con la MISMA asignación de `fetchScenarioDetail`.
+   * Idempotente; jamás valida año ni existencia de fuente (BR-CO-08: flag ON
+   * sin fuente es estado legal que presenta el FE).
+   * @param {number|string} idBudget
+   * @param {boolean} includeCarryover
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  setCarryover(idBudget, includeCarryover) {
+    return axiosInstance.put(`/budget/planning/${idBudget}/carryover`, {
+      include_carryover: Boolean(includeCarryover)
+    })
+  },
+
+  /**
+   * Catálogo de términos de pago al PROVEEDOR del costo de ventas por Línea
+   * (FE-S7 §3; autoridad `backend.02_17` §2/§4 — re-semantizado D-S7-1, la
+   * tabla `line_payable_terms` y su CRUD están VIVOS):
+   * `GET /budget/line-payable-term/` → `[{ id_line_payable_term, id_line,
+   * payment_pct }]` con `payment_pct` en escala 0–1 y `payment_days`
+   * negativo = ANTES de la ancla (`budget_date` del ingreso). Lo consume el
+   * store (`ensureCatalogs` → `payableTerms`, getter `payableTermsByLine`)
+   * para la derivación client-side del bloque "Pago a proveedores" de la
+   * Vista Flujo (D-S7-2). Colección ⇒ CON slash final.
+   * @returns {Promise<import('axios').AxiosResponse<Array<object>>>}
+   */
+  fetchPayableTerms: () => axiosInstance.get('/budget/line-payable-term/'),
+
+  /**
+   * Elimina FÍSICAMENTE un escenario borrador reutilizando el endpoint
+   * LEGACY del CRUD de presupuestos (frontend.03_07 / autoridad
+   * `backend.02_14` D-3): `DELETE /budget/{idBudget}`. NO existe ruta
+   * `/budget/planning/{id}` DELETE (FD-1: no inventar rutas).
+   *
+   * Ruta unitaria ⇒ SIN slash final (misma forma que
+   * `/budget/planning/line/{idBudgetLine}`). El backend re-valida el estado
+   * en vuelo: 400 "Only draft budgets can be deleted" → kind `conflict`;
+   * id inexistente → 404 → kind `notfound` (los clasifica el store).
+   * @param {number|string} idBudget
+   * @returns {Promise<import('axios').AxiosResponse<{message: string}>>}
+   */
+  deleteScenario(idBudget) {
+    return axiosInstance.delete(`/budget/${idBudget}`)
   }
 }

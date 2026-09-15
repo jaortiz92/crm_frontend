@@ -11,8 +11,14 @@ import router from '@/router/index.js'
  *  - `lines`: catálogo de líneas cacheado una vez por sesión SPA (A5).
  *  - `rates[kind]`: `null` = NUNCA cargada | `[]` = cargada vacía (A15);
  *    el cambio de tab y los filtros jamás disparan refetch.
- * Tras cada mutación exitosa (POST/PUT) se hace refetch del `kind` afectado:
- * la fuente de verdad es el servidor; se ignoran respuestas optimistas.
+ *  - `payableTerms` (FE-S5-PAYABLE-TERMS): catálogo de términos de pago a
+ *    proveedores. EXCEPCIÓN a la regla de refetch: AQUÍ LA CACHÉ ES LA FUENTE
+ *    — tras cada POST/PUT/DELETE se inserta/reemplaza/retira en el sitio
+ *    desde la respuesta del servidor (objeto completo; BE-S5 §5) y solo se
+ *    refuerza (force) cuando un 404 avisa de que el catálogo local caducó.
+ * Tras cada mutación exitosa de tasas (POST/PUT) se hace refetch del `kind`
+ * afectado: la fuente de verdad es el servidor; se ignoran respuestas
+ * optimistas.
  */
 
 /**
@@ -84,9 +90,24 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
     linesLoaded: false,
     /** @type {{ cost: Array<object>|null, commission: Array<object>|null }} */
     rates: { cost: null, commission: null },
-    loading: { lines: false, cost: false, commission: false },
+    /**
+     * Catálogo completo de términos de pago a proveedores por línea
+     * (FE-S5): `{ id_line_payable_term, id_line, payment_pct, payment_days }`.
+     * @type {Array<object>}
+     */
+    payableTerms: [],
+    /** `false` = NUNCA cargada; se marca SOLO en éxito (patrón A15 lazy). */
+    payableTermsLoaded: false,
+    /**
+     * Guard doble-submit de las mutaciones de términos (FE-S5, espejo del
+     * `lineSaving` de `budgetPlanningStore`): claves `id_line_payable_term`
+     * para PUT/DELETE y `'new'` para POST. Dueño: las acciones del store.
+     * @type {Record<number|string, boolean>}
+     */
+    payableTermSaving: {},
+    loading: { lines: false, cost: false, commission: false, payableTerms: false },
     /** true ⇒ banner rojo con botón "Reintentar" (A11); null = sin error. */
-    loadError: { cost: null, commission: null },
+    loadError: { cost: null, commission: null, payableTerms: null },
     /** Flag global de POST/PUT en vuelo (anti doble-submit, §10.5). */
     saving: false
   }),
@@ -234,6 +255,141 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
      */
     async setActive(kind, id, value) {
       return this.updateRate(kind, id, { is_active: value })
+    },
+
+    /* ------------------- Términos de pago a proveedores (FE-S5) ------------------- */
+
+    /**
+     * Catálogo completo de términos de pago (GET `/budget/line-payable-term/`,
+     * plano, orden `id_line, payment_days` — BE-S5 §5). Lazy igual que el
+     * `commission` de `fetchRates`: ya cargado y `!force` ⇒ no-op (NFR-S5-FE-3:
+     * UN solo fetch por sesión; el panel filtra por Línea client-side).
+     * `payableTermsLoaded` se marca SOLO en éxito.
+     * @param {boolean} [force=false] refetch forzado (Reintentar / 404 en PUT|DELETE)
+     * @returns {Promise<{ ok: boolean, kind?: string }>}
+     */
+    async fetchPayableTerms(force = false) {
+      if (!force && this.payableTermsLoaded) return { ok: true }
+
+      this.loading.payableTerms = true
+      this.loadError.payableTerms = null
+      try {
+        const response = await budgetRulesService.fetchPayableTerms()
+        this.payableTerms = Array.isArray(response?.data) ? response.data : []
+        this.payableTermsLoaded = true
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        // 'auth' no deja banner: el flujo de sesión redirige a Login (AC-03).
+        if (classified.kind !== 'auth') {
+          this.loadError.payableTerms = true
+        }
+        this.handleAuth(classified)
+        return { ok: false, ...classified }
+      } finally {
+        this.loading.payableTerms = false
+      }
+    },
+
+    /**
+     * POST `{ id_line, payment_pct, payment_days }` (snake_case exacto; el
+     * %→fracción lo convierte la capa modal, FD5-3). Éxito 201: PUSH del
+     * objeto devuelto en el catálogo cacheado — la caché es la fuente, sin
+     * refetch (FE-S5 §4). Guard `'new'` espejo de `lineSaving`. Los 404
+     * propagan `detail` sin clasificar para que el panel distinga
+     * `"Line {id} not found"` (inline en el select) de otros casos (§3.3);
+     * NUNCA se muestra crudo al usuario (NFR-5).
+     * @param {{ id_line: number, payment_pct: number, payment_days: number }} payload
+     * @returns {Promise<{ ok: boolean, term?: object|null, kind?: string, detail?: string|null }>}
+     */
+    async createPayableTerm(payload) {
+      if (this.payableTermSaving.new) return { ok: false, kind: 'busy' }
+      this.payableTermSaving.new = true
+      try {
+        const response = await budgetRulesService.createPayableTerm(payload)
+        const term = response?.data ?? null
+        if (term) this.payableTerms.push(term)
+        return { ok: true, term }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.payableTermSaving.new
+      }
+    },
+
+    /**
+     * PUT de REEMPLAZO TOTAL `/budget/line-payable-term/{id}` (mismo body que
+     * el POST; el BE no acepta parcial aquí, BE-S5 §5). Éxito: el objeto
+     * devuelto SUSTITUYE la fila en el sitio (splice por
+     * `id_line_payable_term`). 404 `"LinePayableTerm {id} not found"` ⇒ el
+     * llamador toastea + refetch forzado (§3.3): aquí solo se propaga
+     * `kind:'notfound'` con `detail`.
+     * @param {number|string} id `id_line_payable_term`
+     * @param {{ id_line: number, payment_pct: number, payment_days: number }} payload
+     * @returns {Promise<{ ok: boolean, term?: object|null, kind?: string, detail?: string|null }>}
+     */
+    async updatePayableTerm(id, payload) {
+      if (this.payableTermSaving[id]) return { ok: false, kind: 'busy' }
+      this.payableTermSaving[id] = true
+      try {
+        const response = await budgetRulesService.updatePayableTerm(id, payload)
+        const term = response?.data ?? null
+        if (term) {
+          const index = this.payableTerms.findIndex(
+            (item) => item.id_line_payable_term === Number(id)
+          )
+          if (index !== -1) this.payableTerms.splice(index, 1, term)
+          else this.payableTerms.push(term)
+        }
+        return { ok: true, term }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.payableTermSaving[id]
+      }
+    },
+
+    /**
+     * DELETE `/budget/line-payable-term/{id}` (`{ deleted_id }`). Éxito:
+     * SPLICE de la fila en el catálogo cacheado (sin refetch). OJO — NO
+     * re-expande escenarios ya creados (BR-TERM-07; el copy del confirm lo
+     * explicita, §3.2). 404 se propaga como en `updatePayableTerm`.
+     * @param {number|string} id `id_line_payable_term`
+     * @returns {Promise<{ ok: boolean, kind?: string, detail?: string|null }>}
+     */
+    async deletePayableTerm(id) {
+      if (this.payableTermSaving[id]) return { ok: false, kind: 'busy' }
+      this.payableTermSaving[id] = true
+      try {
+        await budgetRulesService.deletePayableTerm(id)
+        const index = this.payableTerms.findIndex(
+          (item) => item.id_line_payable_term === Number(id)
+        )
+        if (index !== -1) this.payableTerms.splice(index, 1)
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.payableTermSaving[id]
+      }
     }
   }
 })

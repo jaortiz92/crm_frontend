@@ -18,8 +18,14 @@
  * El :idBudget no válido se resuelve aquí (NaN → toast + replace a
  * BudgetPlanning, §3.1) porque el `beforeEnter` solo valida el gate de rol.
  * 404 del detalle: toast + `router.replace` al dashboard (§9).
+ *
+ * FE-S6-CARRYOVER (§5): la cabecera gana el pill "Arrastrar saldos de {N−1}"
+ * (visible desde cualquier tab — FD6-2; efecto solo en Flujo) con rollback
+ * optimista del store, el aviso de fuente/indisponibilidad bajo el pill SOLO
+ * en el tab Flujo (`aria-live="polite"` — FD6-3) y el disparo LAZY del GET
+ * (tab Flujo activo + flag ON + sin fetch en vuelo).
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ExecutivePivotTable from '@/components/budget/planning/ExecutivePivotTable.vue'
 import CashFlowPivotTable from '@/components/budget/planning/CashFlowPivotTable.vue'
@@ -83,6 +89,73 @@ const demotedName = computed(() => {
   )
   return active ? active.budget_name : null
 })
+
+/* ----------------- Arrastre de saldos N−1 (FE-S6-CARRYOVER §5) ----------------- */
+
+/** Caché del arrastre (store): `enabled/source/lines/loading/error/saving…`. */
+const carryover = computed(() => budgetPlanningStore.carryover)
+
+/** N−1: año de la fuente (etiqueta del pill y avisos §5). */
+const carrySourceYear = computed(() => {
+  const year = Number(scenario.value?.budget_year)
+  return Number.isInteger(year) ? year - 1 : null
+})
+
+/**
+ * Texto del aviso bajo el pill (§5/§7, SOLO tab Flujo): fuente cargada ⇒
+ * `← {budget_name} · {status}`; sin escenario N−1 ⇒ copy literal; fallo de
+ * red/5xx ⇒ "No se pudo cargar el arrastre." (el pill NO revierte por GET:
+ * solo el PUT fallido hace rollback).
+ */
+const carryHintText = computed(() => {
+  if (activeTab.value !== 'flow') return ''
+  const state = budgetPlanningStore.carryover
+  if (!state.enabled) return ''
+  if (state.source) return `← ${state.source.budget_name} · ${state.source.status}`
+  if (state.unavailableReason === 'no_source') {
+    return `No hay escenario de ${carrySourceYear.value} para arrastrar.`
+  }
+  if (state.error) return 'No se pudo cargar el arrastre.'
+  return ''
+})
+
+/**
+ * Toggle del pill: `setCarryoverFlag` ya aplicó el optimismo y revierte solo
+ * (con PUT en vuelo bloqueado por `saving`). Cualquier fallo no-auth (404
+ * re-sincronizado por el store incluido) muestra el toast literal §5; el
+ * `:checked` del input vuelve al estado del store en el re-render.
+ */
+async function onCarryoverToggle(event) {
+  const next = event.target.checked
+  const result = await budgetPlanningStore.setCarryoverFlag(scenario.value.id_budget, next)
+  if (!result.ok && result.kind !== 'auth') {
+    await alertService.generalError('No se pudo guardar. Reintenta.')
+  }
+}
+
+/**
+ * Disparo LAZY del GET (AC-S6-FE-1): tab Flujo activo + flag ON + sin fetch en
+ * vuelo + SIN toggle en vuelo ⇒ `fetchCarryover` (no-op cacheado dentro del
+ * store). El guard `!saving` evita la carrera con `setCarryoverFlag`: el
+ * optimismo pone `enabled=true` antes del PUT, pero el GET autoritativo lo
+ * dispara SOLO la acción (force tras el 200); el watch cubre los otros dos
+ * momentos: activar el tab y cargar el escenario (F5 con flag ON persistente).
+ * El reintento silencioso §7 queda cubierto: el fallo dejó `loaded:false` y
+ * reactivar el tab/toggle vuelve a intentar.
+ */
+watch(
+  [
+    activeTab,
+    () => budgetPlanningStore.carryover.enabled,
+    () => budgetPlanningStore.currentScenario?.id_budget
+  ],
+  () => {
+    const state = budgetPlanningStore.carryover
+    if (activeTab.value === 'flow' && state.enabled && !state.loading && !state.saving) {
+      void budgetPlanningStore.fetchCarryover(idBudget.value)
+    }
+  }
+)
 
 function goDashboard() {
   router.push({ name: 'BudgetPlanning' })
@@ -198,6 +271,32 @@ function backToPlanning() {
           </p>
         </div>
         <div class="ge-header-actions">
+          <!-- FE-S6 §5: pill del arrastre (FD6-2: visible en todo tab; efecto
+               solo en Flujo) + aviso de fuente SOLO en tab Flujo (FD6-3). -->
+          <div class="ge-carry-group">
+            <label
+              class="ge-carry-pill"
+              :class="{ 'is-on': carryover.enabled }"
+              title="Solo afecta a esta Vista Flujo; no genera líneas."
+            >
+              <input
+                type="checkbox"
+                class="ge-carry-input"
+                :checked="carryover.enabled"
+                :disabled="carryover.saving"
+                :aria-label="`Arrastrar saldos del año ${carrySourceYear} al flujo de caja`"
+                @change="onCarryoverToggle"
+              />
+              <span>Arrastrar saldos de {{ carrySourceYear }}</span>
+            </label>
+            <p
+              v-if="activeTab === 'flow' && carryover.enabled"
+              class="ge-carry-hint"
+              aria-live="polite"
+            >
+              {{ carryHintText }}
+            </p>
+          </div>
           <button
             v-if="scenario.status !== 'active' && canTarget"
             type="button"
@@ -418,6 +517,80 @@ function backToPlanning() {
 
 .ge-lines {
   color: var(--color-text-muted, #8a8a8a);
+}
+
+/* Cabecera §5 (FE-S6): acciones + pill del arrastre. */
+
+.ge-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.ge-carry-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-end;
+}
+
+.ge-carry-pill {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  padding: 6px 13px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 999px;
+  background-color: var(--color-surface, #f2f4f7);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #555555);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+    color 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+:root[data-theme='dark'] .ge-carry-pill {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.ge-carry-pill.is-on {
+  border-color: rgba(3, 101, 140, 0.45);
+  background-color: rgba(3, 101, 140, 0.1);
+  color: var(--color-brand, #03658c);
+}
+
+:root[data-theme='dark'] .ge-carry-pill.is-on {
+  color: #56c8ee;
+}
+
+.ge-carry-pill:has(.ge-carry-input:focus-visible) {
+  outline: 2px solid var(--color-brand, #03658c);
+  outline-offset: 1px;
+}
+
+.ge-carry-pill:has(.ge-carry-input:disabled) {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.ge-carry-input {
+  margin: 0;
+  accent-color: var(--color-brand, #03658c);
+  cursor: inherit;
+}
+
+.ge-carry-hint {
+  max-width: 320px;
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--color-text-muted, #8a8a8a);
+  text-align: right;
 }
 
 .chip {
