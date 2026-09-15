@@ -4,12 +4,13 @@
  * ruta `BudgetPlanning` (FE-S4 §3.1/§6).
  *
  * Vista de orquestación: filtro por año + refresco + "Nuevo Escenario (Carga
- * Anual)" + tabla (`ScenarioTable`) + los tres modales auxiliares. El estado
- * vive en `budgetPlanningStore` (orden del backend, sin re-ordenar — §6.1);
- * el gate de "Marcar como Meta Activa" usa `canSetBudgetTarget()` (§3.3,
- * exportado desde `router/index.js` junto a `BUDGET_TARGET_ROLES`).
- * Tras crear/clonar/meta-activa: refresco del listado; el 🎯 es dato, no
- * cálculo (NFR-F3).
+ * Anual)" + tabla (`ScenarioTable`) + los modales auxiliares (ingestión,
+ * clonado, meta-activa y confirmación de borrado de borradores —
+ * frontend.03_07). El estado vive en `budgetPlanningStore` (orden del
+ * backend, sin re-ordenar — §6.1); el gate de "Marcar como Meta Activa" usa
+ * `canSetBudgetTarget()` (§3.3, exportado desde `router/index.js` junto a
+ * `BUDGET_TARGET_ROLES`). Tras crear/clonar/meta-activa/eliminar borrador:
+ * refresco del listado; el 🎯 es dato, no cálculo (NFR-F3).
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -17,6 +18,7 @@ import ScenarioTable from '@/components/budget/planning/ScenarioTable.vue'
 import BudgetIngestionModal from '@/components/budget/planning/BudgetIngestionModal.vue'
 import CloneScenarioModal from '@/components/budget/planning/CloneScenarioModal.vue'
 import SetTargetConfirmModal from '@/components/budget/planning/SetTargetConfirmModal.vue'
+import DeleteScenarioConfirmModal from '@/components/budget/planning/DeleteScenarioConfirmModal.vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import { useUserStore } from '@/stores/userStore.js'
 import { canSetBudgetTarget } from '@/router/index.js'
@@ -53,7 +55,8 @@ const isEmpty = computed(
 const ingestionOpen = ref(false)
 const cloneOpen = ref(false)
 const targetOpen = ref(false)
-/** @type {null | object} fila sobre la que se clona o designa meta. */
+const deleteOpen = ref(false)
+/** @type {null | object} fila sobre la que se clona, designa meta o elimina. */
 const actionRow = ref(null)
 
 /** Escenario que sería desactivado (caché del listado; dato, no cálculo). */
@@ -92,6 +95,11 @@ function onClone(row) {
 function onSetTarget(row) {
   actionRow.value = row
   targetOpen.value = true
+}
+
+function onRequestDelete(row) {
+  actionRow.value = row
+  deleteOpen.value = true
 }
 
 function onCreated() {
@@ -187,6 +195,7 @@ function onTargetDone() {
       @view="onView"
       @set-target="onSetTarget"
       @clone="onClone"
+      @request-delete="onRequestDelete"
     />
 
     <p v-if="budgetPlanningStore.scenariosLoading" class="pd-refresh-note" aria-live="polite">
@@ -213,6 +222,13 @@ function onTargetDone() {
       :demoted-name="demotedName"
       @done="onTargetDone"
       @close="targetOpen = false"
+    />
+
+    <DeleteScenarioConfirmModal
+      :open="deleteOpen"
+      :scenario="actionRow"
+      @deleted="loadScenarios(true)"
+      @close="deleteOpen = false"
     />
   </div>
 </template>

@@ -5,7 +5,9 @@
  * Columnas: Nombre · Año · Tipo · Líneas · Σ Ingresos · Σ Gastos · Estado ·
  * Creado · Acciones. El ORDEN es el que entrega el backend (§6.1: no
  * re-ordenar en cliente). "Marcar como Meta Activa" solo si `status !==
- * 'active'` Y `canSetBudgetTarget()` (gate pasado por el padre). Todas las
+ * 'active'` Y `canSetBudgetTarget()` (gate pasado por el padre). "Eliminar"
+ * SOLO en filas `draft` (frontend.03_07: el backend es la autoridad; emite
+ * `request-delete` y el dashboard abre el modal de confirmación). Todas las
  * acciones se bloquean con `busy` (isSubmitting del store, AC-FE-8).
  */
 import { formatCount, formatDateEs, formatMoney, statusChipOf } from './planningFormat.js'
@@ -19,7 +21,7 @@ defineProps({
   busy: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['view', 'set-target', 'clone'])
+const emit = defineEmits(['view', 'set-target', 'clone', 'request-delete'])
 </script>
 
 <template>
@@ -88,6 +90,15 @@ const emit = defineEmits(['view', 'set-target', 'clone'])
                   @click="emit('clone', row)"
                 >
                   Clonar
+                </button>
+                <button
+                  v-if="row.status === 'draft'"
+                  type="button"
+                  class="btn btn-danger btn-sm"
+                  :disabled="busy"
+                  @click="emit('request-delete', row)"
+                >
+                  Eliminar
                 </button>
               </div>
             </td>
