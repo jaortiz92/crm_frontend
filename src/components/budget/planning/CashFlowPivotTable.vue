@@ -41,12 +41,16 @@
  *  - C (fuera de año): `buildPivot` extiende cada fila con `before`/`after`
  *    (fecha efectiva `< 01/01/N` / `> 31/12/N`; año del string ISO, patrón
  *    `monthIndexOf`) y el bloque con `beforeTotal/afterTotal/
- *    beforeAfterRowCount`. Con toggle OFF (default, ref de sesión FD6-1) las
- *    celdas/totales son EXACTAMENTE los de hoy (output FE-S4B intacto) y un
- *    chip `⊘ {k} filas con montos fuera de año` revela el pendiente; con
- *    toggle ON los montos fuera-de-año SALEN de su celda mensual hacia las
- *    columnas extra "Antes/Después de {N}", y el pie "Σ meses + fuera de año
- *    = total anual" reconcilia exacto (Q4=4 — nunca mentirle al banquero).
+ *    beforeAfterRowCount`. FE-S8-FLUJO-OY ENMIENDA §6.2 (FR-1/FR-2): los
+ *    montos con fecha efectiva fuera de N NUNCA pueblan las 12 celdas
+ *    mensuales ni `columnTotals`, con el toggle en cualquier estado (ON u
+ *    OFF) — ya NO es cierto que "con OFF la matriz es la de FE-S4B"; el
+ *    toggle de sesión (default OFF, FD6-1) solo REVELA/OCULTA las columnas
+ *    extra "Antes/Después de {N}". Con OFF el chip `⊘ {k} filas con montos
+ *    fuera de año` es la señal obligatoria de que falta plata en los meses;
+ *    con ON el pie "Σ meses + fuera de año = total anual" reconcilia exacto
+ *    (Q4=4 — nunca mentirle al banquero). `row.total`/`grandTotal`/buckets
+ *    conservan su semántica anual todo-inclusive (FR-3).
  *    Las columnas van en los dos pivotes propios construidos con
  *    `buildPivot` (Entradas y Salidas fijos); el bloque variable deriva de
  *    causaciones dentro de N (sus fechas `budget_date` son ∈ N por
@@ -74,6 +78,27 @@
  *  "⌁ Costo {N−1}" + tooltip propio en esas cuotas (material intacto);
  *  payloads sin `origin` (o sin ninguna cuota derivada) producen un DOM
  *  idéntico a FE-S6 (AC-S7-FE-8).
+ *
+ * FE-S9-PURCHASES-BODEGA (aditivo, spec `frontend.03_12` §2): (A) bloque
+ *  "Compras del mes (importaciones)" — pivote por CECO × `monthIndexOf
+ *  (budget_date)` de las líneas `purchase` (causación de importación, siempre
+ *  ∈ N por validación BE ⇒ `ooy: false`, sin chip ni columnas extra); entra
+ *  ENTRE Entradas y Pago a proveedores, SOLO si hay compras (§2.4). (B) switch
+ *  de fuente D-4 en la derivación de pagos: `compradorCecos` (CECOs con ≥1
+ *  compra) ⇒ los ingresos de un CECO comprador NO generan cuota cogs (nunca
+ *  doble cuenta) y cada compra genera sus cuotas con los términos de la Línea
+ *  del CECO sobre su `budget_date` (mismo shape FE-S7, ancla = fecha de
+ *  importación, cuota única 100 % sin términos/id_line; `buildPivotFrom` y
+ *  FE-S8 intactos: la cuota fuera de N vive solo en Antes/Después) (§2.5).
+ *  (C) fila informativa "Bodega estimada (cierre)" AL FINAL del Resumen de
+ *  Liquidez: `bodega[m] = bodega[m−1] + compras[m] − costoCausadoPorMes[m]`
+ *  (costo de ventas CAUSADO = Σ ingreso fijo × cogs_pct del month-end,
+ *  INDEPENDIENTE del catálogo de términos; `pct` `null` ⇒ 0; NO toca
+ *  entradas/salidas/neto/acumulado; `—` en Antes/Después; Total = bodega[11];
+ *  negativos en ámbar + nota bajo la tabla; se renderiza SIEMPRE) (§2.6).
+ *  (D) arrastre con `origin:"purchase"` (BE-S8): grupo CECO|origen con orden
+ *  line < cogs < purchase, prefijo "⌁ Compra {N−1}" + tooltip propio; payloads
+ *  sin origen purchase = DOM idéntico a FE-S7/FE-S8 (§2.7).
  */
 import { computed, ref } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
@@ -114,10 +139,11 @@ const carrySourceYear = computed(() =>
 )
 
 /**
- * Toggle de sesión del bloque C (FD6-1, default OCULTAS — Q4=4): con ON, los
- * montos con fecha efectiva fuera de N se RETIRAN de su celda mensual y se
- * muestran en las columnas "Antes/Después de {N}" (reconciliación exacta);
- * con OFF la matriz es literalmente la de FE-S4B hoy (chip aparte). No se
+ * Toggle de sesión del bloque C (FD6-1, default OCULTAS — Q4=4). FE-S8-FLUJO-OY
+ * (FR-1/FR-2): los montos con fecha efectiva fuera de N NUNCA están en las
+ * celdas mensuales; el toggle solo revela/oculta las columnas "Antes/Después
+ * de {N}" (con ON, Σ meses + fuera de año = total anual reconcilia exacto;
+ * con OFF, el chip ⊘ es la señal obligatoria del pendiente). No se
  * persiste: cada visita al escenario arranca colapsada.
  */
 const showOutOfYear = ref(false)
@@ -158,10 +184,12 @@ function outOfYearBucket(value) {
  * fecha efectiva `< 01/01/N` / `> 31/12/N`) y el bloque `beforeTotal`,
  * `afterTotal` y `beforeAfterRowCount` (filas con |before|+|after| > 0 → la
  * `k` del chip). `row.total`/`grandTotal` NO cambian jamás de semántica: el
- * bucket solo hace VISIBLE de dónde viene lo que ya sumaba. Con toggle OFF
- * cada monto sigue poblando su celda mensual exactamente como hoy; con ON los
- * fuera-de-año se retiran de la celda hacia sus columnas (así
- * Σ meses + fuera = total anual es EXACTO, AC-S6-FE-4).
+ * bucket solo hace VISIBLE de dónde viene lo que ya sumaba. FE-S8-FLUJO-OY
+ * (FR-1/C-1): el fuera-de-año NUNCA puebla la celda mensual ni `columnTotals`
+ * (toggle ON u OFF); con ON vive en sus columnas Antes/Después y con OFF solo
+ * lo revelan chip/pie (así Σ meses + fuera = total anual es EXACTO,
+ * AC-S6-FE-4 → AC-OY-1..3). `bucket === 0` incluye fechas indeterminables
+ * (D-OY-6): no se puede afirmar fuera ⇒ vive en el mes.
  * @param {(line: object) => boolean} match Filtro de líneas del bloque.
  * @param {(line: object) => number} monthOf Función de ubicación mensual.
  */
@@ -189,8 +217,10 @@ function buildPivot(match, monthOf) {
     const row = byCeco.get(key)
     const month = monthOf(line)
     const bucket = outOfYearBucket(effectiveDateOf(line))
-    // OFF ⇒ celda igual que hoy; ON ⇒ el fuera-de-año vive solo en su columna.
-    if (month >= 0 && (bucket === 0 || !showOutOfYear.value)) {
+    // FE-S8-FLUJO-OY C-1 (FR-1): el fuera-de-año NUNCA puebla la celda mensual
+    // ni `columnTotals` (toggle ON u OFF); `bucket === 0` además cubre fechas
+    // indeterminables (D-OY-6): no se puede afirmar fuera ⇒ vive en el mes.
+    if (month >= 0 && bucket === 0) {
       row.months[month] += amount
       columnTotals[month] += amount
     }
@@ -220,6 +250,23 @@ const entradasPivot = computed(() =>
 /** Bloque "Salidas — Gastos fijos" (§4.2): gastos fijos por fecha de pago. */
 const fijosPivot = computed(() =>
   buildPivot((line) => line.line_type === 'expense' && line.behavior_type === 'fixed', cfMonth)
+)
+
+/* ─────────── FE-S9-PURCHASES-BODEGA §2.4: bloque "Compras del mes" ─────────── */
+
+/**
+ * Pivote de COMPRAS de importación (§2.4): filas por CECO × MES DE CAUSACIÓN
+ * de la importación (`monthIndexOf(budget_date)` — NO la fecha de pago: una
+ * compra nunca tiene `payment_date`, BR-PUR-01). `bucket` siempre 0 (el BE
+ * valida `budget_date` ∈ N, BR-LINE-04) ⇒ bloque `ooy: false`: sin columnas
+ * Antes/Después ni chip. Solo se renderiza si el escenario tiene compras
+ * (NFR-FE9-3: sin compras, DOM idéntico a FE-S8).
+ */
+const comprasPivot = computed(() =>
+  buildPivot(
+    (line) => line.line_type === 'purchase',
+    (line) => monthIndexOf(line.budget_date)
+  )
 )
 
 /**
@@ -306,10 +353,15 @@ const ENTRADAS_NOTE = 'Montos netos, sin IVA. El pilar de analítica de flujo de
 
 /* ─────────── FE-S7-COGS-PAYFLOW §5: derivación "Pago a proveedores (costo de ventas)" ─────────── */
 
-/** Nota del bloque derivado (literal spec §5): no altera la causación del P&G. */
+/**
+ * Nota del bloque derivado — TEXTO VIGENTE desde FE-S9 §2.5.5 (reemplaza el
+ * literal FE-S7): describe las DOS fuentes de la derivación (compras ×
+ * términos; CECO no comprador: % costo de ventas × ingreso causado). No
+ * altera la causación del P&G.
+ */
 const COGS_PAYMENT_NOTE =
-  'Derivado: % costo de ventas vigente × ingreso causado, por los términos de pago de ' +
-  'la Línea. No altera el P&G (causación).'
+  'Derivado: compras del escenario × términos de pago de la Línea; CECO sin plan ' +
+  'de compras: % costo de ventas vigente × ingreso causado. No altera el P&L (causación).'
 
 /** Nota de degradación §5 (catálogo de términos caído): literal de spec. */
 const COGS_TERMS_UNAVAILABLE_NOTE =
@@ -395,6 +447,34 @@ const cogsIncomeLines = computed(() =>
   lines.value.filter((line) => line.line_type === 'income' && line.behavior_type === 'fixed')
 )
 
+/* ─────────── FE-S9-PURCHASES-BODEGA §2.5: switch de fuente D-4 (VINCULANTE) ─────────── */
+
+/**
+ * Regla de fuente única D-4 (VINCULANTE, backend.02_18 §1): un CECO con ≥1
+ * línea de compra en el escenario es COMPRADOR ⇒ su pago a proveedores se
+ * deriva de sus COMPRAS y NUNCA de su ingreso × cogs_pct (cero doble cuenta).
+ * Una sola pasada O(L) memoizada alimenta AMBOS consumidores (§2.5/§2.6):
+ * `compradorCecos` (skip en la derivación FE-S7) y `purchaseLines` (fuente
+ * nueva de cuotas).
+ */
+const purchaseIndex = computed(() => {
+  const purchaseLinesArr = []
+  const cecoSet = new Set()
+  for (const line of lines.value) {
+    if (line.line_type === 'purchase') {
+      purchaseLinesArr.push(line)
+      cecoSet.add(line.id_cost_center)
+    }
+  }
+  return { lines: purchaseLinesArr, cecos: cecoSet }
+})
+
+/** @see purchaseIndex — CECOs compradores del escenario. */
+const compradorCecos = computed(() => purchaseIndex.value.cecos)
+
+/** @see purchaseIndex — líneas `purchase` crudas (fuente de las cuotas §2.5). */
+const purchaseLines = computed(() => purchaseIndex.value.lines)
+
 /**
  * CECO → `id_line` vía el catálogo `costCenters` cacheado — ESPEJO exacto
  * del helper local de `ExecutivePivotTable` (§3.1): desconocido o catálogo
@@ -435,11 +515,16 @@ function lineIdForCostCenter(idCostCenter) {
 const costPaymentRows = computed(() => {
   if (!budgetPlanningStore.payableTermsLoaded || budgetPlanningStore.payableTermsError) return []
   const incomes = cogsIncomeLines.value
-  if (!incomes.length) return []
+  const purchases = purchaseLines.value
+  if (!incomes.length && !purchases.length) return []
   const rates = budgetPlanningStore.lineCostRates
   const termsByLine = budgetPlanningStore.payableTermsByLine
+  const compradores = compradorCecos.value
   const rows = []
   for (const line of incomes) {
+    // FE-S9 §2.5-1 (D-4): CECO COMPRADOR ⇒ su ingreso NO genera cuota cogs
+    // (el proveedor ya se paga por las compras de arriba — nunca doble cuenta).
+    if (compradores.has(line.id_cost_center)) continue
     // AC-S7-FE-2: ingreso editado a 0 (o tasa 0) ⇒ costo 0 ⇒ NI UNA cuota ⇒
     // el bloque DESAPARECE (`rows.length === 0`). El monto nulo jamás se
     // pinta como fila fantasma (las sumas no cambian: aportar 0 es aportar nada).
@@ -468,6 +553,36 @@ const costPaymentRows = computed(() => {
       })
     }
   }
+  // FE-S9 §2.5-2: CUOTAS DE COMPRA — mismo shape `{ idCostCenter, amount,
+  // effectiveDate }` (D-FE9-4: `buildPivotFrom` y FE-S8 sin cambios). Ancla =
+  // `budget_date` de la importación; término con `payment_days` sobre esa
+  // ancla (negativo ⇒ antes). SIN términos (o CECO sin `id_line`) ⇒ cuota
+  // única 100 % en la ancla (D-S7-4 extendido). Mismos guards FE-S7: monto no
+  // finito o 0 ⇒ sin cuota; `payment_pct` basura ⇒ skip del término;
+  // `addDaysISO` `null` ⇒ la cuota queda anclada (el monto NUNCA se pierde).
+  for (const line of purchases) {
+    const amount = Number(line.projected_amount)
+    if (!Number.isFinite(amount) || amount === 0) continue
+    const lineId = lineIdForCostCenter(line.id_cost_center)
+    const terms = lineId === null ? undefined : termsByLine.get(lineId)
+    if (terms && terms.length) {
+      for (const term of terms) {
+        const paymentPct = Number(term.payment_pct)
+        if (!Number.isFinite(paymentPct)) continue
+        rows.push({
+          idCostCenter: line.id_cost_center,
+          amount: amount * paymentPct,
+          effectiveDate: addDaysISO(line.budget_date, Number(term.payment_days)) ?? line.budget_date
+        })
+      }
+    } else {
+      rows.push({
+        idCostCenter: line.id_cost_center,
+        amount,
+        effectiveDate: line.budget_date
+      })
+    }
+  }
   return rows
 })
 
@@ -484,8 +599,18 @@ const costPaymentsActive = computed(() => costPaymentRows.value.length > 0)
  */
 const costTermsDegraded = computed(() => {
   if (!budgetPlanningStore.payableTermsError) return false
+  // FE-S9 §2.5-3: "produciría filas" ahora cubre AMBAS fuentes — COMPRAS
+  // (ninguna necesita tasa de costo: cualquier compra finita ≠ 0 produce
+  // cuota, y sin catálogo tampoco puede derivarse) e INGRESOS NO COMPRADORES
+  // (regla FE-S7 intacta; los compradores ya no producirían nada).
   const rates = budgetPlanningStore.lineCostRates
+  const compradores = compradorCecos.value
+  for (const line of purchaseLines.value) {
+    const amount = Number(line.projected_amount)
+    if (Number.isFinite(amount) && amount !== 0) return true
+  }
   return cogsIncomeLines.value.some((line) => {
+    if (compradores.has(line.id_cost_center)) return false
     // MISMOS filtros de "produciría filas" que `costPaymentRows` (§5).
     const amount = Number(line.projected_amount)
     if (!Number.isFinite(amount) || amount === 0) return false
@@ -527,7 +652,9 @@ function buildPivotFrom(rows) {
     const row = byCeco.get(key)
     const month = monthIndexOf(item.effectiveDate)
     const bucket = outOfYearBucket(item.effectiveDate)
-    if (month >= 0 && (bucket === 0 || !showOutOfYear.value)) {
+    // FE-S8-FLUJO-OY C-1 (AC-OY-9): MISMA regla que `buildPivot` — la cuota
+    // con fecha de pago fuera de N vive solo en su columna Antes/Después.
+    if (month >= 0 && bucket === 0) {
       row.months[month] += amount
       columnTotals[month] += amount
     }
@@ -555,7 +682,18 @@ const costPaymentsPivot = computed(() => {
   return buildPivotFrom(costPaymentRows.value)
 })
 
-/** Bloques del template en orden fijo (§5.2: 1 Entradas, 2 fijos, 3 variables condicional; FE-S7: 4 pago a proveedores condicional). */
+/** Nota del bloque "Compras del mes (importaciones)" (literal §2.4): destino del pago. */
+const COMPRAS_NOTE =
+  'Valor de la mercancía importada por fecha de importación. El pago al proveedor se muestra, ' +
+  'por términos de la Línea, en “Salidas — Pago a proveedores”.'
+
+/**
+ * Bloques del template. Orden vigente (FE-S9 §2.4): Entradas → [Compras del
+ * mes] → [Pago a proveedores] → Gastos fijos → Gastos variables — el orden
+ * relativo FE-S4B/FE-S7 se conserva; el bloque nuevo entra JUSTO antes de
+ * Pago a proveedores y SOLO si el escenario tiene compras (NFR-FE9-3: sin
+ * compras el DOM es idéntico a FE-S8).
+ */
 const blocks = computed(() => {
   const list = [
     {
@@ -566,8 +704,26 @@ const blocks = computed(() => {
       note: ENTRADAS_NOTE,
       // §6.2: pivotes PROPIOS con fechas de pago que pueden caer fuera de N.
       ooy: true
-    },
+    }
   ]
+  // FE-S9 §2.4: causación de importación ∈ N ⇒ `ooy: false` (sin columnas
+  // extra ni chip): el bucket de una compra es 0 por construcción.
+  if (comprasPivot.value.rows.length) {
+    list.push({
+      title: 'Compras del mes (importaciones)',
+      emptyName: 'compras',
+      pivot: comprasPivot.value,
+      aria: 'Compras de importación del escenario por centro de costo y mes de importación',
+      note: COMPRAS_NOTE,
+      ooy: false
+    })
+  }
+  // FE-S7 §5 (orden intacto desde FE-S8): después de Entradas (y ahora de
+  // Compras) y antes de fijos; solo si la derivación produjo cuotas
+  // (empty ⇒ el bloque no se renderiza — DOM idéntico a FE-S4B, AC-S7-FE-8).
+  // `ooy: true`: los términos negativos pueden anclar antes del 01/01 y los
+  // positivos después del 31/12 (AC-S7-FE-4) — buckets propios; regla
+  // FE-S8/AC-OY-9 vigente: cuota ∈ 2026 ⇒ vive solo en Antes/Después.
   if (costPaymentsPivot.value) {
     list.push({
       title: 'Salidas — Pago a proveedores (costo de ventas)',
@@ -578,7 +734,7 @@ const blocks = computed(() => {
       ooy: true
     })
   }
- 
+
   if (fijosPivot.value) {
     list.push({
       title: 'Salidas — Gastos fijos',
@@ -600,10 +756,6 @@ const blocks = computed(() => {
       ooy: false
     })
   }
-  // FE-S7 §5: DESPUÉS de variables; solo si la derivación produjo cuotas
-  // (empty ⇒ el bloque no se renderiza — DOM idéntico a FE-S4B, AC-S7-FE-8).
-  // `ooy: true`: los términos negativos pueden anclar antes del 01/01 y los
-  // positivos después del 31/12 (AC-S7-FE-4) — buckets propios.
   return list
 })
 
@@ -641,8 +793,21 @@ const carryActive = computed(
  * producen exactamente los mismos grupos/orden/DOM que en FE-S6 (AC-S7-FE-8:
  * el origen único `'line'` conserva el orden de inserción estable). Una
  * pasada O(L_carry) memoizada.
+ *
+ * FE-S9 §2.7: BE-S8 añadió el tercer origen `'purchase'` (cuota de compra
+ * derivada server-side, `id_budget_line: null`, `line_type:"expense"`) — el
+ * FIX colapsa a `'line'` solo lo que NO es `cogs`/`purchase`; grupos y orden
+ * quedan line < cogs < purchase. Payloads sin `'purchase'` (los anteriores a
+ * BE-S8) producen un DOM idéntico a FE-S7/FE-S8 (AC-FE9-5).
  * @param {(line: object) => boolean} match
  */
+/**
+ * Orden de desempate por origen dentro del MISMO CECO (FE-S9 §2.7):
+ * `line` < `cogs` < `purchase` — extensión del binario FE-S7 (line<cogs),
+ * que para payloads sin compras da exactamente el mismo resultado numérico.
+ */
+const CARRY_ORIGIN_RANK = { line: 0, cogs: 1, purchase: 2 }
+
 function buildCarryPivot(match) {
   if (!carryActive.value) return null
   const byCeco = new Map()
@@ -654,7 +819,11 @@ function buildCarryPivot(match) {
     const amount = Number(line.projected_amount)
     if (!Number.isFinite(amount)) continue
 
-    const origin = line.origin === 'cogs' ? 'cogs' : 'line'
+    // FE-S9 §2.7 (FIX obligatorio): normalizar a 'line' | 'cogs' | 'purchase'
+    // — antes TODO lo no-cogs colapsaba a 'line' y una cuota 'purchase' del
+    // BE-S8 se habría disfrazado de material. Payloads viejos (sin `origin` o
+    // con valores desconocidos) siguen cayendo a 'line': DOM idéntico.
+    const origin = ['cogs', 'purchase'].includes(line.origin) ? line.origin : 'line'
     const key = `${line.id_cost_center}|${origin}`
     if (!byCeco.has(key)) {
       byCeco.set(key, {
@@ -676,12 +845,13 @@ function buildCarryPivot(match) {
     grandTotal += amount
   }
 
-  // Orden etiqueta-asc (igual que FE-S6) + desempate material-antes-que-cogs
-  // por el MISMO criterio de orden BR-CO-10 del server (estable garantizado).
+  // Orden etiqueta-asc (igual que FE-S6) + desempate por origen
+  // line < cogs < purchase (FE-S9 §2.7 extiende el BR-CO-10 del server con
+  // el mismo criterio — estable garantizado).
   const rows = [...byCeco.values()].sort(
     (a, b) =>
       a.label.localeCompare(b.label, 'es') ||
-      (a.origin === b.origin ? 0 : a.origin === 'line' ? -1 : 1)
+      CARRY_ORIGIN_RANK[a.origin] - CARRY_ORIGIN_RANK[b.origin]
   )
   return { rows, columnTotals, grandTotal }
 }
@@ -725,7 +895,7 @@ const carryRowTitle = computed(() => {
   return `Línea del escenario ${name} (${year}) — no forma parte de la causación de este escenario.`
 })
 
-/** Año real N−1 de la fuente para el prefijo "⌁ Costo {N−1}" (FE-S7 §5; `source` manda). */
+/** Año real N−1 de la fuente para los prefijos "⌁ Costo {N−1}" / "⌁ Compra {N−1}" (FE-S7 §5 / FE-S9 §2.7; `source` manda). */
 const carryCogsYear = computed(() => {
   const year = carryover.value.source?.budget_year ?? carrySourceYear.value
   return year === null ? 'año anterior' : year
@@ -737,6 +907,23 @@ const carryCogsRowTitle = computed(() => {
   const name = source?.budget_name ?? 'año anterior'
   return `Cuota de costo derivada del escenario ${name} (${carryCogsYear.value}); no es una línea del escenario.`
 })
+
+/**
+ * Tooltip literal §2.7 (frontend.03_12) para las filas `origin:"purchase"`
+ * — comparte el resolvedor de año/nombre de la fuente con `carryCogsRowTitle`.
+ */
+const carryPurchaseRowTitle = computed(() => {
+  const source = carryover.value.source
+  const name = source?.budget_name ?? 'año anterior'
+  return `Cuota de compra derivada del escenario ${name} (${carryCogsYear.value}); no es una línea del escenario.`
+})
+
+/** Tooltip por origen de fila de arrastre (material | cogs | purchase). */
+const carryTitlesByOrigin = computed(() => ({
+  line: carryRowTitle.value,
+  cogs: carryCogsRowTitle.value,
+  purchase: carryPurchaseRowTitle.value
+}))
 
 /* ------------------- Fuera de año: control global (FE-S6 §6.2) ------------------- */
 
@@ -754,10 +941,38 @@ const anyOutOfYear = computed(
 )
 
 /**
+ * Columnas "fuera de año" del resumen de liquidez (FE-S8-FLUJO-OY C-2/FR-4):
+ * series `[antes, después]` derivadas SOLO de los totales ya calculados de los
+ * pivotes — cero re-recorridos de `budget_lines` (NFR-OY-1) y recálculo vivo
+ * desde la misma caché reactiva (NFR-OY-2). Visibles solo con `anyOutOfYear`
+ * + toggle ON (mismo lenguaje visual que los bloques). Entradas = buckets del
+ * pivote de ingresos propios; Salidas = fijos + pago a proveedores (arrastre
+ * y variables aportan 0 a los buckets por construcción — BR-CO-03/BR-LINE-04,
+ * no se recorren); Neto = entradas − salidas por columna.
+ */
+const ooyColumns = computed(() => {
+  const entradas = [entradasPivot.value.beforeTotal, entradasPivot.value.afterTotal]
+  const costes = costPaymentsPivot.value
+  const salidas = [
+    fijosPivot.value.beforeTotal + (costes ? costes.beforeTotal : 0),
+    fijosPivot.value.afterTotal + (costes ? costes.afterTotal : 0)
+  ]
+  return {
+    visible: anyOutOfYear.value && showOutOfYear.value,
+    entradas,
+    salidas,
+    neto: [entradas[0] - salidas[0], entradas[1] - salidas[1]]
+  }
+})
+
+/**
  * Resumen de liquidez (D-6, §4.5): construido SOLO de los
  * `columnTotals`/`grandTotal` de los bloques (ningún re-recorrido de
- * líneas). Neto = entradas − salidas por mes, Total = Σ de los 12 netos;
- * Acumulado = corrida desde Ene, Total = valor de diciembre (≡ neto anual).
+ * líneas). Neto = entradas − salidas por mes. FE-S8-FLUJO-OY C-3/FR-4:
+ * `netoTotal` = entradasTotal − salidasTotal (neto ANUAL: reconcilia con las
+ * filas aun con fuera-de-año; sin ellos coincide con Σ de los 12 netos —
+ * R-OY-2). Acumulado = corrida desde Ene, Total = valor de diciembre (solo
+ * meses ∈ N: con fuera-de-año ya NO equivale al neto anual).
  *
  * FE-S6 §6.1: las columnas mensuales de Entradas/Salidas +=
  * `cobros/pagosArrastre.columnTotals` ANTES de derivar neto/acumulado (el
@@ -768,9 +983,9 @@ const anyOutOfYear = computed(
  *
  * FE-S7 §5: el MISMO punto de integración para el bloque derivado —
  * `salidas[m] += costPaymentsPivot.columnTotals[m]` (y el total anual +=
- * `grandTotal`; con toggle ON, la columna de un mes excluye los buckets
- * antes/después igual que Entradas/Salidas propios: `row.total`/anual los
- * conserva, AC-S7-FE-4 "el total anual lo incluye"). Sin filas derivadas el
+ * `grandTotal`; FE-S8 C-1: la columna de un mes SIEMPRE excluye los buckets
+ * antes/después — toggle ON u OFF: `row.total`/anual los conserva,
+ * AC-S7-FE-4/AC-OY-9 "el total anual lo incluye"). Sin filas derivadas el
  * sumando es 0: resumen byte-idéntico a FE-S4B/FE-S6 (AC-S7-FE-8). El
  * acumulado sigue arrancando en 0 (ningún saldo nuevo arriba de la corrida).
  */
@@ -804,7 +1019,10 @@ const resumen = computed(() => {
     (variablesPivot.value ? variablesPivot.value.grandTotal : 0) +
     (pagos ? pagos.grandTotal : 0) +
     (costes ? costes.grandTotal : 0)
-  const netoTotal = neto.reduce((sum, value) => sum + value, 0)
+  // FE-S8 C-3 (FR-4): neto ANUAL = entradas − salidas (ya no Σ de los 12
+  // netos: con fuera-de-año esos importes no viven en ningún mes pero sí en
+  // los totales; sin fuera-de-año el valor es idéntico — R-OY-2).
+  const netoTotal = entradasTotal - salidasTotal
   const acumuladoTotal = acumulado[11]
 
   return {
@@ -819,14 +1037,96 @@ const resumen = computed(() => {
   }
 })
 
+/**
+ * ─────────── FE-S9-PURCHASES-BODEGA §2.6: fila "Bodega estimada (cierre)" ───────────
+ * Derivación PURA de presentación (informativa): NUNCA toca entradas/salidas/
+ * neto/acumulado — el resumen de caja cuadra igual. Se construye SOLO de
+ * totales ya memoizados + una pasada de `cogsIncomeLines` (NFR-FE9-1).
+ */
+
+/** Compras causadas por mes (`columnTotals` del bloque §2.4; ceros si no hay). */
+const comprasPorMes = computed(() => comprasPivot.value.columnTotals)
+
+/**
+ * Costo de ventas CAUSADO por mes de causación: Σ `monto × pct / 100` sobre
+ * los INGRESOS FIJOS propios con `pct = resolveCogsPctByLine(lineCostRates,
+ * id_line(CECO), monthEnd(budget_date))` — MISMO resolvedor compartido de la
+ * Ejecutiva/FE-S7 (cero divergencia). `pct` `null` ⇒ contribuye 0.
+ * INDEPENDIENTE de `payableTermsByLine`: la bodega funciona aunque el
+ * catálogo de términos esté caído (§2.6). Incluye TAMBIÉN los ingresos de
+ * CECOs compradores (es causación P&L, no caja: el switch D-4 solo afecta a
+ * las cuotas de pago).
+ */
+const costoCausadoPorMes = computed(() => {
+  const out = Array.from({ length: 12 }, () => 0)
+  const rates = budgetPlanningStore.lineCostRates
+  for (const line of cogsIncomeLines.value) {
+    const amount = Number(line.projected_amount)
+    if (!Number.isFinite(amount) || amount === 0) continue
+    const month = monthIndexOf(line.budget_date)
+    if (month < 0) continue
+    const pct = resolveCogsPctByLine(
+      rates,
+      lineIdForCostCenter(line.id_cost_center),
+      monthEndOf(line.budget_date)
+    )
+    if (pct === null || !Number.isFinite(pct)) continue
+    out[month] += (amount * pct) / 100
+  }
+  return out
+})
+
+/** `bodega[m] = bodega[m−1] + compras[m] − costoCausado[m]`, `bodega[−1] = 0` (D-FE9-3). */
+const bodegaMes = computed(() => {
+  const compras = comprasPorMes.value
+  const costos = costoCausadoPorMes.value
+  const out = []
+  let acc = 0
+  for (let month = 0; month < 12; month += 1) {
+    acc += compras[month] - costos[month]
+    out.push(acc)
+  }
+  return out
+})
+
+/** ¿Algún mes negativo? ⇒ nota literal bajo la tabla del resumen (§2.6). */
+const bodegaNegative = computed(() => bodegaMes.value.some((value) => value < 0))
+
+/** `totalTitle` literal §2.6 (cabecera de la fila en el Resumen). */
+const BODEGA_TOTAL_TITLE =
+  'Σ compras − Σ costo de ventas causado, acumulado mes a mes (arranca en 0 en enero). ' +
+  'Estimación: el costo de lo vendido se valúa a cogs_pct; no es efectivo y no suma al neto.'
+
+/** Nota literal §2.6 (solo si algún mes de bodega < 0). */
+const BODEGA_NEGATIVE_NOTE =
+  'La bodega estimada quedó negativa: se está vendiendo costo de períodos previos al ' +
+  'escenario o la tasa de costo está sub-calibrada.'
+
 /** `0` → '·' (patrón Ejecutiva); negativos con signo estándar de `formatMoney`. */
 function resumenCell(value) {
   return value === 0 ? '·' : formatMoney(value)
 }
 
-/** Filas del resumen de liquidez (§4.5). `signed`: neto/acumulado → rojos si < 0. */
+/**
+ * Filas del resumen de liquidez (§4.5). `signed`: neto/acumulado → rojos si < 0.
+ * FE-S8 C-4: cada fila gana `ooy` = celdas `[Antes, Después]` derivadas de
+ * `ooyColumns` (Σ Entradas/Σ Salidas: sus buckets; Flujo neto: el neto del
+ * bucket con `cf-negative` si < 0, igual que sus hermanos; Flujo acumulado:
+ * literal `—` con `title` — la corrida solo cubre Ene–Dic de N).
+ */
 const resumenRows = computed(() => {
   const r = resumen.value
+  const ooy = ooyColumns.value
+  const moneyCell = (value) => (value === 0 ? '·' : formatMoney(value))
+  const unsignedCells = (series) =>
+    series.map((value) => ({ text: moneyCell(value), negative: false, title: undefined }))
+  const signedCells = (series) =>
+    series.map((value) => ({ text: moneyCell(value), negative: value < 0, title: undefined }))
+  const dashCell = {
+    text: '—',
+    negative: false,
+    title: `La corrida acumulada cubre solo los meses Ene–Dic de ${scenarioYear.value}.`
+  }
   return [
     {
       label: 'Σ Entradas',
@@ -835,7 +1135,8 @@ const resumenRows = computed(() => {
       negativeTotal: false,
       signed: false,
       strong: false,
-      totalTitle: undefined
+      totalTitle: undefined,
+      ooy: unsignedCells(ooy.entradas)
     },
     {
       label: 'Σ Salidas',
@@ -844,7 +1145,8 @@ const resumenRows = computed(() => {
       negativeTotal: false,
       signed: false,
       strong: false,
-      totalTitle: undefined
+      totalTitle: undefined,
+      ooy: unsignedCells(ooy.salidas)
     },
     {
       label: 'Flujo neto',
@@ -853,7 +1155,9 @@ const resumenRows = computed(() => {
       negativeTotal: r.netoTotal < 0,
       signed: true,
       strong: true,
-      totalTitle: 'Σ de los 12 flujos netos mensuales.'
+      totalTitle:
+        'Flujo neto anual: Σ entradas − Σ salidas. Incluye los montos con fecha de pago fuera del año.',
+      ooy: signedCells(ooy.neto)
     },
     {
       label: 'Flujo acumulado',
@@ -863,7 +1167,38 @@ const resumenRows = computed(() => {
       signed: true,
       strong: true,
       totalTitle:
-        'Corrida acumulada desde enero; el total corresponde al valor de diciembre (equivale al flujo neto anual).'
+        'Corrida acumulada desde enero; el total corresponde al valor de diciembre. Solo cubre los meses del año del escenario: con montos fuera de año NO equivale al flujo neto anual (ese es el Total de “Flujo neto”).',
+      ooy: [dashCell, { ...dashCell }]
+    },
+    // FE-S9 §2.6: fila INFORMATIVA al final (se renderiza SIEMPRE — aun sin
+    // compras, bodega = −Σ costos causados; única diferencia DOM admitida
+    // frente a FE-S8 en un escenario sin compras, NFR-FE9-3). `bodega: true`
+    // enruta los negativos al ámbar `.cf-bodega-negative` en el template, NO
+    // al rojo de caja `cf-negative`; `signed/strong: false`: no entra en
+    // entradas/salidas/neto/acumulado. Antes/Después: '—' (es por mes ∈ N).
+    {
+      label: 'Bodega estimada (cierre)',
+      months: bodegaMes.value,
+      totalText: resumenCell(bodegaMes.value[11]),
+      negativeTotal: bodegaMes.value[11] < 0,
+      signed: false,
+      strong: false,
+      bodega: true,
+      labelTitle:
+        'Fila informativa: no entra en entradas, salidas, neto ni acumulado del resumen de caja.',
+      totalTitle: BODEGA_TOTAL_TITLE,
+      ooy: [
+        {
+          text: '—',
+          negative: false,
+          title: `La bodega estimada se calcula solo por mes ∈ ${scenarioYear.value}; los montos fuera de año no aplican.`
+        },
+        {
+          text: '—',
+          negative: false,
+          title: `La bodega estimada se calcula solo por mes ∈ ${scenarioYear.value}; los montos fuera de año no aplican.`
+        }
+      ]
     }
   ]
 })
@@ -880,7 +1215,8 @@ function negativeCell(row, value) {
       Matriz de <strong>solo lectura</strong> generada desde las líneas del escenario
       {{ scenario.budget_year }}. Los importes se ajustan en “Editor de Celdas”. El mes se asigna
       por <strong>fecha de pago</strong> (no por causación), por lo que puede diferir de la “Vista
-      Ejecutiva”.
+      Ejecutiva”. Los montos con fecha de pago fuera del año {{ scenario.budget_year }} no aparecen
+      en las columnas Ene–Dic; use “Mostrar fuera de año” para verlos.
     </p>
 
     <!-- FE-S6 §6.2: toggle de sesión "fuera de año" junto a la cabecera de la
@@ -1016,13 +1352,18 @@ function negativeCell(row, value) {
                   <th
                     class="cf-row-label cf-carry-label"
                     scope="row"
-                    :title="row.origin === 'cogs' ? carryCogsRowTitle : carryRowTitle"
+                    :title="carryTitlesByOrigin[row.origin]"
                   >
                     <!-- FE-S7 §5: la fila MATERIAL se pinta byte-idéntica a
                          FE-S6 (`← label`); la cuota derivada `origin:"cogs"`
-                         gana el prefijo "⌁ Costo {N−1}" y su tooltip propio. -->
+                         gana el prefijo "⌁ Costo {N−1}" y su tooltip propio.
+                         FE-S9 §2.7: la cuota `origin:"purchase"` (BE-S8)
+                         gana "⌁ Compra {N−1}" + tooltip de compra. -->
                     <template v-if="row.origin === 'cogs'"
                       >⌁ Costo {{ carryCogsYear }} · {{ row.label }}</template
+                    >
+                    <template v-else-if="row.origin === 'purchase'"
+                      >⌁ Compra {{ carryCogsYear }} · {{ row.label }}</template
                     >
                     <template v-else>← {{ row.label }}</template>
                   </th>
@@ -1057,25 +1398,25 @@ function negativeCell(row, value) {
         <h4 class="cf-block-title">Resumen de liquidez</h4>
         <!-- Nota textual §6.1: el resumen cuadra CON el arrastre. La segunda es
              el pie canónico §6.2 aplicado al resumen (toggle ON con montos
-             fuera de año retirados de los meses): mismo texto, cero invención.
+             fuera de año en sus columnas extra): mismo texto, cero invención.
              FE-S7 §5: la nota "incluye pago a proveedores" convive con la del
-             arrastre (AC-S7-FE-6); la cadena original queda SEMÁNTICAMENTE
-             INTACTA cuando el derivado está vacío (AC-S7-FE-8). -->
+             arrastre (AC-S7-FE-6). FE-S8 C-5 (FR-4): el pie se muestra con
+             `anyOutOfYear && showOutOfYear` SIN el guard de arrastre/costo —
+             sigue siendo exacto: sus montos ya viven en entradas/salidas y
+             en sus buckets. -->
         <p v-if="carryActive" class="cf-note cf-block-note">
           El resumen incluye arrastre {{ carrySourceYear }}.
         </p>
         <p v-if="costPaymentsActive" class="cf-note cf-block-note">
           El resumen incluye pago a proveedores (costo de ventas).
         </p>
-        <p
-          v-if="!carryActive && !costPaymentsActive && showOutOfYear && anyOutOfYear"
-          class="cf-note cf-block-note"
-        >
+        <p v-if="anyOutOfYear && showOutOfYear" class="cf-note cf-block-note">
           Σ meses + fuera de año = total anual
         </p>
         <div class="cf-scroll">
           <table
             class="cf-table"
+            :class="{ 'cf-table-ooy': ooyColumns.visible }"
             aria-label="Resumen de liquidez mensual del escenario: entradas, salidas, flujo neto y flujo acumulado"
           >
             <thead>
@@ -1083,6 +1424,22 @@ function negativeCell(row, value) {
                 <th class="cf-col-ceco">Concepto</th>
                 <th v-for="month in MONTH_LABELS" :key="month" class="cf-col-month">{{ month }}</th>
                 <th class="cf-col-total">Total</th>
+                <!-- FE-S8 C-4 (FR-4/D-OY-4): columnas extra solo con toggle ON
+                     y montos fuera de año — mismo patrón `cf-col-ooy` bloques. -->
+                <template v-if="ooyColumns.visible">
+                  <th
+                    class="cf-col-ooy"
+                    :title="`Montos con fecha de pago anterior al 01/01/${scenarioYear}. No forman parte de los meses ni del acumulado Ene–Dic.`"
+                  >
+                    Antes de {{ scenarioYear }}
+                  </th>
+                  <th
+                    class="cf-col-ooy"
+                    :title="`Montos con fecha de pago posterior al 31/12/${scenarioYear}. No forman parte de los meses ni del acumulado Ene–Dic.`"
+                  >
+                    Después de {{ scenarioYear }}
+                  </th>
+                </template>
               </tr>
             </thead>
             <tbody>
@@ -1091,31 +1448,56 @@ function negativeCell(row, value) {
                 :key="row.label"
                 :class="{ 'cf-row-strong': row.strong }"
               >
-                <th class="cf-row-label" scope="row">{{ row.label }}</th>
+                <th class="cf-row-label" scope="row" :title="row.labelTitle">
+                  {{ row.label }}
+                </th>
                 <td
                   v-for="(value, index) in row.months"
                   :key="index"
                   class="cf-cell-money"
-                  :class="{ 'cf-negative': negativeCell(row, value) }"
+                  :class="{
+                    'cf-negative': negativeCell(row, value),
+                    'cf-bodega-negative': row.bodega && value < 0
+                  }"
                 >
                   {{ resumenCell(value) }}
                 </td>
                 <td
                   class="cf-cell-money cf-cell-total"
-                  :class="{ 'cf-negative': row.negativeTotal }"
+                  :class="{
+                    'cf-negative': row.negativeTotal && !row.bodega,
+                    'cf-bodega-negative': row.bodega && row.negativeTotal
+                  }"
                   :title="row.totalTitle"
                 >
                   {{ row.totalText }}
                 </td>
+                <!-- FE-S8 C-4: buckets [Antes, Después] de cada fila
+                     (acumulado: `—` con `title`, §FR-4). -->
+                <template v-if="ooyColumns.visible">
+                  <td
+                    v-for="(cell, index) in row.ooy"
+                    :key="index"
+                    class="cf-cell-money cf-cell-ooy"
+                    :class="{ 'cf-negative': cell.negative }"
+                    :title="cell.title"
+                  >
+                    {{ cell.text }}
+                  </td>
+                </template>
               </tr>
             </tbody>
           </table>
         </div>
+        <!-- FE-S9 §2.6: nota bajo la tabla SOLO si algún mes de bodega < 0
+             (mismo lenguaje ámbar de la degradación — no es error rojo). -->
+        <p v-if="bodegaNegative" class="cf-warn" role="status">{{ BODEGA_NEGATIVE_NOTE }}</p>
         <!-- FE-S7 §5: aviso ámbar de degradación (CATÁLOGO DE TÉRMINOS CAÍDO
-             con ingresos que producirían filas): el bloque derivado NO se
-             renderiza y el resto del Flujo queda intacto (AC-S7-FE-7). Bajo
-             el resumen, junto al pie del §6.2 — el patrón `pv-warn` de
-             Ejecutiva es información, no error rojo. -->
+             con filas que se producirían — FE-S9: compras o ingresos NO
+             compradores): el bloque derivado NO se renderiza y el resto del
+             Flujo queda intacto (AC-S7-FE-7). Bajo el resumen, junto al pie
+             del §6.2 — el patrón `pv-warn` de Ejecutiva es información, no
+             error rojo. -->
         <p v-if="costTermsDegraded" class="cf-warn" role="status">
           {{ COGS_TERMS_UNAVAILABLE_NOTE }}
         </p>
@@ -1378,5 +1760,17 @@ function negativeCell(row, value) {
   background-color: rgba(245, 158, 11, 0.1);
   font-size: 0.78rem;
   color: var(--color-text-secondary, #555555);
+}
+
+/* ---------- FE-S9 §2.6: negativos de "Bodega estimada" en ámbar ---------- */
+
+/* NO es rojo de caja (`cf-negative`): la bodega es una estimación
+ * informativa de inventario; la familia ámbar es la del chip ⊘/`cf-warn`. */
+.cf-bodega-negative {
+  color: #b7791f;
+}
+
+:root[data-theme='dark'] .cf-bodega-negative {
+  color: #f6e05e;
 }
 </style>

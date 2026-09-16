@@ -112,10 +112,11 @@ export const BEHAVIOR_LABELS = {
   variable_receivables: 'Variable por Recaudo'
 }
 
-/** Etiquetas legibles de `line_type`. */
+/** Etiquetas legibles de `line_type` (FE-S9 §2.1: += `purchase`). */
 export const LINE_TYPE_LABELS = {
   income: 'Ingreso',
-  expense: 'Gasto'
+  expense: 'Gasto',
+  purchase: 'Compra'
 }
 
 /**

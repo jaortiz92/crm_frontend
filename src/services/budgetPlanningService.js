@@ -65,6 +65,9 @@ const MULTIPART_CONFIG = {
 
 /**
  * Resultado 201 de `POST /budget/planning/upload` (`PlanningUploadResult`).
+ * FE-S9/BE-S8 §5.2: claves ADITIVAS `lines_purchase`/`total_purchase` con
+ * default 0 / 0.0 en el schema → respuestas de backends viejos también son
+ * válidas (el modal las trata como opcionales).
  * @typedef {Object} PlanningUploadResult
  * @property {number} id_budget
  * @property {string} scenario_name
@@ -74,6 +77,8 @@ const MULTIPART_CONFIG = {
  * @property {number} total_income
  * @property {number} total_expense_fixed
  * @property {number} payment_rules_expansions
+ * @property {number} [lines_purchase]
+ * @property {number} [total_purchase]
  */
 
 export const budgetPlanningService = {
@@ -99,9 +104,10 @@ export const budgetPlanningService = {
   },
 
   /**
-   * Crea el Presupuesto Base subiendo los DOS archivos SIIGO en una sola
-   * petición multipart (ASM-10 vinculante: `file_ingresos` requerido,
-   * `file_gastos` opcional; jamás una matriz importable).
+   * Crea el Presupuesto Base subiendo los Excel SIIGO en una sola petición
+   * multipart (ASM-10 vinculante: `file_ingresos` requerido, `file_gastos`
+   * opcional y —desde FE-S9/BE-S8 §5.3— `file_compras` opcional como TERCER
+   * archivo "Plan de Importaciones"; jamás una matriz importable).
    * @param {Object} fields
    * @param {string} fields.scenarioName - ≤120.
    * @param {number|string} fields.budgetYear - 2000–2100 (422 fuera de rango).
@@ -109,6 +115,8 @@ export const budgetPlanningService = {
    * @param {number|string|null} [fields.idDepartment=null] - opcional.
    * @param {File} fields.fileIngresos - .xlsx requerido.
    * @param {File|null} [fields.fileGastos=null] - .xlsx opcional.
+   * @param {File|null} [fields.fileCompras=null] - .xlsx opcional (FE-S9 §2.8:
+   *   hoja "Importaciones"; SOLO se anexa `file_compras` si llega un File).
    * @returns {Promise<import('axios').AxiosResponse<PlanningUploadResult>>}
    */
   uploadScenario({
@@ -117,7 +125,8 @@ export const budgetPlanningService = {
     budgetPeriod = 'ANUAL',
     idDepartment = null,
     fileIngresos,
-    fileGastos = null
+    fileGastos = null,
+    fileCompras = null
   }) {
     const formData = new FormData()
     formData.append('scenario_name', String(scenarioName).trim())
@@ -129,6 +138,11 @@ export const budgetPlanningService = {
     formData.append('file_ingresos', fileIngresos)
     if (fileGastos instanceof File) {
       formData.append('file_gastos', fileGastos)
+    }
+    // FE-S9 §2.8: parámetro opcional al final de la firma (no rompe llamantes
+    // viejos); el campo multipart NUNCA viaja si no hay archivo.
+    if (fileCompras instanceof File) {
+      formData.append('file_compras', fileCompras)
     }
     return axiosInstance.post('/budget/planning/upload', formData, MULTIPART_CONFIG)
   },

@@ -197,6 +197,8 @@ Mismo lenguaje visual que `ExecutivePivotTable` pero **CSS scoped propio** (pref
 
 ## 10. Riesgos y divergencias conocidas
 
+> ⚠️ Modificado por FE-S8-FLUJO-OY (`frontend.03_11`): los montos fuera de año nunca poblan celdas mensuales; el toggle solo controla las columnas Antes/Después.
+
 * **R-1 (bajo, aceptado):** ingresos por `payment_date` diverge de `project_cash_flow` (motor: `budget_date`); puede leerse distinto que el dashboard Pilar 2. Mitigación: nota §5.3 y esta decisión registrada. Si gerencia pide conciliación exacta, se mueve el ingreso a `budget_date` en 1 línea (candidato PQ-VF-1).
 * **R-2 (bajo):** el cambio de tab default puede sorprender a usuarios que aterrizaban directo al editor. Rollback: una línea (`ref('editor')`).
 * **R-3 (informativo):** el "Σ Salidas" del resumen mezcla criterios de ubicación (fijos por pago, variables por causación) — es deliberado (§4.2) y coincide con cómo el motor construye `outflows_by_month`.

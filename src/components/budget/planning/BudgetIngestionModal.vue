@@ -9,6 +9,15 @@
  * ('planning-ingresos' / 'planning-gastos'). NO existe matriz importable: la
  * matriz Ene–Dic es presentación de solo lectura en el editor (§8.2).
  *
+ * FE-S9-PURCHASES-BODEGA §2.8 (aditivo, helper reemplazado por la Enmienda
+ * A-01 §6.3): TERCERA zona opcional "Plan de importaciones" → `file_compras`
+ * (layout REAL SIIGO: hoja 1, encabezados en la fila 8, columna Temporada
+ * con resolución no bloqueante; una fila = una importación); solo viaja en
+ * el multipart si el usuario lo adjunta, y el feedback del 201 añade
+ * `Líneas de compra: {lines_purchase} · Total: {formatMoney(total_purchase)}`
+ * SOLO si `lines_purchase > 0` (claves con default 0/0.0 en respuestas de
+ * backend viejas: sin el 3er archivo el flujo es idéntico a FE-S8).
+ *
  * Éxito 201 → toast §7 + `emit('created')` (el dashboard refresca) + cierre.
  * Errores §9: el modal NO se cierra; render estructurados —
  *  missing_cost_centers → lista de chips (máx. 20) + instrucción;
@@ -30,7 +39,7 @@ import FileDropZone from '@/components/budget/upload/FileDropZone.vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import { departmentService } from '@/services/departmentService.js'
 import { alertService } from '@/services/alertService.js'
-import { buildYearOptions } from '@/components/budget/planning/planningFormat.js'
+import { buildYearOptions, formatMoney } from '@/components/budget/planning/planningFormat.js'
 
 const props = defineProps({
   open: { type: Boolean, required: true }
@@ -46,7 +55,9 @@ const attempted = ref(false)
 /** Archivos en selección (solo viven aquí; el `File` viaja en FormData). */
 const files = reactive({
   ingresos: null,
-  gastos: null
+  gastos: null,
+  /** FE-S9 §2.8: tercer opcional — "Plan de Importaciones" (`file_compras`). */
+  compras: null
 })
 
 const form = reactive({
@@ -155,6 +166,7 @@ const visibleServerError = computed(() => {
 function resetForm() {
   files.ingresos = null
   files.gastos = null
+  files.compras = null
   form.name = ''
   form.period = 'ANUAL'
   form.department = ''
@@ -186,14 +198,20 @@ async function handleUpload() {
     budgetPeriod: form.period,
     idDepartment: form.department === '' ? null : Number(form.department),
     fileIngresos: files.ingresos,
-    fileGastos: files.gastos instanceof File ? files.gastos : null
+    fileGastos: files.gastos instanceof File ? files.gastos : null,
+    // FE-S9 §2.8: el store/servicio anexan `file_compras` SOLO si es File.
+    fileCompras: files.compras instanceof File ? files.compras : null
   })
 
   if (result.ok) {
     const data = result.data ?? {}
-    alertService.generalSucces(
-      `Escenario "${data.scenario_name ?? form.name.trim()}" creado: ${data.lines_income ?? 0} líneas de ingreso, ${data.lines_expense ?? 0} de gasto`
-    )
+    let message = `Escenario "${data.scenario_name ?? form.name.trim()}" creado: ${data.lines_income ?? 0} líneas de ingreso, ${data.lines_expense ?? 0} de gasto`
+    // §2.8: el tramo de compra SOLO si el backend reportó compras (respuestas
+    // viejas traen `undefined`/0 ⇒ `Number(...) > 0` false ⇒ texto idéntico a hoy).
+    if (Number(data.lines_purchase) > 0) {
+      message += ` · Líneas de compra: ${data.lines_purchase} · Total: ${formatMoney(data.total_purchase)}`
+    }
+    alertService.generalSucces(message)
     emit('created')
     resetForm()
     emit('close')
@@ -389,6 +407,24 @@ onBeforeUnmount(() => {
               hint-file="Formato Solicitud Presupuesto Gastos.xlsx"
             />
             <p class="bi-zone-note">Sin este archivo el escenario se crea solo con ingresos.</p>
+          </section>
+
+          <!-- FE-S9 §2.8: tercer input OPCIONAL — Plan de Importaciones
+               (helper reemplazado por el layout real SIIGO en A-01 §6.3). -->
+          <section class="bi-zone">
+            <p class="bi-zone-title">Plan de <strong>importaciones</strong> (opcional)</p>
+            <FileDropZone
+              v-model="files.compras"
+              dataset-key="planning-compras"
+              :max-mb="10"
+              :disabled="busy"
+              hint-file="Plantilla Plan de Importaciones.xlsx"
+            />
+            <p class="bi-zone-note">
+              Formato SIIGO (hoja 1, encabezados en la fila 8): Centro de Costo · Fecha Importacion
+              · Temporada · Monto · Descripción. Una fila = una importación; las cuotas al
+              proveedor se derivan de los términos de la Línea.
+            </p>
           </section>
         </div>
 

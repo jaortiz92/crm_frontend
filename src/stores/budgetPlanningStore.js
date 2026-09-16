@@ -176,6 +176,13 @@ export function classifyPlanningError(err) {
         // (BR-LINE-04/07); conserva `message` para el mapeo inline del modal.
         return { kind: 'conflict', message: detail.message }
       }
+      // BE-S8 §5.1 (guards purchase): 400 con detalle {reason: "<literal>"} —
+      // shape dict SIN `message`: se tolera explícitamente clasificándolo como
+      // el mismo 'conflict' (el modal lo muestra inline; jamás revienta por
+      // un `detail` de forma inesperada).
+      if (typeof detail.reason === 'string') {
+        return { kind: 'conflict', message: detail.reason }
+      }
     }
     if (typeof detail === 'string') {
       if (/already exists/i.test(detail)) {
@@ -538,8 +545,12 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
     },
 
     /**
-     * POST multipart de creación del Base (dos SIIGO, ASM-10). Guarda la
-     * respuesta 201 en `data` para el toast del modal (§7).
+     * POST multipart de creación del Base (dos SIIGO + el opcional TERCER
+     * archivo "Plan de Importaciones" de FE-S9 §2.8 — `fields.fileCompras`
+     * viaja tal cual al servicio, que solo anexa `file_compras` si es `File`).
+     * Guarda la respuesta 201 en `data` para el toast del modal (§7), cuyas
+     * claves aditivas `lines_purchase`/`total_purchase` (BE-S8) se muestran
+     * solo si `lines_purchase > 0`.
      * @param {Parameters<budgetPlanningService['uploadScenario']>[0]} fields
      * @returns {Promise<{ ok: boolean, data?: object|null, kind?: string }>}
      */

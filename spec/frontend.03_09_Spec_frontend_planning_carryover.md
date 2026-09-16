@@ -72,6 +72,8 @@ async setCarryoverFlag(idBudget, value)
 
 ### 6.2 Fuera de año (componente C — decisión Q4=4)
 
+> ⚠️ Modificado por FE-S8-FLUJO-OY (`frontend.03_11`): los montos fuera de año nunca poblan celdas mensuales; el toggle solo controla las columnas Antes/Después.
+
 - `buildPivot` extiende fila: `before`/`after` = montos con fecha efectiva `< 01/01/{N}` / `> 31/12/{N}` (mismo `cfMonth`-fuente que las celdas; el total anual `row.total` NO cambia: -1 ya sumaba al total — solo se hace visible de dónde viene).
 - Columnas "Antes de {N}" y "Después de {N}" al final de cada tabla (Entradas / Salidas propias; el arrastre no las necesita: sus fechas son siempre ∈ N): **ocultas por default**; toggle de texto `Mostrar fuera de año` / `Ocultar` (ref local de sesión, junto al título de la vista).
 - Cuando están ocultas y existe cualquier `before/after ≠ 0` ⇒ chip en cada bloque con afectado: `⊘ {k} filas con montos fuera de año` (click = activar el toggle). El chip NUNCA se oculta con valores pendientes (mentirle al banquero es el bug que matamos).

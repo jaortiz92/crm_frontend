@@ -1,7 +1,11 @@
 <script setup>
 /**
  * BudgetLineGrid — "Editor de Celdas" (FE-S4 §8.2 tab 2 + FE-S4D-BUDGET-LINES
- * §3: DOS secciones apiladas Ingresos/Gastos con CRUD por fila).
+ * §3: DOS secciones apiladas Ingresos/Gastos con CRUD por fila; FE-S9-PURCHASES-
+ * BODEGA §2.3 añade aditivamente la tercera sección COMPRAS — semántica de
+ * edición agnóstica de tipo: el PUT de celda (líneas `fixed`, que incluye las
+ * compras) y el PUT/DELETE de línea ya funcionaban por igualdad exacta de
+ * `line_type`; cero cambios en las dos secciones existentes).
  *
  * 1 fila = 1 `budget_line` leída de la caché del store (la ÚNICA fuente: por
  * eso tras un POST/PUT/DELETE de líneas la Vista Ejecutiva/Flujo se recalcula
@@ -124,10 +128,13 @@ const ariaSort = (state, key) => {
  * Estado de filtro/orden/slice POR SECCIÓN (AC-FD-9: `sortKey/sortAsc/
  * visibleCount` ya no son globales). `query` casa código+nombre del CECO o
  * concepto/descripción (case-insensitive); `idCollection` '' = todas.
+ * FE-S9 §2.3: tercera sección `purchase` (mismo stack, cero cambio de
+ * semántica para income/expense).
  */
 const sectionState = reactive({
   income: { query: '', idCollection: '', sortKey: '', sortAsc: true, visibleCount: PAGE_SLICE },
-  expense: { query: '', idCollection: '', sortKey: '', sortAsc: true, visibleCount: PAGE_SLICE }
+  expense: { query: '', idCollection: '', sortKey: '', sortAsc: true, visibleCount: PAGE_SLICE },
+  purchase: { query: '', idCollection: '', sortKey: '', sortAsc: true, visibleCount: PAGE_SLICE }
 })
 
 function sumAmount(rows) {
@@ -184,7 +191,7 @@ function buildSection(type) {
   return { state, all, filtered, sorted, visible, subtotal, visibleSubtotal, hasMore }
 }
 
-/** Strings literales §3.1/§3.2 de FE-S4D (no traducir ni parafrasear). */
+/** Strings literales §3.1/§3.2 de FE-S4D + tercera sección FE-S9 §2.3. */
 const SECTIONS = reactive(
   [
     {
@@ -202,12 +209,31 @@ const SECTIONS = reactive(
       addLabel: '+ Añadir gasto',
       tableLabel: 'Líneas de gastos del escenario',
       emptyText: "Sin gastos en este escenario. Usa '+ Añadir gasto'."
+    },
+    {
+      type: 'purchase',
+      title: 'Compras',
+      chipClass: 'gl-chip-purchase',
+      addLabel: '+ Añadir compra',
+      tableLabel: 'Líneas de compras (importaciones) del escenario',
+      emptyText: "Sin compras en este escenario. Usa '+ Añadir compra'."
     }
   ].map((meta) => {
     const vm = buildSection(meta.type)
     return { ...meta, state: vm.state, vm }
   })
 )
+
+/**
+ * Clase del chip por `line_type` (FE-S9 §2.3: el ternario duro income/expense
+ * se convierte en lookup; una compra ya no hereda el rojo de gasto). La
+ * ETIQUETA siempre fluyó de `LINE_TYPE_LABELS` (agnóstico de tipo).
+ */
+const LINE_CHIP_CLASS_BY_TYPE = {
+  income: 'gl-chip-income',
+  expense: 'gl-chip-expense',
+  purchase: 'gl-chip-purchase'
+}
 
 const HINT_TEXT =
   'Doble clic en un monto para editarlo; ✏️ para el resto de campos. Las variables corríjalas con ✏️ (tasa/fechas).'
@@ -223,7 +249,11 @@ const deleteLineRef = ref(null)
 /** Última acción de modal abierta ('create' | 'edit') para el toast de éxito. */
 const lastFormAction = ref('create')
 
-/** `line_type` FIJADO por la sección (FD-6): el modal no muestra selector. */
+/**
+ * Tipo INICIAL fijado por la sección (FD-6). FE-S9 §2.2: el modal muestra
+ * ahora un selector de tipo (Ingreso/Gasto/Compra) PRECARGADO con el tipo de
+ * la sección; el grid sigue siendo dueño del `line-type` con el que abre.
+ */
 function openCreate(section) {
   formMode.value = 'create'
   formType.value = section.type
@@ -521,10 +551,7 @@ onBeforeUnmount(clearTimers)
                 {{ line.description || '—' }}
               </td>
               <td>
-                <span
-                  class="gl-chip"
-                  :class="line.line_type === 'income' ? 'gl-chip-income' : 'gl-chip-expense'"
-                >
+                <span class="gl-chip" :class="LINE_CHIP_CLASS_BY_TYPE[line.line_type] || 'gl-chip'">
                   {{ LINE_TYPE_LABELS[line.line_type] || line.line_type }}
                 </span>
                 <span
@@ -871,6 +898,18 @@ onBeforeUnmount(clearTimers)
 
 :root[data-theme='dark'] .gl-chip-expense {
   color: #ff9b9b;
+}
+
+/* FE-S9 §2.3: chip de compra (familia ámbar del módulo — misma del chip ⊘
+   de Flujo y de la fila "Bodega estimada"). */
+.gl-chip-purchase {
+  border-color: rgba(180, 83, 9, 0.4);
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #96590a;
+}
+
+:root[data-theme='dark'] .gl-chip-purchase {
+  color: #f6c177;
 }
 
 .gl-chip-var {

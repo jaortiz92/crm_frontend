@@ -1,10 +1,27 @@
 <script setup>
 /**
  * LineFormModal — crear/editar UNA línea del escenario (FE-S4D-BUDGET-LINES
- * §3.2). Un solo componente en modo `create | edit`; el `line_type` LO FIJA la
- * sección que abre el modal (FD-6: sin selector de tipo). `behavior_type` es
- * seleccionable SOLO en create (en edit aparece deshabilitado: cambiar el
- * comportamiento = crear línea nueva + eliminar la vieja, BR-LINE-06/D-2).
+ * §3.2). Un solo componente en modo `create | edit`. En FE-S4D el `line_type`
+ * LO FIJABA la sección que abre el modal (FD-6); FE-S9-PURCHASES-BODEGA §2.2
+ * introduce un SELECTOR DE TIPO (Ingreso / Gasto / Compra) precargado con la
+ * sección: en create es editable (permite crear una compra desde cualquier
+ * sección) y en edit aparece DESHABILITADO (BR-LINE-06: el tipo no se muta).
+ * `behavior_type` es seleccionable SOLO en create (en edit aparece
+ * deshabilitado: cambiar el comportamiento = crear línea nueva + eliminar la
+ * vieja, BR-LINE-06/D-2).
+ *
+ * Modo Compra (FE-S9 §2.2 ENMENDADO por A-01 §6.1, espejo de BR-PUR-01 del
+ * BE): `behavior_type` fijo a `fixed` (el selector de comportamiento se
+ * OCULTA), se ocultan también Fecha de Pago y la tasa variable, el label de
+ * `budget_date` pasa a `Fecha de importación` y —desde la enmienda— el
+ * select "Temporada" SÍ se muestra en compra: el payload de creación envía
+ * `{ id_cost_center, line_type:'purchase', budget_date, projected_amount,
+ * id_collection?, description? }` con `id_collection` SOLO si hubo selección
+ * (nada de ''/0). `payment_date`/`variable_rate`/`behavior_type` jamás viajan
+ * (el BE además fuerza `payment_date` a NULL y rechaza cualquier intento de
+ * PUT de esos campos sobre una compra, BR-PUR-02/03/04 en su forma A-01: la
+ * temporada es metadata informativa, no dimensiona cuotas). La validación
+ * pre-red de año sobre `budget_date` (AC-FD-8) aplica idéntica.
  *
  * Shell copiado de `CloneScenarioModal`/`SetTargetConfirmModal` (overlay,
  * `role="dialog"`, `aria-modal`, foco atrapado, ESC cierra).
@@ -37,7 +54,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import { alertService } from '@/services/alertService.js'
-import { BEHAVIOR_LABELS, formatMoney, parseCellAmount } from './planningFormat.js'
+import {
+  BEHAVIOR_LABELS,
+  LINE_TYPE_LABELS,
+  formatMoney,
+  parseCellAmount
+} from './planningFormat.js'
 
 const props = defineProps({
   open: { type: Boolean, required: true },
@@ -47,7 +69,11 @@ const props = defineProps({
   line: { type: Object, default: null },
   /** `BudgetFull` del store: se usa `id_budget` y `budget_year`. */
   scenario: { type: Object, required: true },
-  /** 'income' | 'expense' — lo fija la sección "+ Añadir X" (FD-6). */
+  /**
+   * 'income' | 'expense' | 'purchase' — tipo INICIAL que fija la sección
+   * "+ Añadir X" del grid (FD-6); en create el selector de tipo del modal
+   * (FE-S9 §2.2) puede cambiarlo sobre la marcha.
+   */
   lineType: { type: String, required: true }
 })
 
@@ -88,20 +114,47 @@ const flagged = ref(new Set())
 const isEdit = computed(() => props.mode === 'edit')
 const isVariable = computed(() => form.behaviorType !== 'fixed')
 
+/* ------------------------ selector de tipo (FE-S9 §2.2) ------------------------ */
+
+/**
+ * Tipo EFECTIVO del formulario. En create arranca en el tipo de la sección que
+ * abrió el modal (`props.lineType`) y es editable; en edit queda clavado al
+ * tipo de la línea (BR-LINE-06: el PUT nunca toca `line_type`).
+ */
+const selectedType = ref(props.lineType || 'income')
+const isPurchase = computed(() => selectedType.value === 'purchase')
+
+/** Opciones del selector de tipo (orden = `LINE_TYPE_LABELS`): Ingreso/Gasto/Compra. */
+const LINE_TYPE_OPTIONS = Object.entries(LINE_TYPE_LABELS).map(([value, label]) => ({
+  value,
+  label
+}))
+
+/** Hint literal §2.2 REEMPLAZADO por A-01 §6.1 (bajo el tipo, solo en compra). */
+const PURCHASE_HINT =
+  'Las cuotas de pago al proveedor se derivan automáticamente de los términos de la Línea sobre la fecha de importación. La temporada es informativa: no genera cuotas.'
+
 /** Opciones del select de comportamiento (orden = `BEHAVIOR_LABELS`). */
 const BEHAVIOR_OPTIONS = Object.entries(BEHAVIOR_LABELS).map(([value, label]) => ({
   value,
   label
 }))
 
-/* ------------------------------ busy / guard ------------------------------- */
+/** Con tipo Compra el comportamiento queda FIJO a `fixed` (BR-PUR-01). */
+watch(selectedType, (type) => {
+  if (type === 'purchase') form.behaviorType = 'fixed'
+})
+
+/* ------------------------------- busy / guard ------------------------------- */
 
 /**
  * Clave `lineSaving` según el contrato del store (§4): edit ⇒ id de línea;
- * create ⇒ 'new' + sección. El STORE es el dueño del flag; aquí solo se lee.
+ * create ⇒ 'new' + TIPO SELECCIONADO (la acción del store deriva la misma
+ * clave de `payload.line_type`). El STORE es el dueño del flag; aquí solo se
+ * lee.
  */
 const savingKey = computed(() =>
-  isEdit.value && props.line ? props.line.id_budget_line : `new${props.lineType}`
+  isEdit.value && props.line ? props.line.id_budget_line : `new${selectedType.value}`
 )
 const busy = computed(() => Boolean(budgetPlanningStore.lineSaving[savingKey.value]))
 
@@ -109,7 +162,9 @@ const busy = computed(() => Boolean(budgetPlanningStore.lineSaving[savingKey.val
 
 const dialogTitle = computed(() => {
   if (isEdit.value) return 'Editar línea'
-  return props.lineType === 'income' ? 'Añadir ingreso al escenario' : 'Añadir gasto al escenario'
+  if (selectedType.value === 'income') return 'Añadir ingreso al escenario'
+  if (selectedType.value === 'purchase') return 'Añadir compra al escenario'
+  return 'Añadir gasto al escenario'
 })
 
 /* ------------------------------ parse / errores ----------------------------- */
@@ -202,9 +257,33 @@ const isFlagged = (key) => flagged.value.has(key)
 /* --------------------------------- payloads -------------------------------- */
 
 const createPayload = computed(() => {
+  if (isPurchase.value) {
+    // FE-S9 §2.2 ENMENDADO por A-01 §6.1: la compra envía
+    // { id_cost_center, line_type, budget_date, projected_amount,
+    // id_collection?, description? } — comportamiento fijo, `payment_date` y
+    // `variable_rate` JAMÁS viajan (BR-PUR-01/02; el BE además fuerza
+    // `payment_date` a NULL, pero el contrato FE no lo depende). La
+    // TEMPORADA sí puede viajar (informativa, sin cuotas): SOLO si el
+    // usuario seleccionó una — nada de ''/0.
+    const payload = {
+      id_cost_center: Number(form.idCostCenter),
+      line_type: 'purchase',
+      budget_date: form.budgetDate,
+      projected_amount: amountParse.value.value
+    }
+    if (form.idCollection) {
+      const collection = Number(form.idCollection)
+      if (Number.isFinite(collection) && collection > 0) {
+        payload.id_collection = collection
+      }
+    }
+    const description = form.description.trim()
+    if (description) payload.description = description
+    return payload
+  }
   const payload = {
     id_cost_center: Number(form.idCostCenter),
-    line_type: props.lineType,
+    line_type: selectedType.value,
     // §3.2 lista los campos editables; `behavior_type` VIAJA porque el default
     // del BE es FIXED (BE-S4D §3.1): sin él, AC-FD-4 (crear variable) sería
     // imposible. El monto/tasa van condicionados por comportamiento (§3.2).
@@ -236,12 +315,24 @@ const updatePayload = computed(() => {
   if (form.budgetDate && form.budgetDate !== original.budget_date) {
     payload.budget_date = form.budgetDate
   }
-  if (form.paymentDate && form.paymentDate !== original.payment_date) {
-    payload.payment_date = form.paymentDate
+  // FE-S9 A-01 §6.1: el gate `!isPurchase` se ESTRECHA — en una compra sigue
+  // prohibidísimo `payment_date` (BR-PUR-04; el campo además está oculto: un
+  // residuo en el modelo jamás viaja). `behavior_type`/`variable_rate` no
+  // aplican: el watch clava `fixed` en compra ⇒ `isVariable` false y el PUT
+  // de tasa/behavior nunca se construye aquí.
+  if (!isPurchase.value) {
+    if (form.paymentDate && form.paymentDate !== original.payment_date) {
+      payload.payment_date = form.paymentDate
+    }
   }
+  // La TEMPORADA SÍ puede enviarse cuando cambió, también en compra (A-01:
+  // `id_collection` es metadata legal en una línea de compra). Patrón
+  // vigente: solo cambios, opcional vacío jamás (PUT parcial `null = keep`).
   if (form.idCollection) {
     const collection = Number(form.idCollection)
-    if (collection !== original.id_collection) payload.id_collection = collection
+    if (collection > 0 && collection !== original.id_collection) {
+      payload.id_collection = collection
+    }
   }
   if (!isVariable.value) {
     const parsed = amountParse.value
@@ -386,6 +477,10 @@ function resetForm() {
     ratePct: '',
     description: ''
   })
+  // FE-S9 §2.2: en create el selector arranca en la sección que abrió el
+  // modal; en edit queda clavado al tipo de la línea (selector deshabilitado).
+  selectedType.value =
+    isEdit.value && props.line?.line_type ? props.line.line_type : props.lineType || 'income'
   clearServerErrors()
   attempted.value = false
 }
@@ -497,6 +592,27 @@ onBeforeUnmount(() => {
 
       <form class="lf-body" @submit.prevent="handleSave">
         <div class="lf-field">
+          <label class="lf-label" for="lf-line-type">Tipo de línea *</label>
+          <!-- FE-S9 §2.2: tres opciones (Ingreso/Gasto/Compra). En create el
+               valor inicial lo fija la sección "+ Añadir X"; en edit queda
+               deshabilitado (BR-LINE-06: el tipo no se muta). -->
+          <select
+            id="lf-line-type"
+            v-model="selectedType"
+            class="lf-input"
+            :disabled="isEdit || busy"
+          >
+            <option v-for="option in LINE_TYPE_OPTIONS" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+          <p v-if="isPurchase" class="lf-hint">{{ PURCHASE_HINT }}</p>
+          <p v-else-if="isEdit" class="lf-hint">
+            El tipo no se puede cambiar: para otro tipo, cree una línea nueva
+          </p>
+        </div>
+
+        <div class="lf-field">
           <label class="lf-label" for="lf-ceco">CECO *</label>
           <select
             id="lf-ceco"
@@ -524,7 +640,11 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="lf-field">
-          <label class="lf-label" for="lf-budget-date">Fecha proyectada *</label>
+          <!-- FE-S9 §2.2: en modo compra la fecha proyectada SE LLAMA "Fecha
+               de importación" (el payload sigue enviando `budget_date`). -->
+          <label class="lf-label" for="lf-budget-date">{{
+            isPurchase ? 'Fecha de importación *' : 'Fecha proyectada *'
+          }}</label>
           <input
             id="lf-budget-date"
             v-model="form.budgetDate"
@@ -545,7 +665,9 @@ onBeforeUnmount(() => {
           </p>
         </div>
 
-        <div class="lf-field">
+        <!-- FE-S9 §2.2: compra ⇒ se OCULTA la fecha de pago (el BE fuerza
+             payment_date a NULL: las cuotas se derivan por términos). -->
+        <div v-if="!isPurchase" class="lf-field">
           <label class="lf-label" for="lf-payment-date">Fecha de pago</label>
           <input
             id="lf-payment-date"
@@ -561,6 +683,10 @@ onBeforeUnmount(() => {
           </p>
         </div>
 
+        <!-- FE-S9 A-01 §6.1: la Temporada se muestra TAMBIÉN en compra
+             (informativa: no genera cuotas; 404 de colección cae en el
+             mensaje campo `collection` vigente). Comportamiento, fecha de
+             pago y tasa variable SIGUEN ocultos en compra (§2.2 intacto). -->
         <div class="lf-field">
           <label class="lf-label" for="lf-collection">Temporada</label>
           <select
@@ -590,7 +716,9 @@ onBeforeUnmount(() => {
           </p>
         </div>
 
-        <div class="lf-field">
+        <!-- FE-S9 §2.2: compra ⇒ comportamiento FIJO a `fixed`: el selector
+             se oculta (a diferencia del edit de FE-S4D, que lo deshabilita). -->
+        <div v-if="!isPurchase" class="lf-field">
           <label class="lf-label" for="lf-behavior">Comportamiento</label>
           <select
             id="lf-behavior"
