@@ -84,12 +84,23 @@
  *  (budget_date)` de las líneas `purchase` (causación de importación, siempre
  *  ∈ N por validación BE ⇒ `ooy: false`, sin chip ni columnas extra); entra
  *  ENTRE Entradas y Pago a proveedores, SOLO si hay compras (§2.4). (B) switch
- *  de fuente D-4 en la derivación de pagos: `compradorCecos` (CECOs con ≥1
- *  compra) ⇒ los ingresos de un CECO comprador NO generan cuota cogs (nunca
- *  doble cuenta) y cada compra genera sus cuotas con los términos de la Línea
- *  del CECO sobre su `budget_date` (mismo shape FE-S7, ancla = fecha de
- *  importación, cuota única 100 % sin términos/id_line; `buildPivotFrom` y
- *  FE-S8 intactos: la cuota fuera de N vive solo en Antes/Después) (§2.5).
+ *  de fuente D-4' ENMIENDA A-02 §7.1 — POR LÍNEA, reemplaza la mecánica
+ *  por-CECO de §2.5, espejo de la rama D-4' del carryover server (claves
+ *  `line:`/`cc:`): cada CECO se cartula con el helper local
+ *  `sourceKeyForCostCenter` (`line:<id_line>` si el catálogo `costCenters`
+ *  le conoce Línea, `cc:<id_cost_center>` si no) y `purchasingKeys` = claves
+ *  de las filas `purchase` ⇒ los ingresos cuya clave es compradora NO generan
+ *  cuota cogs (nunca doble cuenta). Ejemplo (defecto 266): la compra en el
+ *  CECO Facturación de la Línea (000001) apaga la derivación por ingreso de
+ *  los CECOS zonales de esa Línea (000101/000201). Cada compra genera sus
+ *  cuotas con los términos de la Línea del CECO sobre su `budget_date`
+ *  (mismo shape FE-S7, ancla = fecha de importación, cuota única 100 % sin
+ *  términos/id_line; `buildPivotFrom` y FE-S8 intactos: la cuota fuera de N
+ *  vive solo en Antes/Después) (§2.5 punto 2 inalterado). Degradación honesta
+ *  §7.1: catálogo de CECOS caído o CECO desconocido ⇒ `lineIdForCostCenter`
+ *  devuelve `null` ⇒ claves `cc:` ⇒ comportamiento por-CECO conservador de
+ *  A-01: una compra solo apaga la derivación de su MISMO CECO, jamás switcha
+ *  de más.
  *  (C) fila informativa "Bodega estimada (cierre)" AL FINAL del Resumen de
  *  Liquidez: `bodega[m] = bodega[m−1] + compras[m] − costoCausadoPorMes[m]`
  *  (costo de ventas CAUSADO = Σ ingreso fijo × cogs_pct del month-end,
@@ -354,14 +365,14 @@ const ENTRADAS_NOTE = 'Montos netos, sin IVA. El pilar de analítica de flujo de
 /* ─────────── FE-S7-COGS-PAYFLOW §5: derivación "Pago a proveedores (costo de ventas)" ─────────── */
 
 /**
- * Nota del bloque derivado — TEXTO VIGENTE desde FE-S9 §2.5.5 (reemplaza el
- * literal FE-S7): describe las DOS fuentes de la derivación (compras ×
- * términos; CECO no comprador: % costo de ventas × ingreso causado). No
- * altera la causación del P&G.
+ * Nota del bloque derivado — TEXTO VIGENTE desde la ENMIENDA A-02 §7.2
+ * (reemplaza el literal §2.5.5): describe las DOS fuentes POR LÍNEA de la
+ * derivación (compras de la Línea × términos; Línea sin plan de compras:
+ * % costo de ventas × ingreso causado). No altera la causación del P&G.
  */
 const COGS_PAYMENT_NOTE =
-  'Derivado: compras del escenario × términos de pago de la Línea; CECO sin plan ' +
-  'de compras: % costo de ventas vigente × ingreso causado. No altera el P&L (causación).'
+  'Derivado: compras de la Línea × términos de pago; Línea sin plan de ' +
+  'compras: % costo de ventas vigente × ingreso causado. No altera el P&L (causación).'
 
 /** Nota de degradación §5 (catálogo de términos caído): literal de spec. */
 const COGS_TERMS_UNAVAILABLE_NOTE =
@@ -447,33 +458,41 @@ const cogsIncomeLines = computed(() =>
   lines.value.filter((line) => line.line_type === 'income' && line.behavior_type === 'fixed')
 )
 
-/* ─────────── FE-S9-PURCHASES-BODEGA §2.5: switch de fuente D-4 (VINCULANTE) ─────────── */
+/* ── FE-S9-PURCHASES-BODEGA §2.5 + ENMIENDA A-02 §7.1: switch de fuente D-4' POR LÍNEA (VINCULANTE) ── */
 
 /**
- * Regla de fuente única D-4 (VINCULANTE, backend.02_18 §1): un CECO con ≥1
- * línea de compra en el escenario es COMPRADOR ⇒ su pago a proveedores se
- * deriva de sus COMPRAS y NUNCA de su ingreso × cogs_pct (cero doble cuenta).
- * Una sola pasada O(L) memoizada alimenta AMBOS consumidores (§2.5/§2.6):
- * `compradorCecos` (skip en la derivación FE-S7) y `purchaseLines` (fuente
- * nueva de cuotas).
+ * Regla de fuente única D-4' (VINCULANTE, ENMIENDA A-02 §7.1 — reemplaza la
+ * por-CECO de §2.5): una LÍNEA con ≥1 línea de compra en el escenario es
+ * COMPRADORA ⇒ el pago a proveedores de TODOS sus CECOS (la comprador
+ * "Facturación" y los zonales que solo venden) se deriva de sus COMPRAS y
+ * NUNCA de ingreso × cogs_pct (cero doble cuenta; el defecto 266: compra en
+ * 000001/000002 y venta en 000101/000201/000202/000302 de las MISMAS Líneas
+ * ⇒ el switch por-CECO nunca casaba). Una sola pasada O(L) memoizada
+ * alimenta AMBOS consumidores (§2.5/§7.1): `purchasingKeys` (skip en la
+ * derivación FE-S7) y `purchaseLines` (fuente de las cuotas de compra,
+ * INALTERADAS por la enmienda).
  */
 const purchaseIndex = computed(() => {
   const purchaseLinesArr = []
-  const cecoSet = new Set()
+  const keySet = new Set()
   for (const line of lines.value) {
     if (line.line_type === 'purchase') {
       purchaseLinesArr.push(line)
-      cecoSet.add(line.id_cost_center)
+      keySet.add(sourceKeyForCostCenter(line.id_cost_center))
     }
   }
-  return { lines: purchaseLinesArr, cecos: cecoSet }
+  return { lines: purchaseLinesArr, keys: keySet }
 })
-
-/** @see purchaseIndex — CECOs compradores del escenario. */
-const compradorCecos = computed(() => purchaseIndex.value.cecos)
 
 /** @see purchaseIndex — líneas `purchase` crudas (fuente de las cuotas §2.5). */
 const purchaseLines = computed(() => purchaseIndex.value.lines)
+
+/**
+ * @see purchaseIndex — claves D-4' (A-02 §7.1) de las Líneas con plan de
+ * compras: la derivación FE-S7 por ingreso se saltea la fila ingreso si su
+ * `sourceKeyForCostCenter(id_cost_center)` pertenece a este Set.
+ */
+const purchasingKeys = computed(() => purchaseIndex.value.keys)
 
 /**
  * CECO → `id_line` vía el catálogo `costCenters` cacheado — ESPEJO exacto
@@ -487,6 +506,26 @@ function lineIdForCostCenter(idCostCenter) {
   if (idCostCenter === null || idCostCenter === undefined) return null
   const found = budgetPlanningStore.costCenters.find((item) => item.id_cost_center === idCostCenter)
   return typeof found?.id_line === 'number' ? found.id_line : null
+}
+
+/**
+ * Clave de fuente D-4' (ENMIENDA A-02 §7.1, espejo de las claves `line:`/`cc:`
+ * que el backend aplica en el carryover): `line:<id_line>` cuando el catálogo
+ * `costCenters` le conoce Línea al CECO —todas las facetas de una misma Línea
+ * (la compradora "Facturación" y los zonales que solo venden) comparten clave
+ * ⇒ el switch de fuente es POR LÍNEA—; `cc:<id_cost_center>` cuando
+ * `lineIdForCostCenter` devuelve `null` (CECO desconocido o catálogo A5
+ * caído). DEGRADACIÓN HONESTA §7.1: sin catálogo la clave vuelve a ser
+ * por-CECO (comportamiento A-01, conservador: una compra solo apaga la
+ * derivación de su MISMO CECO y jamás apaga de más por una Línea que no se
+ * puede conocer). Los prefijos evitan cualquier colisión entre `id_line` e
+ * `id_cost_center`.
+ * @param {number|null|undefined} idCostCenter
+ * @returns {string}
+ */
+function sourceKeyForCostCenter(idCostCenter) {
+  const lineId = lineIdForCostCenter(idCostCenter)
+  return lineId === null ? `cc:${idCostCenter}` : `line:${lineId}`
 }
 
 /**
@@ -519,12 +558,15 @@ const costPaymentRows = computed(() => {
   if (!incomes.length && !purchases.length) return []
   const rates = budgetPlanningStore.lineCostRates
   const termsByLine = budgetPlanningStore.payableTermsByLine
-  const compradores = compradorCecos.value
+  const purchasing = purchasingKeys.value
   const rows = []
   for (const line of incomes) {
-    // FE-S9 §2.5-1 (D-4): CECO COMPRADOR ⇒ su ingreso NO genera cuota cogs
-    // (el proveedor ya se paga por las compras de arriba — nunca doble cuenta).
-    if (compradores.has(line.id_cost_center)) continue
+    // FE-S9 §2.5-1 + A-02 §7.1 (D-4'): LÍNEA COMPRADORA (o CECO comprador bajo
+    // la degradación `cc:`) ⇒ su ingreso NO genera cuota cogs (el proveedor ya
+    // se paga por las compras de arriba — nunca doble cuenta). La compra en el
+    // CECO Facturación de la Línea apaga también la derivación de los CECOS
+    // zonales de esa Línea (defecto 266: 43M + 28.2M ⇒ ahora 43M exactos).
+    if (purchasing.has(sourceKeyForCostCenter(line.id_cost_center))) continue
     // AC-S7-FE-2: ingreso editado a 0 (o tasa 0) ⇒ costo 0 ⇒ NI UNA cuota ⇒
     // el bloque DESAPARECE (`rows.length === 0`). El monto nulo jamás se
     // pinta como fila fantasma (las sumas no cambian: aportar 0 es aportar nada).
@@ -599,18 +641,19 @@ const costPaymentsActive = computed(() => costPaymentRows.value.length > 0)
  */
 const costTermsDegraded = computed(() => {
   if (!budgetPlanningStore.payableTermsError) return false
-  // FE-S9 §2.5-3: "produciría filas" ahora cubre AMBAS fuentes — COMPRAS
-  // (ninguna necesita tasa de costo: cualquier compra finita ≠ 0 produce
-  // cuota, y sin catálogo tampoco puede derivarse) e INGRESOS NO COMPRADORES
-  // (regla FE-S7 intacta; los compradores ya no producirían nada).
+  // FE-S9 §2.5-3 (con el matiz A-02 §7.1): "produciría filas" ahora cubre
+  // AMBAS fuentes — COMPRAS (ninguna necesita tasa de costo: cualquier compra
+  // finita ≠ 0 produce cuota, y sin catálogo tampoco puede derivarse) e
+  // INGRESOS NO COMPRADORES POR LÍNEA (regla FE-S7 intacta; los de Línea
+  // compradora ya no producirían nada — mismas claves D-4' que arriba).
   const rates = budgetPlanningStore.lineCostRates
-  const compradores = compradorCecos.value
+  const purchasing = purchasingKeys.value
   for (const line of purchaseLines.value) {
     const amount = Number(line.projected_amount)
     if (Number.isFinite(amount) && amount !== 0) return true
   }
   return cogsIncomeLines.value.some((line) => {
-    if (compradores.has(line.id_cost_center)) return false
+    if (purchasing.has(sourceKeyForCostCenter(line.id_cost_center))) return false
     // MISMOS filtros de "produciría filas" que `costPaymentRows` (§5).
     const amount = Number(line.projected_amount)
     if (!Number.isFinite(amount) || amount === 0) return false
@@ -1054,8 +1097,8 @@ const comprasPorMes = computed(() => comprasPivot.value.columnTotals)
  * Ejecutiva/FE-S7 (cero divergencia). `pct` `null` ⇒ contribuye 0.
  * INDEPENDIENTE de `payableTermsByLine`: la bodega funciona aunque el
  * catálogo de términos esté caído (§2.6). Incluye TAMBIÉN los ingresos de
- * CECOs compradores (es causación P&L, no caja: el switch D-4 solo afecta a
- * las cuotas de pago).
+ * las Líneas compradoras y de sus CECOS zonales (es causación P&L, no caja:
+ * el switch D-4' de A-02 solo afecta a las cuotas de pago).
  */
 const costoCausadoPorMes = computed(() => {
   const out = Array.from({ length: 12 }, () => 0)
@@ -1493,11 +1536,11 @@ function negativeCell(row, value) {
              (mismo lenguaje ámbar de la degradación — no es error rojo). -->
         <p v-if="bodegaNegative" class="cf-warn" role="status">{{ BODEGA_NEGATIVE_NOTE }}</p>
         <!-- FE-S7 §5: aviso ámbar de degradación (CATÁLOGO DE TÉRMINOS CAÍDO
-             con filas que se producirían — FE-S9: compras o ingresos NO
-             compradores): el bloque derivado NO se renderiza y el resto del
-             Flujo queda intacto (AC-S7-FE-7). Bajo el resumen, junto al pie
-             del §6.2 — el patrón `pv-warn` de Ejecutiva es información, no
-             error rojo. -->
+             con filas que se producirían — FE-S9: compras o ingresos de
+             Líneas NO compradoras D-4'/A-02): el bloque derivado NO se
+             renderiza y el resto del Flujo queda intacto (AC-S7-FE-7). Bajo
+             el resumen, junto al pie del §6.2 — el patrón `pv-warn` de
+             Ejecutiva es información, no error rojo. -->
         <p v-if="costTermsDegraded" class="cf-warn" role="status">
           {{ COGS_TERMS_UNAVAILABLE_NOTE }}
         </p>

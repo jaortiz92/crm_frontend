@@ -130,3 +130,28 @@ Texto reemplazado por: `Formato SIIGO (hoja 1, encabezados en la fila 8): Centro
 - **AC-FE9a-1:** crear compra con temporada desde el modal ⇒ 201, la grilla de Compras muestra la etiqueta de temporada en la fila; editar la compra y cambiar temporada ⇒ 200 sin tocar fecha de importación.
 - **AC-FE9a-2:** subir la plantilla real vía el modal (con `Temporada` desconocida en alguna fila) ⇒ éxito con temporada `—` en esa fila (mismo comportamiento no bloqueante de ingresos).
 - **AC-FE9a-3:** regresión FE-S9 íntegra: los AC-FE9-1..8 siguen; ningún pivote de caja consume temporada (compras/pagos/bodega inalterados).
+
+---
+
+## 7. Enmienda A-02 (2026-09-16): switch de fuente POR LÍNEA (espejo de backend.02_18 §11 / D-4')
+
+**Defecto:** en escenarios donde la importación se registra en el CECO "Facturación {Línea}" (p. ej. 266: compras en `000001/000002`) y la venta en CECOS zonales de la MISMA Línea (`000101/000201/000202/000302`), el switch por-CECO de §2.5 nunca aplica ⇒ el bloque "Salidas — Pago a proveedores" suma compras + derivación-por-ingreso = doble cuenta (43M + 28.2M en 266).
+
+### 7.1 Regla (reemplaza `compradorCecos` de §2.5)
+
+Clave por CECO vía `lineIdForCostCenter` (catálogo `costCenters` del store — helper existente): `line:<id_line>` con línea; `cc:<id_cost_center>` sin línea. `purchasingKeys = Set` de claves de las filas purchase del escenario. La derivación FE-S7 por ingreso se saltea la fila ingreso si su clave ∈ `purchasingKeys` (antes: si su CECO ∈ cecos). Las cuotas de compra se generan igual que §2.5. Con catálogo `costCenters` caído: `lineIdForCostCenter` devuelve null ⇒ claves `cc:` ⇒ degradación al comportamiento por-CECO de A-01 (documentada, conservadora: no switcha de más).
+
+### 7.2 Texto literal del bloque (reemplaza la nota de §2.5)
+
+`Derivado: compras de la Línea × términos de pago; Línea sin plan de compras: % costo de ventas vigente × ingreso causado. No altera el P&L (causación).`
+
+### 7.3 Intocados
+
+Bloque "Compras del mes" (§2.4), fila Bodega (§2.6 — consume compras y costos causados, ajenos al switch), arrastre (§2.7 — el server aplica D-4'), FE-S8 (fuera-de-año), Ejecutiva.
+
+### 7.4 AC de la enmienda
+
+- **AC-FE9b-1 (266):** el bloque "Pago a proveedores" muestra SOLO las cuotas de compra: Mar 8.5M · Abr 8.25M · May 8.25M (Kyly 25M @ +60/+90/+120 d con pct .34/.33/.33) · Ago 18M (Tinta @ +90 d 100 %); grandTotal 43M; cero cuotas derivadas de los ingresos Kyly/Tinta; Σ salidas del resumen = 43M + gastos (sin el +28.2M viejo); Total anual del bloque = Σ compras = 43M exacto (Σ meses + antes + después = total).
+- **AC-FE9b-2:** borrar/regresar una compra desde el Editor (reactividad): al quedar 0 compras de la Línea, su derivación FE-S7 reaparece al instante; al volver, desaparece — mutuamente excluyentes SIEMPRE.
+- **AC-FE9b-3 (regresión 69/clon FE-S9):** CECOS con Líneas distintas (151 Kyly, 159 Tinta, 156 Lunelli) ⇒ el número de cuotas es idéntico al QA de §4 (por-CECO ≡ por-Línea cuando no hay co-Línea); un clon con compra en 000101 (Kyly) ahora SÍ apaga también la cuota de ingresos de 000201 (Kyly zonal) — aserción nueva del fix.
+- **AC-FE9b-4:** escenario sin compras ⇒ DOM idéntico a hoy (NFR-FE9-3 intacto).
