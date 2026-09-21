@@ -110,6 +110,27 @@
  *  (D) arrastre con `origin:"purchase"` (BE-S8): grupo CECO|origen con orden
  *  line < cogs < purchase, prefijo "⌁ Compra {N−1}" + tooltip propio; payloads
  *  sin origen purchase = DOM idéntico a FE-S7/FE-S8 (§2.7).
+ *
+ * FE-S10-INTERNMENT-SPLIT (aditivo, spec `frontend.03_13` §2.4-2.6; autoridad
+ *  de fórmula `backend.02_19` §4): el valor de una compra ES el costo total
+ *  (A-1'). Las compras de `costPaymentRows` se parten client-side (D-FE10-1,
+ *  cero escrituras): `pctInt = internmentRateByLine.get(lineId) ?? 0` (no
+ *  finito o negativo ⇒ 0, guard §2.4-1), `provBase = amount / (1 + pctInt)`,
+ *  `intBase = amount − provBase` — el stream proveedor conserva el mecanismo
+ *  FE-S7/FE-S9 INTACTO pero sobre `provBase` (cuota única D-S7-4 incluida).
+ *  El stream de internación vive en `internmentPaymentRows` (MISMO shape
+ *  `{ idCostCenter, amount, effectiveDate }`, precedente D-FE9-4): solo
+ *  compras con `intBase > 0.005` (D-FE10-5), cuotas por `internmentTermsByLine`
+ *  (orden D-7) o cuota única en la ancla sin términos (BR-INT-04); pct 0 ⇒
+ *  cero filas (BR-INT-05). Bloque NUEVO "Pago de internación" entre "Pago a
+ *  proveedores" y "Gastos fijos", SOLO si hay filas propias ∨ cuotas de
+ *  arrastre `origin:"internment"` (NFR-FE10-3: sin configuración, DOM
+ *  idéntico a FE-S9). Fail-closed D-FE10-3: `internmentCatalogError`
+ *  cortocircuita AMBOS streams de compra (no se puede partir la base) con el
+ *  aviso de `costTermsDegraded` extendido; la ruta `cogs` sobre ingresos NO
+ *  usa rates ⇒ byte-idéntica (A-8/§2.4-6). Arrastre §2.6: origin normalizado
+ *  también a 'internment' (rank line < cogs < purchase < internment), fila
+ *  "⌁ Internación {N−1}" con tooltip propio (comparte resolvedor de año).
  */
 import { computed, ref } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
@@ -529,6 +550,19 @@ function sourceKeyForCostCenter(idCostCenter) {
 }
 
 /**
+ * ¿Dúo de internación disponible (cargado y sin error)? FE-S10 §2.4-5
+ * (D-FE10-3, fail-closed): SIN el % vigente no se puede partir la base de
+ * las compras ⇒ AMBOS streams de compra (proveedor e internación) se
+ * cortocircuitan mientras el catálogo esté en vuelo o caído; la ruta `cogs`
+ * sobre ingresos NO usa rates y queda intacta (A-8). Como `ensureCatalogs`
+ * se.await-a antes de pintar el detalle, el estado transitorio "en vuelo"
+ * no produce parpadeo (patrón FE-S7: el bloque simplemente aún no existe).
+ */
+const internmentCatalogReady = computed(
+  () => budgetPlanningStore.internmentCatalogLoaded && !budgetPlanningStore.internmentCatalogError
+)
+
+/**
  * Cuotas DERIVADAS de pago al proveedor por costo de ventas (§5; D-S7-2:
  * NUNCA se materializan — vivimos solo aquí). Por cada ingreso fijo propio:
  *  1. `pct = resolveCogsPctByLine(lineCostRates, id_line(CECO),
@@ -548,6 +582,11 @@ function sourceKeyForCostCenter(idCostCenter) {
  * no se renderiza; el aviso vive bajo el resumen). Si un `payment_days`
  * basura impidiera el desplazamiento, la cuota queda en la ancla (el monto
  * NUNCA se pierde — reconciliación con el total de la fila).
+ * FE-S10 §2.4: en las COMPRAS la base deja de ser el total de la fila y pasa
+ * a ser `provBase = amount / (1 + pctInt)` (fórmula §4 de `backend.02_19`
+ * replicada cliente, D-FE10-1); el mecanismo de cuotas queda INTACTO. Con el
+ * dúo de internación no disponible se cortocircuita SOLO el bloque de
+ * compras (fail-closed, D-FE10-3) — los ingresos `cogs` siguen.
  * Memoizada O(#ingresos × #términos) sobre `budget_lines` + getters (AC-S7-FE-2).
  * @returns {Array<{ idCostCenter: number, amount: number, effectiveDate: string|null }>}
  */
@@ -595,17 +634,31 @@ const costPaymentRows = computed(() => {
       })
     }
   }
-  // FE-S9 §2.5-2: CUOTAS DE COMPRA — mismo shape `{ idCostCenter, amount,
-  // effectiveDate }` (D-FE9-4: `buildPivotFrom` y FE-S8 sin cambios). Ancla =
-  // `budget_date` de la importación; término con `payment_days` sobre esa
-  // ancla (negativo ⇒ antes). SIN términos (o CECO sin `id_line`) ⇒ cuota
-  // única 100 % en la ancla (D-S7-4 extendido). Mismos guards FE-S7: monto no
+  // FE-S9 §2.5-2 + FE-S10 §2.4: CUOTAS DE COMPRA (stream PROVEEDOR) — mismo
+  // shape `{ idCostCenter, amount, effectiveDate }` (D-FE9-4: `buildPivotFrom`
+  // y FE-S8 sin cambios). Ancla = `budget_date` de la importación; término con
+  // `payment_days` sobre esa ancla (negativo ⇒ antes). SIN términos (o CECO
+  // sin `id_line`) ⇒ cuota única 100 % en la ancla (D-S7-4 extendido) — ahora
+  // SOBRE `provBase` (FE-S10): Línea sin tasa ⇒ pctInt 0 ⇒ `provBase ===
+  // amount` ⇒ DOM idéntico a FE-S9 (NFR-FE10-3). Mismos guards FE-S7: monto no
   // finito o 0 ⇒ sin cuota; `payment_pct` basura ⇒ skip del término;
   // `addDaysISO` `null` ⇒ la cuota queda anclada (el monto NUNCA se pierde).
+  // Fail-closed D-FE10-3: sin el dúo de internación NO se puede partir la
+  // base ⇒ este stream tampoco se deriva (la ruta `cogs` de arriba es
+  // independiente de rates y sigue intacta, A-8).
+  if (!internmentCatalogReady.value) return rows
+  const internmentPctsByLine = budgetPlanningStore.internmentRateByLine
   for (const line of purchases) {
     const amount = Number(line.projected_amount)
     if (!Number.isFinite(amount) || amount === 0) continue
     const lineId = lineIdForCostCenter(line.id_cost_center)
+    // §2.4-1: `Number(map.get(lineId) ?? 0)`; basura o negativa ⇒ 0 (CECO sin
+    // Línea ⇒ `get(null)` undefined ⇒ 0, misma fila del borde BE §4).
+    const pctIntRaw = Number(internmentPctsByLine.get(lineId) ?? 0)
+    const pctInt = !Number.isFinite(pctIntRaw) || pctIntRaw < 0 ? 0 : pctIntRaw
+    // §2.4-2: `provBase = amount / (1 + pctInt)` (pctInt 0 ⇒ amount EXACTO —
+    // `x / 1 === x` en IEEE-754: cero regresión numérica, NFR-FE10-3).
+    const provBase = amount / (1 + pctInt)
     const terms = lineId === null ? undefined : termsByLine.get(lineId)
     if (terms && terms.length) {
       for (const term of terms) {
@@ -613,14 +666,14 @@ const costPaymentRows = computed(() => {
         if (!Number.isFinite(paymentPct)) continue
         rows.push({
           idCostCenter: line.id_cost_center,
-          amount: amount * paymentPct,
+          amount: provBase * paymentPct,
           effectiveDate: addDaysISO(line.budget_date, Number(term.payment_days)) ?? line.budget_date
         })
       }
     } else {
       rows.push({
         idCostCenter: line.id_cost_center,
-        amount,
+        amount: provBase,
         effectiveDate: line.budget_date
       })
     }
@@ -631,6 +684,109 @@ const costPaymentRows = computed(() => {
 /** ¿El bloque derivado tiene filas? (empty ⇒ no se renderiza, §5). */
 const costPaymentsActive = computed(() => costPaymentRows.value.length > 0)
 
+/* ─────────── FE-S10-INTERNMENT-SPLIT §2.4: stream de internación de las compras ─────────── */
+
+/**
+ * Épsilon COP para suprimir filas de internación residuales de float crudo
+ * (D-FE10-5/§2.4-4: `intBase > 0.005`; convención BE-S8 §4 "raw float, cero
+ * redondeo intermedio" — NUNCA redondear el monto derivado, solo excluir).
+ */
+const INTERNMENT_EPSILON_COP = 0.005
+
+/**
+ * Cuotas DERIVADAS de pago de la INTERNACIÓN (FE-S10 §2.4-4): MISMO shape
+ * `{ idCostCenter, amount, effectiveDate }` que `costPaymentRows` (precedente
+ * D-FE9-4 ⇒ `buildPivotFrom` reutilizado sin tocar). Solo compras:
+ *  - `pctInt = Number(internmentRateByLine.get(lineId) ?? 0)` (§2.4-1: no
+ *    finito o negativo ⇒ 0, guard defensivo espejo del skip por pct basura);
+ *  - `intBase = amount − amount / (1 + pctInt)` (BR-INT-01);
+ *  - `pctInt === 0` ⇒ CERO filas (BR-INT-05/A-5) y `intBase ≤ 0.005` ⇒ cero
+ *    filas (§2.4-4);
+ *  - CON `internmentTermsByLine.get(lineId)` ⇒ una cuota `{ intBase ×
+ *    payment_pct, addDaysISO(budget_date, payment_days) ?? budget_date }` por
+ *    término (orden D-7 del getter; mismos guards FE-S7: pct no finito ⇒
+ *    skip, addDays `null` ⇒ ancla);
+ *  - SIN términos ⇒ cuota ÚNICA `{ intBase, budget_date }` (BR-INT-04, espejo
+ *    D-S7-4). Ancla = fecha de importación también para este stream (A-3).
+ * Fail-closed D-FE10-3: sin el dúo cargado (o con `internmentCatalogError`)
+ * ⇒ `[]` (el bloque no se deriva; el aviso vive en `costTermsDegraded`).
+ * O(L_compras) memoizada dentro del mismo loop de derivation (§2.4; NFR-
+ * FE10-1: ≤2 pasadas constantes, cero anidados extra fuera de cuotas).
+ * @returns {Array<{ idCostCenter: number, amount: number, effectiveDate: string|null }>}
+ */
+const internmentPaymentRows = computed(() => {
+  if (!internmentCatalogReady.value) return []
+  const purchases = purchaseLines.value
+  if (!purchases.length) return []
+  const ratesByLine = budgetPlanningStore.internmentRateByLine
+  const termsByLine = budgetPlanningStore.internmentTermsByLine
+  const rows = []
+  for (const line of purchases) {
+    const amount = Number(line.projected_amount)
+    if (!Number.isFinite(amount) || amount === 0) continue
+    const lineId = lineIdForCostCenter(line.id_cost_center)
+    const pctIntRaw = Number(ratesByLine.get(lineId) ?? 0)
+    const pctInt = !Number.isFinite(pctIntRaw) || pctIntRaw < 0 ? 0 : pctIntRaw
+    if (pctInt === 0) continue // A-5/BR-INT-05: sin tasa ⇒ cero filas
+    const intBase = amount - amount / (1 + pctInt) // BR-INT-01
+    if (intBase <= INTERNMENT_EPSILON_COP) continue // §2.4-4 (float crudo)
+    const terms = lineId === null ? undefined : termsByLine.get(lineId)
+    if (terms && terms.length) {
+      for (const term of terms) {
+        const paymentPct = Number(term.payment_pct)
+        if (!Number.isFinite(paymentPct)) continue
+        rows.push({
+          idCostCenter: line.id_cost_center,
+          amount: intBase * paymentPct,
+          effectiveDate: addDaysISO(line.budget_date, Number(term.payment_days)) ?? line.budget_date
+        })
+      }
+    } else {
+      // BR-INT-04: Línea con tasa pero sin cuotas de internación ⇒ pago
+      // completo el día de la importación.
+      rows.push({
+        idCostCenter: line.id_cost_center,
+        amount: intBase,
+        effectiveDate: line.budget_date
+      })
+    }
+  }
+  return rows
+})
+
+/**
+ * ¿Hay cuotas de internación ARRASTRADAS del escenario N−1? §2.5: el bloque
+ * también se muestra con `origin:"internment"` en el carryover (el BE ya
+ * filtró por año, BR-CO-09 — aquí solo se detecta presencia). Lectura directa
+ * de `budgetPlanningStore.carryover` (SD6-4: SOLO lee).
+ */
+const carryInternmentActive = computed(() => {
+  const carry = budgetPlanningStore.carryover
+  return (
+    carry.enabled &&
+    Array.isArray(carry.lines) &&
+    carry.lines.some((line) => line.origin === 'internment')
+  )
+})
+
+/** §2.5: render-condición del bloque (filas propias ∨ arrastre int ⇒ NFR-
+ *  FE10-3: sin configuración ninguna de las dos ⇒ bloque ausente, DOM idéntico). */
+const internmentPaymentsActive = computed(
+  () => internmentPaymentRows.value.length > 0 || carryInternmentActive.value
+)
+
+/** Nota literal del bloque §2.5 (ACEPTACIÓN — `−` U+2212 verbatim). */
+const INTERNMENT_PAYMENT_NOTE =
+  'Desglose del valor importado: costo de internación = total − total/(1 + % internación de la Línea), pagado según sus propios términos. Informativo en caja: no altera el P&L (causación).'
+
+/** Pivote del bloque "Pago de internación" (CECO de la compra × mes de
+ *  vencimiento de la cuota; cuotas fuera de año → Antes/Después, FE-S8
+ *  intacto). `null` ⇒ sin bloque. */
+const internmentPaymentsPivot = computed(() => {
+  if (!internmentPaymentsActive.value) return null
+  return buildPivotFrom(internmentPaymentRows.value)
+})
+
 /**
  * Degradación §5 (espejo del patrón `costDegradation` de Ejecutiva): SOLO
  * con el catálogo de términos CAÍDO (`payableTermsError`) y además ingresos
@@ -638,8 +794,24 @@ const costPaymentsActive = computed(() => costPaymentRows.value.length > 0)
  * está EN VUELO (`!loaded` sin error) no se pinta nada — el bloque simplemente
  * aún no existe (cero parpadeo; DOM idéntico a FE-S4B en usuario nuevo,
  * AC-S7-FE-8).
+ *
+ * FE-S10 §2.4-5 (extiende FE-S9 §2.5-3): "produciría filas" cubre TAMBIÉN
+ * los streams nuevos — con `internmentCatalogError` ambos streams de COMPRA
+ * quedan cortocircuitados (D-FE10-3), así que el aviso aplica con cualquier
+ * compra finita ≠ 0 (no requieren tasa de costo); la ruta `cogs` de los
+ * ingresos NO depende del catálogo de internación (A-8) y su regla queda
+ * intacta (solo `payableTermsError` la degrada).
  */
 const costTermsDegraded = computed(() => {
+  // FE-S10: catálogo de internación caído ⇒ streams de COMPRAS (proveedor +
+  // internación) indegradables: cualquier compra que produciría filas dispara
+  // el aviso compartido (`COGS_TERMS_UNAVAILABLE_NOTE`).
+  if (budgetPlanningStore.internmentCatalogError) {
+    for (const line of purchaseLines.value) {
+      const amount = Number(line.projected_amount)
+      if (Number.isFinite(amount) && amount !== 0) return true
+    }
+  }
   if (!budgetPlanningStore.payableTermsError) return false
   // FE-S9 §2.5-3 (con el matiz A-02 §7.1): "produciría filas" ahora cubre
   // AMBAS fuentes — COMPRAS (ninguna necesita tasa de costo: cualquier compra
@@ -731,11 +903,13 @@ const COMPRAS_NOTE =
   'por términos de la Línea, en “Salidas — Pago a proveedores”.'
 
 /**
- * Bloques del template. Orden vigente (FE-S9 §2.4): Entradas → [Compras del
- * mes] → [Pago a proveedores] → Gastos fijos → Gastos variables — el orden
- * relativo FE-S4B/FE-S7 se conserva; el bloque nuevo entra JUSTO antes de
- * Pago a proveedores y SOLO si el escenario tiene compras (NFR-FE9-3: sin
- * compras el DOM es idéntico a FE-S8).
+ * Bloques del template. Orden vigente (FE-S9 §2.4 + FE-S10 §2.5): Entradas →
+ * [Compras del mes] → [Pago a proveedores] → [Pago de internación] → Gastos
+ * fijos → Gastos variables — el orden relativo FE-S4B/FE-S7 se conserva;
+ * "Compras del mes" entra JUSTO antes de Pago a proveedores y solo con
+ * compras; "Pago de internación" entra JUSTO DESPUÉS de Pago a proveedores
+ * (antes de fijos) y solo con filas propias ∨ arrastre `internment`
+ * (NFR-FE9-3/NFR-FE10-3: sin configuraciones el DOM es idéntico al previo).
  */
 const blocks = computed(() => {
   const list = [
@@ -774,6 +948,24 @@ const blocks = computed(() => {
       pivot: costPaymentsPivot.value,
       aria: 'Salidas de pago a proveedores por costo de ventas derivado, por centro de costo de ingreso y mes de pago',
       note: COGS_PAYMENT_NOTE,
+      ooy: true
+    })
+  }
+  // FE-S10 §2.5 (D-FE10-2): bloque PROPIO de internación — destinatario y
+  // plazos distintos, NUNCA mezclado con "Pago a proveedores" — insertado
+  // JUSTO después de él y antes de fijos. Solo con filas propias ∨ cuotas de
+  // arrastre `internment` (NFR-FE10-3). `ooy: true`: los términos pueden
+  // anclar fuera de N (regla FE-S8/AC-OY-9 vigente: cuota ∉ N vive solo en
+  // Antes/Después). Neto/salidas/acumulado lo incorpora la agregación del
+  // `resumen`/`ooyColumns`, que suma los pivotes (sin lista hard-coded de
+  // IDs de bloque — verificado §2.5).
+  if (internmentPaymentsPivot.value) {
+    list.push({
+      title: 'Pago de internación',
+      emptyName: 'pagos de internación',
+      pivot: internmentPaymentsPivot.value,
+      aria: 'Pago de internación del escenario por centro de costo y mes de vencimiento',
+      note: INTERNMENT_PAYMENT_NOTE,
       ooy: true
     })
   }
@@ -842,14 +1034,20 @@ const carryActive = computed(
  * FIX colapsa a `'line'` solo lo que NO es `cogs`/`purchase`; grupos y orden
  * quedan line < cogs < purchase. Payloads sin `'purchase'` (los anteriores a
  * BE-S8) producen un DOM idéntico a FE-S7/FE-S8 (AC-FE9-5).
+ *
+ * FE-S10 §2.6: BE-S9 añadió el CUARTO origen `'internment'` (cuota de
+ * internación arrastrada, misma forma) — la normalización lo reconoce y el
+ * rank extiende el desempate a line < cogs < purchase < internment (espejo
+ * del rank BE §5.4-3). Payloads sin `'internment'` ⇒ DOM idéntico a FE-S9.
  * @param {(line: object) => boolean} match
  */
 /**
- * Orden de desempate por origen dentro del MISMO CECO (FE-S9 §2.7):
- * `line` < `cogs` < `purchase` — extensión del binario FE-S7 (line<cogs),
- * que para payloads sin compras da exactamente el mismo resultado numérico.
+ * Orden de desempate por origen dentro del MISMO CECO (FE-S9 §2.7 + FE-S10
+ * §2.6): `line` < `cogs` < `purchase` < `internment` — extensión del rank
+ * BE §5.4-3 (`_carryover_order_key`, BR-CO-10 ampliado): para payloads sin
+ * internment da exactamente el mismo resultado que FE-S9.
  */
-const CARRY_ORIGIN_RANK = { line: 0, cogs: 1, purchase: 2 }
+const CARRY_ORIGIN_RANK = { line: 0, cogs: 1, purchase: 2, internment: 3 }
 
 function buildCarryPivot(match) {
   if (!carryActive.value) return null
@@ -862,11 +1060,14 @@ function buildCarryPivot(match) {
     const amount = Number(line.projected_amount)
     if (!Number.isFinite(amount)) continue
 
-    // FE-S9 §2.7 (FIX obligatorio): normalizar a 'line' | 'cogs' | 'purchase'
-    // — antes TODO lo no-cogs colapsaba a 'line' y una cuota 'purchase' del
-    // BE-S8 se habría disfrazado de material. Payloads viejos (sin `origin` o
-    // con valores desconocidos) siguen cayendo a 'line': DOM idéntico.
-    const origin = ['cogs', 'purchase'].includes(line.origin) ? line.origin : 'line'
+    // FE-S9 §2.7 + FE-S10 §2.6 (FIX obligatorio): normalizar a
+    // 'line' | 'cogs' | 'purchase' | 'internment' — antes TODO lo no-cogs
+    // colapsaba a 'line' y una cuota 'purchase' del BE-S8 se habría
+    // disfrazado de material; con BE-S9 la cuota de INTERNACIÓN llega con
+    // `origin:"internment"` (id_budget_line null, línea `expense` derivada).
+    // Payloads viejos (sin `origin` o con valores desconocidos) siguen
+    // cayendo a 'line': DOM idéntico (R-S9-3 tolerado en BE, montos iguales).
+    const origin = ['cogs', 'purchase', 'internment'].includes(line.origin) ? line.origin : 'line'
     const key = `${line.id_cost_center}|${origin}`
     if (!byCeco.has(key)) {
       byCeco.set(key, {
@@ -961,11 +1162,23 @@ const carryPurchaseRowTitle = computed(() => {
   return `Cuota de compra derivada del escenario ${name} (${carryCogsYear.value}); no es una línea del escenario.`
 })
 
-/** Tooltip por origen de fila de arrastre (material | cogs | purchase). */
+/**
+ * Tooltip literal §2.6 (frontend.03_13) para las filas `origin:"internment"`
+ * (BE-S9: cuotas de internación arrastradas) — comparte el resolvedor de
+ * año/nombre de la fuente con `carryCogsRowTitle`/`carryPurchaseRowTitle`.
+ */
+const carryInternmentRowTitle = computed(() => {
+  const source = carryover.value.source
+  const name = source?.budget_name ?? 'año anterior'
+  return `Cuota de internación derivada del escenario ${name} (${carryCogsYear.value}); no es una línea del escenario.`
+})
+
+/** Per-origin tooltip de fila de arrastre (material | cogs | purchase | internment). */
 const carryTitlesByOrigin = computed(() => ({
   line: carryRowTitle.value,
   cogs: carryCogsRowTitle.value,
-  purchase: carryPurchaseRowTitle.value
+  purchase: carryPurchaseRowTitle.value,
+  internment: carryInternmentRowTitle.value
 }))
 
 /* ------------------- Fuera de año: control global (FE-S6 §6.2) ------------------- */
@@ -979,7 +1192,10 @@ const anyOutOfYear = computed(
       // N (términos negativos sobre enero / +120 sobre diciembre) ⇒ el toggle
       // debe existir cuando solo ÉL tiene pendientes (AC-S7-FE-4). Sin filas
       // derivadas el sumando es 0: DOM idéntico a la era pre-FE-S7 (AC-S7-FE-8).
-      (costPaymentsPivot.value ? costPaymentsPivot.value.beforeAfterRowCount : 0) >
+      (costPaymentsPivot.value ? costPaymentsPivot.value.beforeAfterRowCount : 0) +
+      // FE-S10 §2.5: mismo caso para "Pago de internación" (AC-OY-* siguen:
+      // cuota int fuera de N vive solo en Antes/Después). Sin filas ⇒ 0.
+      (internmentPaymentsPivot.value ? internmentPaymentsPivot.value.beforeAfterRowCount : 0) >
     0
 )
 
@@ -989,16 +1205,22 @@ const anyOutOfYear = computed(
  * pivotes — cero re-recorridos de `budget_lines` (NFR-OY-1) y recálculo vivo
  * desde la misma caché reactiva (NFR-OY-2). Visibles solo con `anyOutOfYear`
  * + toggle ON (mismo lenguaje visual que los bloques). Entradas = buckets del
- * pivote de ingresos propios; Salidas = fijos + pago a proveedores (arrastre
- * y variables aportan 0 a los buckets por construcción — BR-CO-03/BR-LINE-04,
- * no se recorren); Neto = entradas − salidas por columna.
+ * pivote de ingresos propios; Salidas = fijos + pago a proveedores + pago de
+ * internación (FE-S10 §2.5; arrastre y variables aportan 0 a los buckets por
+ * construcción — BR-CO-03/BR-LINE-04, no se recorren); Neto = entradas −
+ * salidas por columna.
  */
 const ooyColumns = computed(() => {
   const entradas = [entradasPivot.value.beforeTotal, entradasPivot.value.afterTotal]
   const costes = costPaymentsPivot.value
+  const internment = internmentPaymentsPivot.value
   const salidas = [
-    fijosPivot.value.beforeTotal + (costes ? costes.beforeTotal : 0),
-    fijosPivot.value.afterTotal + (costes ? costes.afterTotal : 0)
+    fijosPivot.value.beforeTotal +
+      (costes ? costes.beforeTotal : 0) +
+      (internment ? internment.beforeTotal : 0),
+    fijosPivot.value.afterTotal +
+      (costes ? costes.afterTotal : 0) +
+      (internment ? internment.afterTotal : 0)
   ]
   return {
     visible: anyOutOfYear.value && showOutOfYear.value,
@@ -1036,6 +1258,10 @@ const resumen = computed(() => {
   const cobros = cobrosArrastre.value
   const pagos = pagosArrastre.value
   const costes = costPaymentsPivot.value
+  // FE-S10 §2.5: el bloque propio "Pago de internación" entra a salidas por
+  // la MISMA agregación de pivotes (sin lista hard-coded de IDs de bloque);
+  // sin filas el sumando es 0: resumen byte-idéntico a FE-S9 (NFR-FE10-3).
+  const internment = internmentPaymentsPivot.value
   const entradasPropias = entradasPivot.value.columnTotals
   const fijos = fijosPivot.value.columnTotals
   const variables = variablesPivot.value ? variablesPivot.value.columnTotals : null
@@ -1046,7 +1272,8 @@ const resumen = computed(() => {
       fijos[m] +
       (variables ? variables[m] : 0) +
       (pagos ? pagos.columnTotals[m] : 0) +
-      (costes ? costes.columnTotals[m] : 0)
+      (costes ? costes.columnTotals[m] : 0) +
+      (internment ? internment.columnTotals[m] : 0)
   )
   const neto = entradas.map((value, m) => value - salidas[m])
 
@@ -1061,7 +1288,8 @@ const resumen = computed(() => {
     fijosPivot.value.grandTotal +
     (variablesPivot.value ? variablesPivot.value.grandTotal : 0) +
     (pagos ? pagos.grandTotal : 0) +
-    (costes ? costes.grandTotal : 0)
+    (costes ? costes.grandTotal : 0) +
+    (internment ? internment.grandTotal : 0)
   // FE-S8 C-3 (FR-4): neto ANUAL = entradas − salidas (ya no Σ de los 12
   // netos: con fuera-de-año esos importes no viven en ningún mes pero sí en
   // los totales; sin fuera-de-año el valor es idéntico — R-OY-2).
@@ -1401,12 +1629,17 @@ function negativeCell(row, value) {
                          FE-S6 (`← label`); la cuota derivada `origin:"cogs"`
                          gana el prefijo "⌁ Costo {N−1}" y su tooltip propio.
                          FE-S9 §2.7: la cuota `origin:"purchase"` (BE-S8)
-                         gana "⌁ Compra {N−1}" + tooltip de compra. -->
+                         gana "⌁ Compra {N−1}" + tooltip de compra.
+                         FE-S10 §2.6: la cuota `origin:"internment"` (BE-S9)
+                         gana "⌁ Internación {N−1}" + tooltip propio. -->
                     <template v-if="row.origin === 'cogs'"
                       >⌁ Costo {{ carryCogsYear }} · {{ row.label }}</template
                     >
                     <template v-else-if="row.origin === 'purchase'"
                       >⌁ Compra {{ carryCogsYear }} · {{ row.label }}</template
+                    >
+                    <template v-else-if="row.origin === 'internment'"
+                      >⌁ Internación {{ carryCogsYear }} · {{ row.label }}</template
                     >
                     <template v-else>← {{ row.label }}</template>
                   </th>

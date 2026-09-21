@@ -50,6 +50,15 @@
  * (parcial; `null = keep` en `PlanningLineUpdate`, por eso los opcionales
  * vacíos jamás se envían) y NUNCA `projected_amount` en variables
  * (BR-LINE-07) ni `line_type`/`behavior_type` (BR-LINE-06).
+ *
+ * FE-S10-INTERNMENT-SPLIT §2.7 (CLARITY ONLY — cero cambios de contrato): en
+ * modo compra el hint canónico es el del split (el valor ES el costo total:
+ * proveedor + internación) y, CUANDO el CECO resuelve una Línea con tasa de
+ * internación > 0 y el monto es numérico, se pinta la fila de SOLO LECTURA
+ * "Desglose estimado: proveedor … + internación …" (derivada client-side de
+ * `internmentRateByLine`, reactiva sin refetch). Los payloads CREATE/UPDATE
+ * de compra siguen BYTE-IDÉNTICOS a FE-S9 §6.1 (AC-FE10-7; guards BR-PUR-
+ * 02/03/04 intactos: ningún campo nuevo viaja jamás).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
@@ -130,9 +139,50 @@ const LINE_TYPE_OPTIONS = Object.entries(LINE_TYPE_LABELS).map(([value, label]) 
   label
 }))
 
-/** Hint literal §2.2 REEMPLAZADO por A-01 §6.1 (bajo el tipo, solo en compra). */
+/**
+ * Hint literal FE-S10 §2.7 (REEMPLAZA al de FE-S9 §6.1; solo en modo compra):
+ * el valor capturado ES el costo total (proveedor + internación, A-1') y el
+ * desglose se deriva client-side en la Vista Flujo (D-FE10-1). Cero cambios
+ * de payload: la fila "Desglose estimado" de abajo es SOLO lectura.
+ */
 const PURCHASE_HINT =
-  'Las cuotas de pago al proveedor se derivan automáticamente de los términos de la Línea sobre la fecha de importación. La temporada es informativa: no genera cuotas.'
+  'El valor es el costo total (proveedor + internación). Las cuotas al proveedor se derivan del costo del proveedor (total ÷ (1 + % de internación de la Línea)) y las de internación de sus propios términos, ambas sobre la fecha de importación. La temporada es informativa: no genera cuotas.'
+
+/* ───── FE-S10-INTERNMENT-SPLIT §2.7: fila "Desglose estimado" (solo lectura) ───── */
+
+/**
+ * Tasa de internación (fracción 0–1) VIGENTE de la LÍNEA del CECO
+ * seleccionado en el formulario, resuelta contra los catálogos ya cacheados
+ * por `ensureCatalogs` (`costCenters` + getter `internmentRateByLine`) —
+ * reactiva a monto/CECO/temporada SIN refetch (NFR-FE10-2). Guard defensivo
+ * espejo §2.4-1: no finita o negativa ⇒ 0 (sin desglose).
+ */
+const purchaseInternmentPct = computed(() => {
+  if (!isPurchase.value) return 0
+  if (!form.idCostCenter) return 0
+  const idCostCenter = Number(form.idCostCenter)
+  if (!Number.isFinite(idCostCenter)) return 0
+  const found = budgetPlanningStore.costCenters.find((item) => item.id_cost_center === idCostCenter)
+  const lineId = typeof found?.id_line === 'number' ? found.id_line : null
+  if (lineId === null) return 0
+  const pct = Number(budgetPlanningStore.internmentRateByLine.get(lineId) ?? 0)
+  return Number.isFinite(pct) && pct > 0 ? pct : 0
+})
+
+/**
+ * Literal §2.7 (solo lectura — NO es campo, NO viaja en payload): visible
+ * SOLO en modo compra con CECO que resuelve Línea con `pct > 0` y monto
+ * numérico (`parseCellAmount` válido, ASM-12). Fórmula espejo backend.02_19
+ * §4: `proveedor = amount / (1 + pct)`, `internación = amount − proveedor`.
+ */
+const purchaseBreakdownText = computed(() => {
+  const pct = purchaseInternmentPct.value
+  if (pct <= 0) return ''
+  const parsed = amountParse.value
+  if (!parsed.valid) return ''
+  const provBase = parsed.value / (1 + pct)
+  return `Desglose estimado: proveedor ${formatMoney(provBase)} + internación ${formatMoney(parsed.value - provBase)}`
+})
 
 /** Opciones del select de comportamiento (orden = `BEHAVIOR_LABELS`). */
 const BEHAVIOR_OPTIONS = Object.entries(BEHAVIOR_LABELS).map(([value, label]) => ({
@@ -756,6 +806,12 @@ onBeforeUnmount(() => {
             class="lf-hint"
           >
             Actual: {{ formatMoney(props.line?.projected_amount) }}
+          </p>
+          <!-- FE-S10 §2.7: fila informativa SOLO lectura (no campo, no
+               payload) — solo modo compra con Línea de rate > 0 y monto
+               numérico; AC-FE10-7: los payloads son idénticos a FE-S9. -->
+          <p v-if="purchaseBreakdownText" class="lf-hint" aria-live="polite">
+            {{ purchaseBreakdownText }}
           </p>
           <p
             v-if="fieldMessage('amount') || isFlagged('amount')"

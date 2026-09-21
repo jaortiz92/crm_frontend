@@ -1,21 +1,26 @@
 <script setup>
 /**
  * BudgetRulesView — Gestión de Reglas Financieras (`/budget/rules`), spec
- * FE-S3-RULES §8 + FE-S5-PAYABLE-TERMS §3.1. Vista: cabecera + tabs custom
- * "pill" (A2, sin Vuetify) + un panel por pilar (Costos por Línea / Comisiones
- * de Venta) con barra de filtros, tabla reutilizable y modal crear/editar, más
- * el tercer tab 'payable' (Términos de pago, panel propio).
+ * FE-S3-RULES §8 + FE-S5-PAYABLE-TERMS §3.1 + FE-S10-INTERNMENT-SPLIT §2.3.
+ * Vista: cabecera + tabs custom "pill" (A2, sin Vuetify) + un panel por pilar
+ * (Costos por Línea / Comisiones de Venta) con barra de filtros, tabla
+ * reutilizable y modal crear/editar, más el tercer tab 'payable' (Términos de
+ * pago, panel propio) y el CUARTO tab 'internment' ("Internación", panel
+ * propio FE-S10 §2.3: tasa de internación + cuotas por Línea).
  *
  * El estado vive en `budgetRulesStore` (caché §6) y los FILTROS en la vista,
  * por kind y sin compartirse (§8.3). Ni el cambio de tab ni los filtros
- * disparan HTTP (NFR-2): `commission` y `payable` se cargan perezosamente una
- * sola vez en SU primera activación (A15 / FE-S5 §3.1). `activeTab` sigue
- * arrancando en 'cost': la pestaña nueva va al final (FE-S5 §3.1).
+ * disparan HTTP (NFR-2): `commission`, `payable` e `internment` se cargan
+ * perezosamente una sola vez en SU primera activación (A15 / FE-S5 §3.1 /
+ * FE-S10 §2.2: el dúo de internación viaja atómico en
+ * `fetchInternmentCatalogs`). `activeTab` sigue arrancando en 'cost': las
+ * pestañas nuevas van al final.
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import RatesDataTable from '@/components/budget/rates/RatesDataTable.vue'
 import RateEditorModal from '@/components/budget/rates/RateEditorModal.vue'
 import PayableTermsPanel from '@/components/budget/rates/PayableTermsPanel.vue'
+import InternmentPanel from '@/components/budget/rates/InternmentPanel.vue'
 import { RATE_KINDS } from '@/components/budget/rates/ratesConfig.js'
 import { useBudgetRulesStore } from '@/stores/budgetRulesStore.js'
 import { useUserStore } from '@/stores/userStore.js'
@@ -24,14 +29,16 @@ import { alertService } from '@/services/alertService.js'
 /** Pilares de tasas: paneles FE-S3 con `ratesConfig.js` como única fuente. */
 const RATE_TABS = ['cost', 'commission']
 
-/** Orden de los tres tabs (FE-S5 §3.1): `payable` se renderiza aparte. */
-const TAB_ORDER = ['cost', 'commission', 'payable']
+/** Orden de los cuatro tabs (FE-S5 §3.1 + FE-S10 §2.3): los paneles propios
+ *  (`payable`, `internment`) se renderizan aparte de los pilares de tasas. */
+const TAB_ORDER = ['cost', 'commission', 'payable', 'internment']
 
 /** Etiquetas del pill: las dos tasas salen de `RATE_KINDS` (sin tocarla). */
 const TAB_LABELS = {
   cost: RATE_KINDS.cost.tabLabel,
   commission: RATE_KINDS.commission.tabLabel,
-  payable: 'Términos de pago'
+  payable: 'Términos de pago',
+  internment: 'Internación'
 }
 
 const budgetRulesStore = useBudgetRulesStore()
@@ -66,10 +73,13 @@ onMounted(async () => {
 
 /**
  * Activa un tab. La primera activación de 'commission' dispara el único
- * `GET /budget/commission-rates/` (re-pulsear la tab es no-op, AC-04/A15) y
- * la de 'payable' hace lo propio con el catálogo `GET /budget/line-payable-term/`
- * (lazy FE-S5 §3.1, jamás en `onMounted`).
- * @param {'cost'|'commission'|'payable'} kind
+ * `GET /budget/commission-rates/` (re-pulsear la tab es no-op, AC-04/A15), la
+ * de 'payable' hace lo propio con el catálogo `GET /budget/line-payable-term/`
+ * (lazy FE-S5 §3.1, jamás en `onMounted`) y la de 'internment' carga el DÚO
+ * atómico de internación (`GET /budget/line-internment-rate/` +
+ * `GET /budget/line-internment-term/` en UN `Promise.all` con UNA bandera de
+ * error, FE-S10 §2.2/D-FE10-3) — también lazy, jamás en `onMounted`.
+ * @param {'cost'|'commission'|'payable'|'internment'} kind
  */
 function activateTab(kind) {
   if (!TAB_ORDER.includes(kind) || activeTab.value === kind) return
@@ -77,6 +87,12 @@ function activateTab(kind) {
   if (kind === 'payable') {
     if (!budgetRulesStore.payableTermsLoaded) {
       budgetRulesStore.fetchPayableTerms()
+    }
+    return
+  }
+  if (kind === 'internment') {
+    if (!budgetRulesStore.internmentCatalogsLoaded) {
+      budgetRulesStore.fetchInternmentCatalogs()
     }
     return
   }
@@ -171,9 +187,10 @@ async function onRestore(kind, row) {
 
     <p class="page-description">
       Administre las tasas que alimentan el motor financiero: costo de ventas (COGS) y comisión
-      comercial, por línea de producto o globales, y los términos de pago a proveedores por línea
-      (fechas de salida del efectivo). La historia no se borra: las reglas se archivan y quedan
-      auditables con su nombre, vigencia y estado.
+      comercial, por línea de producto o globales; los términos de pago a proveedores por línea
+      (fechas de salida del efectivo) y la internación de la Línea (el % que parte el costo total de
+      cada importación en proveedor + internación, con sus propias cuotas). La historia no se borra:
+      las reglas se archivan y quedan auditables con su nombre, vigencia y estado.
     </p>
 
     <div class="rates-tabs" role="tablist" aria-label="Pilares de reglas financieras">
@@ -305,9 +322,22 @@ async function onRestore(kind, row) {
       <PayableTermsPanel />
     </div>
 
+    <!-- FE-S10 §2.3: el panel de internación (4.ª pestaña) SOLO se monta con
+         su tab activo; el dúo de catálogos ya lo trajo `activateTab` (lazy,
+         fetch atómico con bandera de error única, D-FE10-3) -->
+    <div
+      v-if="activeTab === 'internment'"
+      id="rates-panel-internment"
+      class="rates-panel"
+      role="tabpanel"
+      aria-labelledby="rates-tab-internment"
+    >
+      <InternmentPanel />
+    </div>
+
     <RateEditorModal
       :open="modalOpen"
-      :kind="activeTab === 'payable' ? 'cost' : activeTab"
+      :kind="activeTab === 'payable' || activeTab === 'internment' ? 'cost' : activeTab"
       :rate="editingRate"
       @saved="closeModal"
       @close="closeModal"

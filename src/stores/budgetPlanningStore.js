@@ -21,10 +21,12 @@ import router from '@/router/index.js'
  *    (ambos derivados client-side, ASM-10; jamás dos fuentes divergentes).
  *  - Catálogos CECO/temporadas cacheados una vez por sesión (patrón A5) para
  *    resolver `id_cost_center`/`id_collection` en etiquetas legibles. Las
- *    tasas de costo activas (`lineCostRates`, FE-S4C §3.2) y los términos de
- *    pago al proveedor del costo (`payableTerms`, FE-S7 §3) comparten el
- *    mismo ciclo de vida en `ensureCatalogs()` para la estimación de la
- *    Ejecutiva y la derivación "Pago a proveedores" de la Vista Flujo.
+ *    tasas de costo activas (`lineCostRates`, FE-S4C §3.2), los términos de
+ *    pago al proveedor del costo (`payableTerms`, FE-S7 §3) y el dúo de
+ *    internación (`internmentRates`/`internmentTerms`, FE-S10 §2.2) comparten
+ *    el mismo ciclo de vida en `ensureCatalogs()` para la estimación de la
+ *    Ejecutiva y la derivación "Pago a proveedores" + split "Pago de
+ *    internación" de la Vista Flujo.
  *
  * Flags anti-doble-submit (NFR-F4/AC-FE-8): `uploading`, `cloning`,
  * `settingTarget`, `deleting` (expuestos como `isSubmitting`), `cellSaving`
@@ -267,6 +269,30 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
     payableTerms: [],
     payableTermsLoaded: false,
     payableTermsError: false,
+    /**
+     * @type {Array<object>} catálogos de internación por Línea (FE-S10-
+     * INTERNMENT-SPLIT §2.2; autoridad `backend.02_19` §3.1/§3.2):
+     * `internmentRates` = `{ id_line_internment_rate, id_line,
+     * internment_pct (FRACCIÓN 0–1, D-S9-1: recargo SOBRE el costo del
+     * proveedor) }` (unicidad por Línea ⇒ last-wins imposible en
+     * `internmentRateByLine`) e `internmentTerms` = `{
+     * id_line_internment_term, id_line, payment_pct, payment_days }` (la
+     * base del pct es el CostoInternación, NO el total de la fila — tablas
+     * no intercambiables con `payableTerms`). Se cargan como UN dúo atómico
+     * en `ensureCatalogs`: el fallo de cualquiera de los dos GETs marca
+     * `internmentCatalogError` (D-FE10-3: sin el % no se puede partir la
+     * base ⇒ la Vista Flujo cortocircuita AMBOS streams de compra con aviso
+     * — FE-S10 §2.4-5) y NO bloquea el resto de catálogos. Cache A5/misma
+     * sesión, mismo convenio silencioso de `payableTerms` (jamás toast ni
+     * request extra — NFR-CY-1).
+     */
+    internmentRates: [],
+    /** @type {Array<object>} */
+    internmentTerms: [],
+    /** dúo completamente cargado (ambas GETs exitosas). */
+    internmentCatalogLoaded: false,
+    /** true ⇒ cortocircuito fail-closed de los streams de compra (§2.4-5). */
+    internmentCatalogError: false,
 
     /** Flags anti-doble-submit (NFR-F4/AC-FE-8). */
     uploading: false,
@@ -338,6 +364,56 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
           (a, b) =>
             Number(a.payment_days) - Number(b.payment_days) ||
             Number(a.id_line_payable_term) - Number(b.id_line_payable_term)
+        )
+      }
+      return byLine
+    },
+
+    /**
+     * Tasa de internación vigente por `id_line` (FE-S10 §2.2):
+     * `Map<number, number>` con `internment_pct` en FRACCIÓN 0–1 (D-S9-1).
+     * Unicidad BE (backend.02_19 §3.1) ⇒ last-wins imposible; pcts no
+     * finitos se descartan (defensivo, espejo del guard §2.4-1 del Flujo).
+     * Getters de Pinia = `computed`: el Map se reconstruye SOLO cuando muta
+     * `internmentRates` (NFR-S7-FE-1 pattern). Líneas sin tasa NO figuran ⇒
+     * `get(lineId)` es `undefined` y el consumidor aplica `?? 0` (A-5:
+     * provBase = amount, DOM idéntico a FE-S9 — NFR-FE10-3).
+     * @returns {Map<number, number>}
+     */
+    internmentRateByLine() {
+      const byLine = new Map()
+      for (const rate of Array.isArray(this.internmentRates) ? this.internmentRates : []) {
+        if (!rate || typeof rate.id_line !== 'number') continue
+        const pct = Number(rate.internment_pct)
+        if (!Number.isFinite(pct)) continue
+        byLine.set(rate.id_line, pct)
+      }
+      return byLine
+    },
+
+    /**
+     * Términos de pago de la INTERNACIÓN agrupados por `id_line` (FE-S10
+     * §2.2): `Map<number, Array<object>>`, cada lista ordenada
+     * `payment_days asc, id_line_internment_term asc` — orden D-7 (espejo
+     * EXACTO del getter hermano `payableTermsByLine` de arriba, incluida la
+     * reconstrucción solo cuando muta el catálogo). Líneas sin términos NO
+     * figuran ⇒ `get(id_line)` es `undefined` y el consumidor aplica la
+     * cuota única 100 % del CostoInternación en la ancla (BR-INT-04,
+     * espejo D-S7-4).
+     * @returns {Map<number, Array<object>>}
+     */
+    internmentTermsByLine() {
+      const byLine = new Map()
+      for (const term of Array.isArray(this.internmentTerms) ? this.internmentTerms : []) {
+        if (!term || typeof term.id_line !== 'number') continue
+        if (!byLine.has(term.id_line)) byLine.set(term.id_line, [])
+        byLine.get(term.id_line).push(term)
+      }
+      for (const terms of byLine.values()) {
+        terms.sort(
+          (a, b) =>
+            Number(a.payment_days) - Number(b.payment_days) ||
+            Number(a.id_line_internment_term) - Number(b.id_line_internment_term)
         )
       }
       return byLine
@@ -426,14 +502,17 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
     },
 
     /**
-     * Catálogos CECO + temporadas + tasas de costo + términos de pago
-     * cacheados una vez por sesión (A5; FE-S4C §3.2 para las tasas, FE-S7 §3
-     * para los términos). El fallo es SIEMPRE silencioso: las etiquetas
-     * degradan a `CECO #<id>`, la vista sigue funcionando y
-     * `lineCostRatesError`/`payableTermsError` permiten diferenciar la
-     * degradación visual en la Vista Ejecutiva (§5.2) y en el bloque derivado
-     * "Pago a proveedores" de la Vista Flujo (FE-S7 §5) — jamás toast ni
-     * bloqueo (D-4).
+     * Catálogos CECO + temporadas + tasas de costo + términos de pago +
+     * dúo de internación cacheados una vez por sesión (A5; FE-S4C §3.2 para
+     * las tasas, FE-S7 §3 para los términos, FE-S10 §2.2 para la
+     * internación). El fallo es SIEMPRE silencioso: las etiquetas degradan a
+     * `CECO #<id>`, la vista sigue funcionando y
+     * `lineCostRatesError`/`payableTermsError`/`internmentCatalogError`
+     * permiten diferenciar la degradación visual en la Vista Ejecutiva
+     * (§5.2) y en los bloques derivados "Pago a proveedores" / "Pago de
+     * internación" de la Vista Flujo (FE-S7 §5 / FE-S10 §2.4-5) — jamás
+     * toast ni bloqueo (D-4). Cada catálogo es un job INDEPENDIENTE del
+     * `Promise.all`: la caída de uno no bloquea la carga de los demás.
      * @returns {Promise<void>}
      */
     async ensureCatalogs() {
@@ -493,6 +572,31 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
             .catch(() => {
               /* silencioso: degradación visual en Vista Flujo (FE-S7 §5) */
               this.payableTermsError = true
+            })
+        )
+      }
+      // FE-S10 §2.2: dúo de internación (tasas + términos) en UN solo job —
+      // `Promise.all` atómico con UNA sola bandera de error (D-FE10-3: sin
+      // el % no se puede partir la base ⇒ fail-closed de AMBOS streams de
+      // compra en la Vista Flujo, FE-S10 §2.4-5). Es un job MÁS del mismo
+      // `jobs`: su fallo NO bloquea al resto de catálogos (Promise.all de
+      // arriba ya aísla cada job con su propio .catch silencioso).
+      if (!this.internmentCatalogLoaded) {
+        jobs.push(
+          Promise.all([
+            budgetPlanningService.fetchInternmentRates(),
+            budgetPlanningService.fetchInternmentTerms()
+          ])
+            .then(([ratesResponse, termsResponse]) => {
+              this.internmentRates = Array.isArray(ratesResponse?.data) ? ratesResponse.data : []
+              this.internmentTerms = Array.isArray(termsResponse?.data) ? termsResponse.data : []
+              this.internmentCatalogLoaded = true
+            })
+            .catch(() => {
+              /* silencioso: cortocircuito fail-closed de los streams de
+                 compra en la Vista Flujo (FE-S10 §2.4-5, aviso vía
+                 `costTermsDegraded`) */
+              this.internmentCatalogError = true
             })
         )
       }

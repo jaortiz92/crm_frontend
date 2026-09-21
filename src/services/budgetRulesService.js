@@ -22,7 +22,17 @@ import { RATE_KINDS } from '@/components/budget/rates/ratesConfig.js'
  *    verificado contra el openapi vivo de BE-S5): GET/POST
  *    `/budget/line-payable-term/` · PUT/DELETE
  *    `/budget/line-payable-term/{id_line_payable_term}`. GET plano (sin
- *    paginación) ordenado por `id_line, payment_days`.
+ *    paginación) ordenado por `id_line, payment_days` (BE-S5 §5).
+ *  - Catálogos de internación por línea (FE-S10-INTERNMENT-SPLIT §2.1,
+ *    contrato congelado en `backend.02_19` §5.3/§6): GET/POST
+ *    `/budget/line-internment-rate/` · PUT/DELETE
+ *    `/budget/line-internment-rate/{id_line_internment_rate}` y espejo
+ *    `/budget/line-internment-term/{id_line_internment_term}`. GET planos
+ *    (sin paginación): las tasas ordenan `id_line` (unicidad por Línea —
+ *    máx. UNA tasa, §5.1) y los términos `id_line, payment_days` (§5.2).
+ *    Errores: la rejilla `{ detail, reason? }` existente — los 400 amables
+ *    ("Line {id} already has an internment rate") llegan con el `detail`
+ *    literal del backend y se propagan tal cual para su exhibición (§2.1).
  *
  * Instancia compartida de `@/plugins/axios`: JWT auto-inyectado y `timeout`
  * global de 20 s suficiente para estos GET/PUT JSON (sin overrides, §5.5).
@@ -117,5 +127,113 @@ export const budgetRulesService = {
    */
   deletePayableTerm(id) {
     return axiosInstance.delete(`/budget/line-payable-term/${id}`)
+  },
+
+  /* ───────── CATÁLOGOS DE INTERNACIÓN (FE-S10 §2.1 / backend.02_19 §5.3) ───────── */
+
+  /**
+   * Catálogo COMPLETO de tasas de internación por línea (GET
+   * `/budget/line-internment-rate/`, plano, orden `id_line` — BE-S9 §5.1).
+   * Cada fila: `{ id_line_internment_rate, id_line, internment_pct }` con
+   * `internment_pct` en FRACCIÓN 0–1 = recargo SOBRE el costo del proveedor
+   * (D-S9-1: `CostoTotal = Proveedor × (1 + %)`). Unicidad por Línea (máx.
+   * una tasa vigente; la ausencia se representa con la INEXISTENCIA de fila
+   * ⇒ sin tasa ⇒ % = 0, A-5).
+   * @returns {Promise<import('axios').AxiosResponse<Array<{
+   *   id_line_internment_rate: number,
+   *   id_line: number,
+   *   internment_pct: number
+   * }>>>}
+   */
+  fetchInternmentRates() {
+    return axiosInstance.get('/budget/line-internment-rate/')
+  },
+
+  /**
+   * Crea la tasa de una Línea: POST `{ id_line, internment_pct }` (snake_case
+   * exacto BE-S9 §5.3; el %→fracción lo convierte SOLO la capa panel, mismo
+   * FD5-3). 201 = objeto completo. Duplicado ⇒ 400 `"Line {id_line} already
+   * has an internment rate"` (se pinta con el `detail` literal, §2.1);
+   * rango fuera de (0, 1] ⇒ 422 de esquema.
+   * @param {Object} payload
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  createInternmentRate(payload) {
+    return axiosInstance.post('/budget/line-internment-rate/', payload)
+  },
+
+  /**
+   * Edita una tasa: PUT de REEMPLAZO TOTAL (mismo body que el POST, espejo
+   * del convenio payable-term BE-S5 §5). 404 `"LineInternmentRate {id} not
+   * found"`; re-parentear a Línea con tasa existente ⇒ 400 literal análogo.
+   * @param {number|string} id `id_line_internment_rate`
+   * @param {Object} payload
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  updateInternmentRate(id, payload) {
+    return axiosInstance.put(`/budget/line-internment-rate/${id}`, payload)
+  },
+
+  /**
+   * Elimina una tasa (borrado físico, catálogo sin historial — BE-S9 §5.1;
+   * tras ello la Línea vuelve a % = 0 y el Flujo degrada al 100 % proveedor).
+   * Respuesta `{ deleted_id }`; 404 `"LineInternmentRate {id} not found"`.
+   * @param {number|string} id `id_line_internment_rate`
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  deleteInternmentRate(id) {
+    return axiosInstance.delete(`/budget/line-internment-rate/${id}`)
+  },
+
+  /**
+   * Catálogo COMPLETO de términos de pago de la internación por línea (GET
+   * `/budget/line-internment-term/`, plano, orden `id_line, payment_days` —
+   * BE-S9 §5.2). Cada fila: `{ id_line_internment_term, id_line,
+   * payment_pct, payment_days }`; OJO — SEMÁNTICA DISTINTA de
+   * `line-payable-term`: `payment_pct` multiplica el COSTO DE INTERNACIÓN
+   * (no el total de la compra) y `payment_days` ancla en la fecha de
+   * importación (A-3). Tablas NO intercambiables (BE-S9 §3.2).
+   * @returns {Promise<import('axios').AxiosResponse<Array<{
+   *   id_line_internment_term: number,
+   *   id_line: number,
+   *   payment_pct: number,
+   *   payment_days: number
+   * }>>>}
+   */
+  fetchInternmentTerms() {
+    return axiosInstance.get('/budget/line-internment-term/')
+  },
+
+  /**
+   * Crea un término de internación: POST `{ id_line, payment_pct,
+   * payment_days }` (snake_case exacto; `payment_pct` FRACCIÓN 0–1). 201 =
+   * objeto completo. 404 `"Line {id_line} not found"`; 422 pct ∉ (0, 1].
+   * @param {Object} payload
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  createInternmentTerm(payload) {
+    return axiosInstance.post('/budget/line-internment-term/', payload)
+  },
+
+  /**
+   * Edita un término de internación: PUT de REEMPLAZO TOTAL (mismo body que
+   * el POST). 404 `"LineInternmentTerm {id} not found"`.
+   * @param {number|string} id `id_line_internment_term`
+   * @param {Object} payload
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  updateInternmentTerm(id, payload) {
+    return axiosInstance.put(`/budget/line-internment-term/${id}`, payload)
+  },
+
+  /**
+   * Elimina un término de internación (borrado físico; la derivación del Flujo
+   * degrada a la cuota única 100 % en la ancla — BR-INT-04, BE-S9 §5.2).
+   * Respuesta `{ deleted_id }`; 404 `"LineInternmentTerm {id} not found"`.
+   * @param {number|string} id `id_line_internment_term`
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  deleteInternmentTerm(id) {
+    return axiosInstance.delete(`/budget/line-internment-term/${id}`)
   }
 }

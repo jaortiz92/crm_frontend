@@ -422,8 +422,9 @@ onBeforeUnmount(() => {
             />
             <p class="bi-zone-note">
               Formato SIIGO (hoja 1, encabezados en la fila 8): Centro de Costo · Fecha Importacion
-              · Temporada · Monto · Descripción. Una fila = una importación; las cuotas al
-              proveedor se derivan de los términos de la Línea.
+              · Temporada · Monto · Descripción. Una fila = una importación; las cuotas al proveedor
+              se derivan de los términos de la Línea; el valor es el costo total de la importación
+              (proveedor + internación).
             </p>
           </section>
         </div>

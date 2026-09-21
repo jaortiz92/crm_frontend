@@ -281,6 +281,33 @@ export const budgetPlanningService = {
   fetchPayableTerms: () => axiosInstance.get('/budget/line-payable-term/'),
 
   /**
+   * Catálogo de TASAS DE INTERNACIÓN por Línea (FE-S10-INTERNMENT-SPLIT §2.1;
+   * autoridad `backend.02_19` §3.1/§5.3):
+   * `GET /budget/line-internment-rate/` → `[{ id_line_internment_rate,
+   * id_line, internment_pct }]` con `internment_pct` en FRACCIÓN 0–1
+   * (D-S9-1: recargo sobre el costo del proveedor; `CostoProveedor =
+   * Total / (1 + %)`). Unicidad por Línea (máx. una tasa; ausencia ⇒ 0,
+   * A-5). Lo consume el store (`ensureCatalogs` → `internmentRateByLine`)
+   * para el split client-side de la Vista Flujo (D-FE10-1). Colección ⇒ CON
+   * slash final.
+   * @returns {Promise<import('axios').AxiosResponse<Array<object>>>}
+   */
+  fetchInternmentRates: () => axiosInstance.get('/budget/line-internment-rate/'),
+
+  /**
+   * Catálogo de TÉRMINOS DE PAGO DE LA INTERNACIÓN por Línea (FE-S10 §2.1;
+   * autoridad `backend.02_19` §3.2/§5.3):
+   * `GET /budget/line-internment-term/` → `[{ id_line_internment_term,
+   * id_line, payment_pct, payment_days }]`. SEMÁNTICA DISTINTA de
+   * `line-payable-term`: `payment_pct` multiplica el CostoInternación (no el
+   * total de la compra) — tablas NO intercambiables. Mismo ciclo de vida
+   * (ensureCatalogs, dúo atómico con la tasa ⇒ D-FE10-3). Colección ⇒ CON
+   * slash final.
+   * @returns {Promise<import('axios').AxiosResponse<Array<object>>>}
+   */
+  fetchInternmentTerms: () => axiosInstance.get('/budget/line-internment-term/'),
+
+  /**
    * Elimina FÍSICAMENTE un escenario borrador reutilizando el endpoint
    * LEGACY del CRUD de presupuestos (frontend.03_07 / autoridad
    * `backend.02_14` D-3): `DELETE /budget/{idBudget}`. NO existe ruta

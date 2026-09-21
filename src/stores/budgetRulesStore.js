@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { budgetRulesService } from '@/services/budgetRulesService.js'
 import { RATE_KINDS } from '@/components/budget/rates/ratesConfig.js'
 import { useUserStore } from '@/stores/userStore.js'
+import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import router from '@/router/index.js'
 
 /**
@@ -105,9 +106,49 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
      * @type {Record<number|string, boolean>}
      */
     payableTermSaving: {},
-    loading: { lines: false, cost: false, commission: false, payableTerms: false },
+    /**
+     * Catálogos de INTERNACIÓN por línea (FE-S10-INTERNMENT-SPLIT §2.2;
+     * autoridad `backend.02_19` §3.1/§3.2/§5.3):
+     *  - `internmentRates`: `{ id_line_internment_rate, id_line,
+     *    internment_pct (fracción 0–1, D-S9-1) }` — unicidad por Línea (máx.
+     *    UNA tasa vigente; la ausencia se representa con la INEXISTENCIA de
+     *    fila ⇒ sin tasa = 0 %, A-5) ⇒ last-wins imposible al cartular.
+     *  - `internmentTerms`: `{ id_line_internment_term, id_line,
+     *    payment_pct, payment_days }` — espejo de forma de `payableTerms`
+     *    pero la base del pct es el CostoInternación (tablas NO
+     *    intercambiables, BE-S9 §3.2).
+     * Se cargan SIEMPRE como dúo atómico (`fetchInternmentCatalogs`, UN
+     * `Promise.all`): la derivación del split es todo-o-nada — sin el % no
+     * se puede partir la base ⇒ UNA sola bandera de error (D-FE10-3). Misma
+     * excepción de caché que `payableTerms`: las acciones CRUD patchan
+     * in-place desde la respuesta del servidor (sin refetch).
+     * @type {Array<object>}
+     */
+    internmentRates: [],
+    /** @type {Array<object>} */
+    internmentTerms: [],
+    /** `false` = NUNCA cargada; se marca SOLO en éxito del dúo (patrón A15). */
+    internmentCatalogsLoaded: false,
+    /**
+     * Guards doble-submit de las mutaciones de internación (espejo de
+     * `payableTermSaving`): claves `id_line_internment_rate` /
+     * `id_line_internment_term` para PUT/DELETE y `'new'` para POST.
+     * Mapas SEPARADOS por entidad: un POST de tasa y un POST de término en
+     * vuelo no se bloquean entre sí (la clave `'new'` vive en cada mapa).
+     * @type {Record<number|string, boolean>}
+     */
+    internmentRateSaving: {},
+    /** @type {Record<number|string, boolean>} */
+    internmentTermSaving: {},
+    loading: {
+      lines: false,
+      cost: false,
+      commission: false,
+      payableTerms: false,
+      internment: false
+    },
     /** true ⇒ banner rojo con botón "Reintentar" (A11); null = sin error. */
-    loadError: { cost: null, commission: null, payableTerms: null },
+    loadError: { cost: null, commission: null, payableTerms: null, internment: null },
     /** Flag global de POST/PUT en vuelo (anti doble-submit, §10.5). */
     saving: false
   }),
@@ -389,6 +430,274 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
         }
       } finally {
         delete this.payableTermSaving[id]
+      }
+    },
+
+    /* ---------------------- Catálogos de internación (FE-S10) ---------------------- */
+
+    /**
+     * DÚO atómico de internación (FE-S10 §2.2): UN `Promise.all` sobre
+     * `GET /budget/line-internment-rate/` + `GET /budget/line-internment-term/`
+     * con UNA sola bandera de error — la derivación del split es
+     * todo-o-nada (sin el % no se puede partir la base ⇒ D-FE10-3: si
+     * cualquiera de los dos GETs falla, `loadError.internment = true` y el
+     * panel/Flujo tratan el catálogo completo como NO disponible). Lazy como
+     * `fetchPayableTerms`: ya cargado y `!force` ⇒ no-op (NFR-S5-FE-3
+     * espejo: UN solo fetch por sesión; el panel filtra por Línea
+     * client-side). `internmentCatalogsLoaded` se marca SOLO en éxito.
+     * @param {boolean} [force=false] refetch forzado (Reintentar / 404 en PUT|DELETE)
+     * @returns {Promise<{ ok: boolean, kind?: string }>}
+     */
+    async fetchInternmentCatalogs(force = false) {
+      if (!force && this.internmentCatalogsLoaded) return { ok: true }
+
+      this.loading.internment = true
+      this.loadError.internment = null
+      try {
+        const [ratesResponse, termsResponse] = await Promise.all([
+          budgetRulesService.fetchInternmentRates(),
+          budgetRulesService.fetchInternmentTerms()
+        ])
+        this.internmentRates = Array.isArray(ratesResponse?.data) ? ratesResponse.data : []
+        this.internmentTerms = Array.isArray(termsResponse?.data) ? termsResponse.data : []
+        this.internmentCatalogsLoaded = true
+        this.syncInternmentMirrorToPlanning()
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        // 'auth' no deja banner: el flujo de sesión redirige a Login (AC-03).
+        if (classified.kind !== 'auth') {
+          this.loadError.internment = true
+        }
+        this.handleAuth(classified)
+        return { ok: false, ...classified }
+      } finally {
+        this.loading.internment = false
+      }
+    },
+
+    /**
+     * PUENTE AC-FE10-6 / NFR-FE10-2: tras cargar o mutar con éxito el catálogo
+     * de internación, refresca la COPIA-espejo que el `budgetPlanningStore`
+     * cachea en su `ensureCatalogs` (`internmentRates`/`internmentTerms`). La
+     * Vista Flujo deriva `internmentRateByLine`/`internmentTermsByLine` de ESA
+     * caché (§2.2 "state espejo"), y el CRUD del panel jamás dispara HTTP
+     * extra: sin este puente, "crear/update/delete de rate y términos
+     * recalcula en vivo el Flujo abierto" solo valdría para el orden
+     * Reglas→Flujo de la sesión. No-op si la caché del planning NUNCA cargó
+     * (su propio `ensureCatalogs` traerá la verdad del servidor) o si está
+     * degradada por error (`internmentCatalogLoaded=false` ⇒ el fail-closed
+     * D-FE10-3 del Flujo se respeta intacto). Snapshot copiado (no alias):
+     * cada store sigue siendo DUEÑO de su array y los getters-computed
+     * recalculan al cambiar la referencia (misma filosofía de "la caché es
+     * LA fuente", cero refetch).
+     * @returns {void}
+     */
+    syncInternmentMirrorToPlanning() {
+      if (!this.internmentCatalogsLoaded) return
+      const planning = useBudgetPlanningStore()
+      if (!planning.internmentCatalogLoaded) return
+      planning.internmentRates = [...this.internmentRates]
+      planning.internmentTerms = [...this.internmentTerms]
+    },
+
+    /**
+     * POST `{ id_line, internment_pct }` de la tasa de una Línea (el %→
+     * fracción lo convierte SOLO el panel, FD5-3 espejo). Éxito 201: PUSH
+     * del objeto devuelto en la caché (la caché es LA fuente, sin refetch —
+     * patrón `createPayableTerm` l.311). El 400 amable `"Line {id} already
+     * has an internment rate"` (BE-S9 §5.3) propaga `detail` para que el
+     * panel lo muestre con el literal del backend (FE-S10 §2.1).
+     * @param {{ id_line: number, internment_pct: number }} payload
+     * @returns {Promise<{ ok: boolean, rate?: object|null, kind?: string, detail?: string|null }>}
+     */
+    async createInternmentRate(payload) {
+      if (this.internmentRateSaving.new) return { ok: false, kind: 'busy' }
+      this.internmentRateSaving.new = true
+      try {
+        const response = await budgetRulesService.createInternmentRate(payload)
+        const rate = response?.data ?? null
+        if (rate) this.internmentRates.push(rate)
+        this.syncInternmentMirrorToPlanning()
+        return { ok: true, rate }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.internmentRateSaving.new
+      }
+    },
+
+    /**
+     * PUT de REEMPLAZO TOTAL `/budget/line-internment-rate/{id}` (mismo body
+     * que el POST; espejo del convenio payable-term). Éxito: el objeto
+     * devuelto SUSTITUYE la fila en el sitio (splice por
+     * `id_line_internment_rate`, patrón l.344). 404 `"LineInternmentRate
+     * {id} not found"` ⇒ el panel toastea + refetch forzado del dúo.
+     * @param {number|string} id `id_line_internment_rate`
+     * @param {{ id_line: number, internment_pct: number }} payload
+     * @returns {Promise<{ ok: boolean, rate?: object|null, kind?: string, detail?: string|null }>}
+     */
+    async updateInternmentRate(id, payload) {
+      if (this.internmentRateSaving[id]) return { ok: false, kind: 'busy' }
+      this.internmentRateSaving[id] = true
+      try {
+        const response = await budgetRulesService.updateInternmentRate(id, payload)
+        const rate = response?.data ?? null
+        if (rate) {
+          const index = this.internmentRates.findIndex(
+            (item) => item.id_line_internment_rate === Number(id)
+          )
+          if (index !== -1) this.internmentRates.splice(index, 1, rate)
+          else this.internmentRates.push(rate)
+        }
+        this.syncInternmentMirrorToPlanning()
+        return { ok: true, rate }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.internmentRateSaving[id]
+      }
+    },
+
+    /**
+     * DELETE `/budget/line-internment-rate/{id}` (`{ deleted_id }`). Éxito:
+     * SPLICE de la fila (la Línea vuelve a "sin tasa" ⇒ % = 0 ⇒ el Flujo
+     * degrada al 100 % proveedor, A-5/NFR-FE10-3). 404 se propaga como en
+     * `updateInternmentRate`.
+     * @param {number|string} id `id_line_internment_rate`
+     * @returns {Promise<{ ok: boolean, kind?: string, detail?: string|null }>}
+     */
+    async deleteInternmentRate(id) {
+      if (this.internmentRateSaving[id]) return { ok: false, kind: 'busy' }
+      this.internmentRateSaving[id] = true
+      try {
+        await budgetRulesService.deleteInternmentRate(id)
+        const index = this.internmentRates.findIndex(
+          (item) => item.id_line_internment_rate === Number(id)
+        )
+        if (index !== -1) this.internmentRates.splice(index, 1)
+        this.syncInternmentMirrorToPlanning()
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.internmentRateSaving[id]
+      }
+    },
+
+    /**
+     * POST `{ id_line, payment_pct, payment_days }` de un término de
+     * internación. Éxito 201: PUSH in-place (patrón l.311). El panel puede
+     * encadenar varios POSTs (p. ej. el "Patrón típico", D-FE10-4): el guard
+     * `'new'` exige que sean SECUENCIALES (cada `await` libera el flag).
+     * @param {{ id_line: number, payment_pct: number, payment_days: number }} payload
+     * @returns {Promise<{ ok: boolean, term?: object|null, kind?: string, detail?: string|null }>}
+     */
+    async createInternmentTerm(payload) {
+      if (this.internmentTermSaving.new) return { ok: false, kind: 'busy' }
+      this.internmentTermSaving.new = true
+      try {
+        const response = await budgetRulesService.createInternmentTerm(payload)
+        const term = response?.data ?? null
+        if (term) this.internmentTerms.push(term)
+        this.syncInternmentMirrorToPlanning()
+        return { ok: true, term }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.internmentTermSaving.new
+      }
+    },
+
+    /**
+     * PUT de REEMPLAZO TOTAL `/budget/line-internment-term/{id}`. Éxito:
+     * splice-replace en el sitio (patrón l.344). 404 `"LineInternmentTerm
+     * {id} not found"` ⇒ toast + refetch forzado del dúo desde el panel.
+     * @param {number|string} id `id_line_internment_term`
+     * @param {{ id_line: number, payment_pct: number, payment_days: number }} payload
+     * @returns {Promise<{ ok: boolean, term?: object|null, kind?: string, detail?: string|null }>}
+     */
+    async updateInternmentTerm(id, payload) {
+      if (this.internmentTermSaving[id]) return { ok: false, kind: 'busy' }
+      this.internmentTermSaving[id] = true
+      try {
+        const response = await budgetRulesService.updateInternmentTerm(id, payload)
+        const term = response?.data ?? null
+        if (term) {
+          const index = this.internmentTerms.findIndex(
+            (item) => item.id_line_internment_term === Number(id)
+          )
+          if (index !== -1) this.internmentTerms.splice(index, 1, term)
+          else this.internmentTerms.push(term)
+        }
+        this.syncInternmentMirrorToPlanning()
+        return { ok: true, term }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.internmentTermSaving[id]
+      }
+    },
+
+    /**
+     * DELETE `/budget/line-internment-term/{id}` (`{ deleted_id }`). Éxito:
+     * SPLICE en el sitio (patrón l.377). OJO — sin términos la derivación
+     * del Flujo degrada a la CUOTA ÚNICA 100 % del costo de internación en
+     * la ancla (BR-INT-04, BE-S9 §5.2); ningún escenario se re-expandea aquí.
+     * @param {number|string} id `id_line_internment_term`
+     * @returns {Promise<{ ok: boolean, kind?: string, detail?: string|null }>}
+     */
+    async deleteInternmentTerm(id) {
+      if (this.internmentTermSaving[id]) return { ok: false, kind: 'busy' }
+      this.internmentTermSaving[id] = true
+      try {
+        await budgetRulesService.deleteInternmentTerm(id)
+        const index = this.internmentTerms.findIndex(
+          (item) => item.id_line_internment_term === Number(id)
+        )
+        if (index !== -1) this.internmentTerms.splice(index, 1)
+        this.syncInternmentMirrorToPlanning()
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.internmentTermSaving[id]
       }
     }
   }
