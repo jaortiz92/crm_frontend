@@ -48,6 +48,11 @@ import axiosInstance from '@/plugins/axios'
  * `budgetRulesService` en Reglas Financieras; aquí SOLO se cachea para la
  * derivación de la Vista Flujo (D-S7-2).
  *
+ * Rutas FE-S14-IVA (autoridad: `backend.02_20` §5.9 — contrato §4.6):
+ *  - `GET /budget/iva/settlement/{idBudget}?year=`  liquidación bimestral
+ *    proyectada del escenario (único dato IVA server-side del FE, D-FE14-4).
+ * Ruta unitaria ⇒ SIN slash final.
+ *
  * Slash final obligatorio en la ruta de colección `/budget/planning/` (sin
  * él FastAPI responde 307 — mismo detalle verificado en `budgetRulesService`).
  *
@@ -200,6 +205,12 @@ export const budgetPlanningService = {
    * (`PlanningLineUpdate`): solo campos editables modificados; omitido =
    * keep (y `null` también = keep ⇒ borrar valores opcionales no soportado).
    * `line_type`/`behavior_type` NUNCA se envían (BR-LINE-06).
+   *
+   * FE-S14-IVA (backend.02_20 §5.2): `has_iva` es un campo aditivo del
+   * contrato parcial — el grid y el modal envían SOLO `{ has_iva: <bool> }`
+   * para marcar/desmarcar el flag de una línea EXPENSE; la derivación del
+   * backend interpreta `NULL ≡ True` (D-S10-3) y lo IGNORA en INCOME/PURCHASE
+   * (D-S10-5). Al ser parcial, ningún otro campo se toca con ese body.
    * @param {number|string} idLine
    * @param {Object} data
    * @returns {Promise<import('axios').AxiosResponse<object>>} 200 línea completa
@@ -306,6 +317,32 @@ export const budgetPlanningService = {
    * @returns {Promise<import('axios').AxiosResponse<Array<object>>>}
    */
   fetchInternmentTerms: () => axiosInstance.get('/budget/line-internment-term/'),
+
+  /**
+   * Liquidación de IVA del escenario (FE-S14-IVA §5; autoridad
+   * `backend.02_20` §4.6/§5.9): `GET /budget/iva/settlement/{idBudget}`
+   * con `?year=` opcional (el BE defaultea a `budget.budget_year`; aquí se
+   * envía explícito cuando se conoce para fijar la clave de caché).
+   * ÚNICO dato IVA que viaja del backend (D-FE14-4: la recurrencia con
+   * arrastre no se recalcula en FE para evitar divergencia). Contrato de
+   * respuesta `IvaSettlementResult` (§4.6): claves `tax_rate_used`,
+   * `basis: "cash"`, `periods[]` (`generated/deductible{fixed_expenses,
+   * variable_expenses,import_vat,nationalization_vat}/prior_balance/
+   * tax_base/payment/carry_balance/events_count`), `unassigned`,
+   * `totals{generated,deductable,payments,final_balance}` (ojo: `deductable`
+   * con la grafía literal del BE) y `meta.warnings`. Ruta unitaria ⇒ SIN
+   * slash final. 404 `"Budget {id} not found"`; sin calendario ⇒ 200 con
+   * `periods: []` + warning (nunca error — NFR-BE10-3).
+   * @param {number|string} idBudget
+   * @param {number|string|null} [year=null] null/'' ⇒ el default del backend
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  getIvaSettlement(idBudget, year = null) {
+    const hasYear =
+      year !== null && year !== undefined && String(year).trim() !== ''
+    const query = hasYear ? `?year=${encodeURIComponent(year)}` : ''
+    return axiosInstance.get(`/budget/iva/settlement/${idBudget}${query}`)
+  },
 
   /**
    * Elimina FÍSICAMENTE un escenario borrador reutilizando el endpoint

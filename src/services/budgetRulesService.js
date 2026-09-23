@@ -33,6 +33,12 @@ import { RATE_KINDS } from '@/components/budget/rates/ratesConfig.js'
  *    Errores: la rejilla `{ detail, reason? }` existente — los 400 amables
  *    ("Line {id} already has an internment rate") llegan con el `detail`
  *    literal del backend y se propagan tal cual para su exhibición (§2.1).
+ *  - Calendario de liquidación IVA (FE-S14-IVA §5, autoridad
+ *    `backend.02_20` §5.8 — espejo del stack `lineInternmentRate`): GET/POST
+ *    `/budget/iva-period/` · PUT/DELETE `/budget/iva-period/{id}`; el GET
+ *    acepta `?year=` y ordena `period_year, period_no`. 400 duplicado
+ *    ("Period {n} already exists for year {y}") y 422 de rango
+ *    (`date_to >= date_from`) con la misma rejilla de `detail` propagada.
  *
  * Instancia compartida de `@/plugins/axios`: JWT auto-inyectado y `timeout`
  * global de 20 s suficiente para estos GET/PUT JSON (sin overrides, §5.5).
@@ -235,5 +241,66 @@ export const budgetRulesService = {
    */
   deleteInternmentTerm(id) {
     return axiosInstance.delete(`/budget/line-internment-term/${id}`)
+  },
+
+  /* ───── CALENDARIO DE LIQUIDACIÓN IVA (FE-S14-IVA §5 / backend.02_20 §5.8) ───── */
+
+  /**
+   * Períodos de liquidación de IVA de un año (GET `/budget/iva-period/?year=`,
+   * espejo del stack `line-internment-*`: ruta de colección ⇒ CON slash
+   * final; autoridad `backend.02_20` §5.8). Plano, orden
+   * `period_year, period_no` (BE-S10 §5.3). Cada fila: `{ id_iva_period,
+   * period_year, period_no (1..N; bimestres 1..6), date_from, date_to,
+   * payment_due_date, description|null }` — fechas ISO `YYYY-MM-DD`. El
+   * calendario es POR AÑO y de compañía única (D-FE14-5): escenario base y
+   * what-if del mismo año comparten catálogo.
+   * @param {number|string} year año fiscal (2000–2100)
+   * @returns {Promise<import('axios').AxiosResponse<Array<object>>>}
+   */
+  fetchIvaPeriods(year) {
+    const query =
+      year === null || year === undefined || String(year).trim() === ''
+        ? ''
+        : `?year=${encodeURIComponent(year)}`
+    return axiosInstance.get(`/budget/iva-period/${query}`)
+  },
+
+  /**
+   * Crea un período: POST `{ period_year, period_no, date_from, date_to,
+   * payment_due_date, description? }` (snake_case exacto backend.02_20 §5.2;
+   * las fechas viajan ISO crudas — ninguna conversión %↔fracción aquí). 201 =
+   * objeto completo. Duplicado ⇒ 400 `"Period {period_no} already exists for
+   * year {period_year}"` (el `detail` LITERAL del backend se propaga para
+   * exhibición amable, mismo convenio FE-S10 §2.1); rango inválido
+   * (`date_to < date_from`) ⇒ 422 de esquema (`model_validator`).
+   * @param {Object} payload
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  createIvaPeriod(payload) {
+    return axiosInstance.post('/budget/iva-period/', payload)
+  },
+
+  /**
+   * Edita un período: PUT de REEMPLAZO TOTAL (mismo body que el POST; espejo
+   * del convenio internment/payable). 404 `"IvaPeriod {id} not found"`; 400
+   * duplicado en re-parent (año+número) con el `detail` literal.
+   * @param {number|string} id `id_iva_period`
+   * @param {Object} payload
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  updateIvaPeriod(id, payload) {
+    return axiosInstance.put(`/budget/iva-period/${id}`, payload)
+  },
+
+  /**
+   * Elimina un período (borrado físico, catálogo sin historial — BE-S10
+   * §5.3). Respuesta `{ deleted_id }`; 404 `"IvaPeriod {id} not found"`.
+   * Tras borrar TODOS los del año, la liquidación del escenario vuelve al
+   * estado "sin calendario" con el warning de `meta.warnings` (AC-FE14-6).
+   * @param {number|string} id `id_iva_period`
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  deleteIvaPeriod(id) {
+    return axiosInstance.delete(`/budget/iva-period/${id}`)
   }
 }

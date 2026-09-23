@@ -24,12 +24,27 @@
  * optimista del store, el aviso de fuente/indisponibilidad bajo el pill SOLO
  * en el tab Flujo (`aria-live="polite"` — FD6-3) y el disparo LAZY del GET
  * (tab Flujo activo + flag ON + sin fetch en vuelo).
+ *
+ * FE-S14-IVA (frontend.03_14 §5) + ENMIENDA D-FE14-7 (2026-09-23):
+ *  - BARRA: switch segmentado "Neto / Con IVA" (D-FE14-1, default ON) — la
+ *    preferencia se PERSISTE por `idBudget` en localStorage vía
+ *    `budgetPlanningStore.setIvaMode` (cero HTTP). El modo SOLO altera la
+ *    Vista Flujo: la cabecera (Σ Ingresos/Σ Gastos) y la Vista Ejecutiva son
+ *    SIEMPRE NETOS (D-FE14-7: el P&G nunca lleva información de IVA), y con
+ *    el modo ON la cabecera muestra el chip "Modo caja con IVA (proyectado)"
+ *    que lo aclara (R-FE14-2).
+ *  - TAB 4 "Liquidación": monta `IvaSettlementPanel` (fuente
+ *    `GET /budget/iva/settlement/{id}` cacheada en el store). El settlement
+ *    se pide AL ABRIR el escenario (§4.2), de nuevo con reintento perezoso
+ *    al activar el tab y con el botón "Recalcular" del panel.
+ *  - `BudgetLineGrid` recibe la bandera como prop (`iva-mode`, §5).
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ExecutivePivotTable from '@/components/budget/planning/ExecutivePivotTable.vue'
 import CashFlowPivotTable from '@/components/budget/planning/CashFlowPivotTable.vue'
 import BudgetLineGrid from '@/components/budget/planning/BudgetLineGrid.vue'
+import IvaSettlementPanel from '@/components/budget/planning/IvaSettlementPanel.vue'
 import SetTargetConfirmModal from '@/components/budget/planning/SetTargetConfirmModal.vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import { useUserStore } from '@/stores/userStore.js'
@@ -37,13 +52,14 @@ import { canSetBudgetTarget } from '@/router/index.js'
 import { alertService } from '@/services/alertService.js'
 import { formatMoney, statusChipOf } from '@/components/budget/planning/planningFormat.js'
 
-const TAB_ORDER = ['executive', 'flow', 'editor']
+const TAB_ORDER = ['executive', 'flow', 'editor', 'settlement']
 
-/** Etiquetas de los pills (FE-S4B §3.1: el ternario inline ya no basta para 3 tabs). */
+/** Etiquetas de los pills (FE-S4B §3.1; FE-S14 suma "Liquidación"). */
 const TAB_LABELS = {
   executive: 'Vista Ejecutiva',
   flow: 'Vista Flujo',
-  editor: 'Editor de Celdas'
+  editor: 'Editor de Celdas',
+  settlement: 'Liquidación'
 }
 
 const route = useRoute()
@@ -66,7 +82,9 @@ const statusChip = computed(() =>
   scenario.value ? statusChipOf(scenario.value.status) : { label: '', tone: 'draft' }
 )
 
-/** Σ informativos de la cabecera, de la MISMA caché de líneas (AC-FE-6). */
+/** Σ informativos de la cabecera, de la MISMA caché de líneas (AC-FE-6).
+ *  FE-S14-IVA ENMIENDA D-FE14-7: SIEMPRE NETOS — el modo "Con IVA" no toca
+ *  la cabecera ni la Vista Ejecutiva (el IVA solo genera efecto en el Flujo). */
 const headerTotals = computed(() => {
   const lines = scenario.value?.budget_lines ?? []
   let income = 0
@@ -79,6 +97,25 @@ const headerTotals = computed(() => {
   }
   return { income, expense }
 })
+
+/* ───────────── FE-S14-IVA §5: switch "Neto / Con IVA" (persistente por escenario) ───────────── */
+
+/** Bandera viva del modo (dueño: store; localStorage por `idBudget`). */
+const ivaMode = computed(() => budgetPlanningStore.ivaMode === true)
+
+/**
+ * Toggle del switch: SIN HTTP (preferencia de visualización; las derivaciones
+ * cuelgan de la reactividad — AC-FE14-1/2). Al encender el modo, si el
+ * settlement nunca se cargó (o quedó en error) se refuerza el GET: el bloque
+ * del Flujo y la pestaña Liquidación lo necesitan (D-FE14-4).
+ * @param {boolean} value
+ */
+function onIvaModeSelect(value) {
+  const flag = Boolean(value)
+  if (flag === ivaMode.value) return
+  budgetPlanningStore.setIvaMode(idBudget.value, flag)
+  if (flag) void budgetPlanningStore.fetchIvaSettlement(idBudget.value)
+}
 
 /** Meta activa a desactivar: de la caché del listado (se refresca blando). */
 const demotedName = computed(() => {
@@ -168,6 +205,11 @@ async function load(force = false) {
     // Refresco SUAVE del listado para resolver el escenario a desactivar en
     // "Marcar Meta Activa" (silencioso: su fallo no rompe el editor).
     budgetPlanningStore.fetchScenarios({ year: scenario.value?.budget_year ?? 'all', force: true })
+    // FE-S14-IVA §4.2: el settlement se pide AL ABRIR el escenario (único
+    // request server-side del IVA; silente por diseño del store: su fallo
+    // degrada panel/Flujo con "sin dato de liquidación" + reintento, nunca
+    // toast ni pantalla rota — NFR-FE14-3).
+    void budgetPlanningStore.fetchIvaSettlement(idBudget.value)
     return
   }
   if (result.kind === 'auth') return
@@ -178,6 +220,19 @@ async function load(force = false) {
   }
   detailError.value = true
 }
+
+/**
+ * FE-S14-IVA: reintento perezoso al activar el tab Liquidación (mismo
+ * lenguaje del lazy-fetch del arrastre): si la caché nunca cargó o quedó en
+ * error, reactivar el tab vuelve a intentar; el store dedupe el vuelo y el
+ * fetch cacheado es no-op. El GET del "Recalcular" del panel pasa `force`.
+ */
+watch(activeTab, (tab) => {
+  const state = budgetPlanningStore.settlement
+  if (tab === 'settlement' && !state.loading && (!state.loaded || state.error)) {
+    void budgetPlanningStore.fetchIvaSettlement(idBudget.value)
+  }
+})
 
 onMounted(() => {
   if (!userStore.token) return
@@ -263,6 +318,15 @@ function backToPlanning() {
             <span v-if="scenario.is_scenario && scenario.parent_budget_name" class="ge-parent">
               ↳ Clonado de {{ scenario.parent_budget_name }}
             </span>
+            <!-- FE-S14-IVA R-FE14-2 + D-FE14-7: el chip aclara que el modo IVA
+                 SOLO altera la Vista Flujo (cabecera y Ejecutiva son netos). -->
+            <span
+              v-if="ivaMode"
+              class="chip chip-iva"
+              title="El IVA solo afecta a la Vista Flujo (caja bruta × 1.19). La cabecera y la Vista Ejecutiva (P&G) siempre muestran netos."
+            >
+              Modo caja con IVA (proyectado)
+            </span>
           </p>
           <p class="ge-totals" aria-live="polite">
             Σ Ingresos <strong>{{ formatMoney(headerTotals.income) }}</strong> · Σ Gastos
@@ -271,6 +335,37 @@ function backToPlanning() {
           </p>
         </div>
         <div class="ge-header-actions">
+          <!-- FE-S14-IVA §5: switch segmentado "Neto / Con IVA" (barra de
+               cabecera, visible en todo tab; preferencia POR ESCENARIO en
+               localStorage vía el store — D-FE14-1). -->
+          <div
+            class="ge-mode-group"
+            role="group"
+            aria-label="Modo de montos: netos o con IVA"
+            title="Neto: cifras de presupuesto sin IVA. Con IVA: la Vista Flujo muestra caja bruta proyectada (× 1.19); la cabecera y la Vista Ejecutiva (P&G) siempre muestran netos."
+          >
+            <span class="ge-mode-caption">Montos</span>
+            <div class="ge-mode-switch">
+              <button
+                type="button"
+                class="ge-mode-btn"
+                :class="{ 'is-active': !ivaMode }"
+                :aria-pressed="!ivaMode ? 'true' : 'false'"
+                @click="onIvaModeSelect(false)"
+              >
+                Neto
+              </button>
+              <button
+                type="button"
+                class="ge-mode-btn"
+                :class="{ 'is-active': ivaMode }"
+                :aria-pressed="ivaMode ? 'true' : 'false'"
+                @click="onIvaModeSelect(true)"
+              >
+                Con IVA
+              </button>
+            </div>
+          </div>
           <!-- FE-S6 §5: pill del arrastre (FD6-2: visible en todo tab; efecto
                solo en Flujo) + aviso de fuente SOLO en tab Flujo (FD6-3). -->
           <div class="ge-carry-group">
@@ -355,7 +450,21 @@ function backToPlanning() {
         role="tabpanel"
         aria-labelledby="planning-tab-editor"
       >
-        <BudgetLineGrid :scenario="scenario" />
+        <!-- FE-S14-IVA: la bandera de modo viaja como prop (§5): columnas
+             IVA/Total + checkbox `Con IVA` solo con el modo ON. -->
+        <BudgetLineGrid :scenario="scenario" :iva-mode="ivaMode" />
+      </div>
+      <!-- FE-S14-IVA §5: pestaña nueva "Liquidación" — monta el panel de
+           liquidación IVA (fuente: settlement cacheado en el store; el
+           reintento perezoso al activar el tab vive en el `watch` de arriba). -->
+      <div
+        id="planning-panel-settlement"
+        v-show="activeTab === 'settlement'"
+        class="ge-panel"
+        role="tabpanel"
+        aria-labelledby="planning-tab-settlement"
+      >
+        <IvaSettlementPanel :id-budget="idBudget" />
       </div>
     </template>
 
@@ -591,6 +700,75 @@ function backToPlanning() {
   font-size: 0.72rem;
   color: var(--color-text-muted, #8a8a8a);
   text-align: right;
+}
+
+/* ───────── FE-S14-IVA §5: switch segmentado "Neto / Con IVA" + chip de modo ───────── */
+
+.ge-mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-end;
+}
+
+.ge-mode-caption {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--color-text-muted, #8a8a8a);
+}
+
+.ge-mode-switch {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 999px;
+  background-color: var(--color-surface, #f2f4f7);
+}
+
+:root[data-theme='dark'] .ge-mode-switch {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.ge-mode-btn {
+  padding: 5px 13px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #555555);
+  cursor: pointer;
+  transition:
+    background-color 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+    color 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ge-mode-btn:hover:not(.is-active) {
+  background-color: rgba(3, 101, 140, 0.08);
+  color: var(--color-text-primary, #070707);
+}
+
+.ge-mode-btn:focus-visible {
+  outline: 2px solid var(--color-brand, #03658c);
+  outline-offset: 1px;
+}
+
+.ge-mode-btn.is-active {
+  background-color: var(--color-brand, #03658c);
+  color: var(--text-white, #eeeeee);
+  box-shadow: 0 1px 4px rgba(3, 101, 140, 0.35);
+}
+
+/* Chip ámbar del modo (misma familia "proyección" de `chip-closed`). */
+.chip-iva {
+  border-color: rgba(180, 83, 9, 0.4);
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #96590a;
+}
+
+:root[data-theme='dark'] .chip-iva {
+  color: #f6c177;
 }
 
 .chip {

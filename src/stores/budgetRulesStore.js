@@ -17,6 +17,11 @@ import router from '@/router/index.js'
  *    — tras cada POST/PUT/DELETE se inserta/reemplaza/retira en el sitio
  *    desde la respuesta del servidor (objeto completo; BE-S5 §5) y solo se
  *    refuerza (force) cuando un 404 avisa de que el catálogo local caducó.
+ *  - `ivaPeriods` (FE-S14-IVA, frontend.03_14 §5): calendario de liquidación
+ *    de IVA POR AÑO con la misma excepción de caché-fuente; la caché vale
+ *    solo para `ivaPeriodsYear` y cada mutación exitosa notifica al
+ *    `budgetPlanningStore` (AC-FE14-6: la Liquidación abierta se refresca
+ *    viva vía su debounce, sin request síncrono desde aquí).
  * Tras cada mutación exitosa de tasas (POST/PUT) se hace refetch del `kind`
  * afectado: la fuente de verdad es el servidor; se ignoran respuestas
  * optimistas.
@@ -130,6 +135,26 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
     /** `false` = NUNCA cargada; se marca SOLO en éxito del dúo (patrón A15). */
     internmentCatalogsLoaded: false,
     /**
+     * Calendario de liquidación de IVA por año (FE-S14-IVA §5; autoridad
+     * `backend.02_20` §3.2/§5.8): filas `{ id_iva_period, period_year,
+     * period_no, date_from, date_to, payment_due_date, description }`.
+     * EXCEPCIÓN de caché-fuente a la `payableTerms`/internment: las acciones
+     * CRUD insertan/reemplazan/retiran in-place desde la respuesta (cero
+     * refetch). La caché vale SOLO para `ivaPeriodsYear` — cambiar de año en
+     * el panel fuerza `fetchIvaPeriods(year)` (no-op si ya es el año
+     * cargado). Tras CADA mutación exitosa se notifica al
+     * `budgetPlanningStore` (`scheduleSettlementRefresh`): la recurrencia de
+     * la liquidación y el bloque del Flujo dependen de este catálogo y el
+     * escenario puede estar abierto (AC-FE14-6: "edición en vivo visible en
+     * Liquidación al refetch"; borrado total ⇒ estado "sin calendario").
+     * @type {Array<object>}
+     */
+    ivaPeriods: [],
+    /** año fiscal de las filas cacheadas (`null` = ninguna carga resuelta). */
+    ivaPeriodsYear: null,
+    /** `false` = NUNCA cargada; se marca SOLO en éxito (patrón A15). */
+    ivaPeriodsLoaded: false,
+    /**
      * Guards doble-submit de las mutaciones de internación (espejo de
      * `payableTermSaving`): claves `id_line_internment_rate` /
      * `id_line_internment_term` para PUT/DELETE y `'new'` para POST.
@@ -140,15 +165,23 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
     internmentRateSaving: {},
     /** @type {Record<number|string, boolean>} */
     internmentTermSaving: {},
+    /**
+     * Guard doble-submit de las mutaciones del calendario IVA (espejo de
+     * `internmentTermSaving`): claves `id_iva_period` para PUT/DELETE y
+     * `'new'` para POST. Dueño: las acciones del store.
+     * @type {Record<number|string, boolean>}
+     */
+    ivaPeriodSaving: {},
     loading: {
       lines: false,
       cost: false,
       commission: false,
       payableTerms: false,
-      internment: false
+      internment: false,
+      ivaPeriods: false
     },
     /** true ⇒ banner rojo con botón "Reintentar" (A11); null = sin error. */
-    loadError: { cost: null, commission: null, payableTerms: null, internment: null },
+    loadError: { cost: null, commission: null, payableTerms: null, internment: null, ivaPeriods: null },
     /** Flag global de POST/PUT en vuelo (anti doble-submit, §10.5). */
     saving: false
   }),
@@ -698,6 +731,165 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
         }
       } finally {
         delete this.internmentTermSaving[id]
+      }
+    },
+
+    /* ------------------- Calendario de liquidación IVA (FE-S14) ------------------- */
+
+    /**
+     * PUENTE AC-FE14-6: tras Crear/Editar/Borrar un período del calendario,
+     * la recurrencia de la liquidación (y el bloque "Pago de liquidación de
+     * IVA" del Flujo, D-FE14-4) cambió. Si el `budgetPlanningStore` tiene un
+     * escenario abierto y su liquidación YA fue leída (cargada o en estado de
+     * error), se programa el refetch debounced del store —nunca un request
+     * síncrono extra desde este store—. Si jamás se cargó, la deja perezosa:
+     * el tab Liquidación la traerá fresca al abrirse.
+     * @returns {void}
+     */
+    notifyIvaCalendarChanged() {
+      const planning = useBudgetPlanningStore()
+      if (!planning.currentScenario) return
+      if (!planning.settlement.loaded && !planning.settlement.error) return
+      planning.settlement.loaded = false
+      planning.scheduleSettlementRefresh()
+    },
+
+    /**
+     * Períodos de liquidación IVA de un año (GET `/budget/iva-period/?year=`,
+     * backend.02_20 §5.8; plano, orden `period_year, period_no`). Lazy con
+     * clave de año: mismo `year` ya cargado y `!force` ⇒ no-op; otro año ⇒
+     * refetch (la caché solo vale para `ivaPeriodsYear`, patrón
+     * `fetchPayableTerms`/A15). `ivaPeriodsLoaded` se marca SOLO en éxito.
+     * @param {number|string} year año fiscal 2000–2100
+     * @param {boolean} [force=false] refetch forzado (Reintentar / 404 en PUT|DELETE)
+     * @returns {Promise<{ ok: boolean, kind?: string }>}
+     */
+    async fetchIvaPeriods(year, force = false) {
+      const target = Number(year)
+      if (!Number.isInteger(target)) return { ok: false, kind: 'unknown' }
+      if (!force && this.ivaPeriodsLoaded && this.ivaPeriodsYear === target) return { ok: true }
+
+      this.loading.ivaPeriods = true
+      this.loadError.ivaPeriods = null
+      try {
+        const response = await budgetRulesService.fetchIvaPeriods(target)
+        this.ivaPeriods = Array.isArray(response?.data) ? response.data : []
+        this.ivaPeriodsYear = target
+        this.ivaPeriodsLoaded = true
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        // 'auth' no deja banner: el flujo de sesión redirige a Login (AC-03).
+        if (classified.kind !== 'auth') {
+          this.loadError.ivaPeriods = true
+        }
+        this.handleAuth(classified)
+        return { ok: false, ...classified }
+      } finally {
+        this.loading.ivaPeriods = false
+      }
+    },
+
+    /**
+     * POST `{ period_year, period_no, date_from, date_to, payment_due_date,
+     * description? }` (snake_case exacto backend.02_20 §5.2; fechas ISO
+     * crudas). Éxito 201: PUSH del objeto devuelto en la caché (la caché es
+     * LA fuente — patrón `createInternmentTerm`, cero refetch) + puente
+     * AC-FE14-6. El 400 amable `"Period {n} already exists for year {y}"`
+     * (§5.8) propaga `detail` para pintarse LITERAL inline (FE-S10 §2.1
+     * heredado); 422 de esquema (rango inválido, num fuera de 1–36) llega
+     * como `kind:'validation'`. El "generar bimestres" encadena POSTs con
+     * este action en secuencia (el guard `'new'` exige no solaparlos).
+     * @param {object} payload
+     * @returns {Promise<{ ok: boolean, period?: object|null, kind?: string, detail?: string|null }>}
+     */
+    async createIvaPeriod(payload) {
+      if (this.ivaPeriodSaving.new) return { ok: false, kind: 'busy' }
+      this.ivaPeriodSaving.new = true
+      try {
+        const response = await budgetRulesService.createIvaPeriod(payload)
+        const period = response?.data ?? null
+        if (period) this.ivaPeriods.push(period)
+        this.notifyIvaCalendarChanged()
+        return { ok: true, period }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.ivaPeriodSaving.new
+      }
+    },
+
+    /**
+     * PUT de REEMPLAZO TOTAL `/budget/iva-period/{id}` (mismo body que el
+     * POST; espejo del convenio internment/payable — el BE no acepta parcial
+     * aquí). Éxito: el objeto devuelto SUSTITUYE la fila en el sitio (splice
+     * por `id_iva_period`). 404 `"IvaPeriod {id} not found"` ⇒ el panel
+     * toastea + `fetchIvaPeriods(year, true)`; 400 duplicado en re-parent con
+     * `detail` literal propagado.
+     * @param {number|string} id `id_iva_period`
+     * @param {object} payload
+     * @returns {Promise<{ ok: boolean, period?: object|null, kind?: string, detail?: string|null }>}
+     */
+    async updateIvaPeriod(id, payload) {
+      if (this.ivaPeriodSaving[id]) return { ok: false, kind: 'busy' }
+      this.ivaPeriodSaving[id] = true
+      try {
+        const response = await budgetRulesService.updateIvaPeriod(id, payload)
+        const period = response?.data ?? null
+        if (period) {
+          const index = this.ivaPeriods.findIndex((item) => item.id_iva_period === Number(id))
+          if (index !== -1) this.ivaPeriods.splice(index, 1, period)
+          else this.ivaPeriods.push(period)
+        }
+        this.notifyIvaCalendarChanged()
+        return { ok: true, period }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.ivaPeriodSaving[id]
+      }
+    },
+
+    /**
+     * DELETE `/budget/iva-period/{id}` (`{ deleted_id }`, borrado físico —
+     * catálogo sin historial, §5.3). Éxito: SPLICE de la fila + puente
+     * AC-FE14-6 (borrados los últimos del año, la liquidación vuelve al
+     * estado "sin calendario" con su warning: el BE degrada a 200 +
+     * `meta.warnings`, nunca 500). 404 se propaga como en `updateIvaPeriod`.
+     * @param {number|string} id `id_iva_period`
+     * @returns {Promise<{ ok: boolean, kind?: string, detail?: string|null }>}
+     */
+    async deleteIvaPeriod(id) {
+      if (this.ivaPeriodSaving[id]) return { ok: false, kind: 'busy' }
+      this.ivaPeriodSaving[id] = true
+      try {
+        await budgetRulesService.deleteIvaPeriod(id)
+        const index = this.ivaPeriods.findIndex((item) => item.id_iva_period === Number(id))
+        if (index !== -1) this.ivaPeriods.splice(index, 1)
+        this.notifyIvaCalendarChanged()
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyRateError(err)
+        this.handleAuth(classified)
+        return {
+          ok: false,
+          ...classified,
+          detail: typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : null
+        }
+      } finally {
+        delete this.ivaPeriodSaving[id]
       }
     }
   }

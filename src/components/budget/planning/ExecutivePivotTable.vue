@@ -50,6 +50,13 @@
  *    las tasas cambian intra-anual."
  *
  * CERO dependencias: tabla HTML nativa + computados (patrón `RatesDataTable`).
+ *
+ * FE-S14-IVA ENMIENDA D-FE14-1/§4.1 — 2026-09-23 (frontend.03_14 D-FE14-7):
+ * esta vista es el P&G por causación y NUNCA muestra información de IVA: con
+ * el modo "Con IVA" activo o apagado, TODAS sus cifras (bloques Ingresos,
+ * Costo de ventas, Gastos fijos/variables, P&G, Acumulado y sus %) quedan
+ * SOBRE NETOS, byte-idénticas a FE-S4C (AC-FE14-8). El IVA solo genera efecto
+ * en la Vista Flujo (`CashFlowPivotTable`) — cero gross-up aquí.
  */
 import { computed } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
@@ -74,6 +81,10 @@ const budgetPlanningStore = useBudgetPlanningStore()
 const lines = computed(() =>
   props.scenario && Array.isArray(props.scenario.budget_lines) ? props.scenario.budget_lines : []
 )
+
+/* ───────── FE-S14-IVA D-FE14-7: sin IVA — la Ejecutiva SIEMPRE NETOS ─────────
+ * Decisión de enmienda 2026-09-23: el modo "Con IVA" NO toca esta vista (es el
+ * P&G en netos por causación). `budgetPlanningStore.ivaMode` no se lee aquí. */
 
 /** Líneas de costo fijo (base del pivote): `behavior_type === 'fixed'`. */
 const fixedLines = computed(() => lines.value.filter((line) => line.behavior_type === 'fixed'))
@@ -151,8 +162,11 @@ const expensePivot = computed(() => buildPivot('expense'))
  * Los montos son DERIVADOS (no se almacenan; ASM-10: la matriz es
  * presentación). `null` si no hay líneas variables o no hay ingresos: el
  * bloque simplemente no se renderiza.
+ *
+ * FE-S14-IVA D-FE14-7: siempre NETOS — el estimado corre sobre el ingreso
+ * neto del mes y no recibe gross-up (la Ejecutiva nunca muestra IVA).
  */
-const variablePivot = computed(() => {
+function buildVariablePivot() {
   const source = variableSourceLines.value
   const incomeTotals = incomePivot.value.columnTotals
   if (!source.length || !incomeTotals.some((value) => value !== 0)) return null
@@ -189,7 +203,10 @@ const variablePivot = computed(() => {
     .sort((a, b) => a.label.localeCompare(b.label, 'es'))
     .map((row) => ({ ...row, title: `Tasas: ${row.rates.join(' / ')}` }))
   return { rows, columnTotals, grandTotal }
-})
+}
+
+/** Pivote estimado — SIEMPRE neto (D-FE14-7: la Ejecutiva nunca muestra IVA). */
+const variablePivot = computed(() => buildVariablePivot())
 
 /* ─────────────────── FE-S4C: resolución de tasas de costo (§3.1) ─────────────────── */
 
@@ -542,6 +559,8 @@ const costWarnText = computed(() => {
  * Gastos fijos → Gastos variables). El bloque de costo se omite por
  * completo sin filas de ingreso (§5.4) y degrada a `pv-empty` con el
  * mensaje exacto §5.1/§5.2 cuando la resolución no está disponible.
+ * FE-S14-IVA D-FE14-7: TODOS los bloques leen los pivotes NETOS — el modo
+ * "Con IVA" no altera esta vista (el IVA solo genera efecto en el Flujo).
  */
 const blocks = computed(() => {
   const list = [
@@ -585,6 +604,8 @@ const blocks = computed(() => {
       {{ scenario.budget_year }}. Los montos se ajustan en “Editor de Celdas”. El costo de ventas se
       ESTIMA con las tasas de Reglas Financieras; no se almacena en las líneas.
     </p>
+
+    <!-- D-FE14-7: sin chip de modo IVA — esta vista SIEMPRE muestra netos. -->
 
     <section v-for="block in blocks" :key="block.title" class="pv-block">
       <h4 class="pv-block-title">{{ block.title }}</h4>

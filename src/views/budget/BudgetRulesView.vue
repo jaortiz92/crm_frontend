@@ -15,12 +15,21 @@
  * FE-S10 §2.2: el dúo de internación viaja atómico en
  * `fetchInternmentCatalogs`). `activeTab` sigue arrancando en 'cost': las
  * pestañas nuevas van al final.
+ *  * FE-S14-IVA (frontend.03_14 §5/D-FE14-5) añade la QUINTA pestaña
+ *  'iva' ("Calendario IVA"): catálogo de períodos de liquidación POR AÑO,
+ *  panel propio espejo de `InternmentPanel` (live-sync, validaciones amables,
+ *  generador de bimestres con vencimientos editables). Lazy igual que las
+ *  demás pestañas nuevas: el panel trae sus períodos al MONTARSE (primera
+ *  activación; jamás en `onMounted` de la vista, NFR-2). Soporta deep-link
+ *  `?tab=iva` — el CTA del aviso "sin calendario" del panel Liquidación.
  */
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import RatesDataTable from '@/components/budget/rates/RatesDataTable.vue'
 import RateEditorModal from '@/components/budget/rates/RateEditorModal.vue'
 import PayableTermsPanel from '@/components/budget/rates/PayableTermsPanel.vue'
 import InternmentPanel from '@/components/budget/rates/InternmentPanel.vue'
+import IvaCalendarPanel from '@/components/budget/rules/IvaCalendarPanel.vue'
 import { RATE_KINDS } from '@/components/budget/rates/ratesConfig.js'
 import { useBudgetRulesStore } from '@/stores/budgetRulesStore.js'
 import { useUserStore } from '@/stores/userStore.js'
@@ -29,22 +38,35 @@ import { alertService } from '@/services/alertService.js'
 /** Pilares de tasas: paneles FE-S3 con `ratesConfig.js` como única fuente. */
 const RATE_TABS = ['cost', 'commission']
 
-/** Orden de los cuatro tabs (FE-S5 §3.1 + FE-S10 §2.3): los paneles propios
- *  (`payable`, `internment`) se renderizan aparte de los pilares de tasas. */
-const TAB_ORDER = ['cost', 'commission', 'payable', 'internment']
+/** Orden de los cinco tabs (FE-S5 §3.1 + FE-S10 §2.3 + FE-S14 §5): los paneles
+ *  propios (`payable`, `internment`, `iva`) se renderizan aparte de los pilares. */
+const TAB_ORDER = ['cost', 'commission', 'payable', 'internment', 'iva']
 
 /** Etiquetas del pill: las dos tasas salen de `RATE_KINDS` (sin tocarla). */
 const TAB_LABELS = {
   cost: RATE_KINDS.cost.tabLabel,
   commission: RATE_KINDS.commission.tabLabel,
   payable: 'Términos de pago',
-  internment: 'Internación'
+  internment: 'Internación',
+  iva: 'Calendario IVA'
 }
 
 const budgetRulesStore = useBudgetRulesStore()
 const userStore = useUserStore()
+const route = useRoute()
 
-const activeTab = ref('cost')
+/**
+ * FE-S14-IVA: deep-link `?tab=iva` (CTA del panel Liquidación cuando el año no
+ * tiene calendario). Cualquier valor fuera de `TAB_ORDER` degrada al 'cost' de
+ * siempre; `activeTab` sigue arrancando en 'cost' sin query (las pestañas
+ * nuevas van al final).
+ */
+function initialTab() {
+  const requested = Array.isArray(route.query.tab) ? route.query.tab[0] : route.query.tab
+  return TAB_ORDER.includes(requested) ? requested : 'cost'
+}
+
+const activeTab = ref(initialTab())
 const modalOpen = ref(false)
 const editingRate = ref(null)
 
@@ -335,9 +357,27 @@ async function onRestore(kind, row) {
       <InternmentPanel />
     </div>
 
+    <!-- FE-S14-IVA §5 (D-FE14-5): QUINTA pestaña "Calendario IVA" — catálogo
+         por año; el panel trae sus períodos al montarse (lazy en la primera
+         activación, jamás en `onMounted`; NFR-2 espejo) y cada mutación
+         exitosa notifica al planning store (AC-FE14-6) -->
+    <div
+      v-if="activeTab === 'iva'"
+      id="rates-panel-iva"
+      class="rates-panel"
+      role="tabpanel"
+      aria-labelledby="rates-tab-iva"
+    >
+      <IvaCalendarPanel />
+    </div>
+
     <RateEditorModal
       :open="modalOpen"
-      :kind="activeTab === 'payable' || activeTab === 'internment' ? 'cost' : activeTab"
+      :kind="
+        activeTab === 'payable' || activeTab === 'internment' || activeTab === 'iva'
+          ? 'cost'
+          : activeTab
+      "
       :rate="editingRate"
       @saved="closeModal"
       @close="closeModal"

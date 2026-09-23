@@ -134,7 +134,17 @@
  */
 import { computed, ref } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
-import { MONTH_LABELS, formatMoney, monthIndexOf, resolveCogsPctByLine } from './planningFormat.js'
+import {
+  MONTH_LABELS,
+  formatMoney,
+  formatDateEs,
+  monthIndexOf,
+  resolveCogsPctByLine,
+  IVA_RATE,
+  lineChargesIva,
+  withIva,
+  ivaOf
+} from './planningFormat.js'
 
 const props = defineProps({
   /** `BudgetFull` + `parent_budget_name` de la caché del store. */
@@ -168,6 +178,63 @@ const scenarioYear = computed(() => {
 /** N−1: año de la fuente del arrastre (etiquetas §5/§6.1). */
 const carrySourceYear = computed(() =>
   scenarioYear.value === null ? null : scenarioYear.value - 1
+)
+
+/* ─────────── FE-S14-IVA §4.1: modo "Con IVA" — derivación bruto memoizada O(#líneas) ─────────── */
+
+/**
+ * Bandera viva del interruptor "Neto / Con IVA" del escenario
+ * (frontend.03_14 D-FE14-1; dueño: `budgetPlanningStore.ivaMode`,
+ * persistido por `idBudget`). Con OFF todas las derivaciones de abajo
+ * devuelven el neto crudo: DOM y cifras byte-idénticas al FE-S10
+ * (AC-FE14-1, cero regresión).
+ */
+const ivaActive = computed(() => budgetPlanningStore.ivaMode === true)
+
+/**
+ * Monto PRESENTADO de una línea material (fija) bajo el modo: neto × 1.19
+ * cuando está gravada — INCOME siempre (D-S10-5), EXPENSE según el flag
+ * EFECTIVO (`has_iva`, NULL≡True; D-FE14-2) y PURCHASE no aplica (sus
+ * streams se derivan aparte). `planningFormat.withIva` es la ÚNICA fórmula
+ * (D-FE14-6). Reacciona en vivo al PUT de celda/toggle de flag porque cuelga
+ * de `lines` + `ivaActive` (AC-FE14-2, NFR-FE14-1: cero re-fetch).
+ * @param {object} line
+ * @returns {number}
+ */
+function grossLineAmount(line) {
+  const net = Number(line.projected_amount)
+  if (!Number.isFinite(net)) return net
+  if (!ivaActive.value) return net
+  return withIva(net, lineChargesIva(line))
+}
+
+/**
+ * Gross-up de un monto DERIVADO (cuotas de internación): con el modo OFF o
+ * línea no gravada devuelve el neto crudo (identidad numérica, NFR-FE10-3
+ * heredado). El IVA de importación NO pasa por aquí: es fila propia del
+ * bloque "Pago a proveedores" (D-FE14-3).
+ * @param {number} net
+ * @param {boolean} [charged=true] gravado (internación siempre: es servicio)
+ * @returns {number}
+ */
+function grossDerived(net, charged = true) {
+  if (!ivaActive.value || !charged) return net
+  return withIva(net, true)
+}
+
+/**
+ * Tasa efectiva del settlement para las etiquetas del panel/Flujo
+ * (D-FE14-6: `tax_rate_used` del BE manda cuando hay respuesta; mientras no
+ * la hay, la constante espejo `IVA_RATE`).
+ * @returns {number}
+ */
+const settlementTaxRate = computed(() => {
+  const raw = Number(budgetPlanningStore.settlement.data?.tax_rate_used)
+  return Number.isFinite(raw) && raw > 0 ? raw : IVA_RATE
+})
+/** P. ej. `19 %` (nunca hardcode: se deriva de `settlementTaxRate`). */
+const settlementTaxRateLabel = computed(() =>
+  `${Number((settlementTaxRate.value * 100).toFixed(2))} %`
 )
 
 /**
@@ -224,15 +291,19 @@ function outOfYearBucket(value) {
  * (D-OY-6): no se puede afirmar fuera ⇒ vive en el mes.
  * @param {(line: object) => boolean} match Filtro de líneas del bloque.
  * @param {(line: object) => number} monthOf Función de ubicación mensual.
+ * @param {((line: object) => number)|null} [amountOf=null] extractor del
+ *   monto a acumular (FE-S14-IVA: con el modo "Con IVA" cada bloque pasa su
+ *   derivación bruto por bandera efectiva; `null` ⇒ `projected_amount` crudo
+ *   — modo OFF byte-idéntico a FE-S4B, AC-FE14-1).
  */
-function buildPivot(match, monthOf) {
+function buildPivot(match, monthOf, amountOf = null) {
   const byCeco = new Map()
   const columnTotals = Array.from({ length: 12 }, () => 0)
   let grandTotal = 0
 
   for (const line of lines.value) {
     if (!match(line)) continue
-    const amount = Number(line.projected_amount)
+    const amount = amountOf ? amountOf(line) : Number(line.projected_amount)
     if (!Number.isFinite(amount)) continue
 
     const key = line.id_cost_center
@@ -274,14 +345,30 @@ function buildPivot(match, monthOf) {
   return { rows, columnTotals, grandTotal, beforeTotal, afterTotal, beforeAfterRowCount }
 }
 
-/** Bloque "Entradas" (§4.2): ingresos fijos por fecha de pago (D-3, R-1). */
+/**
+ * Bloque "Entradas" (§4.2): ingresos fijos por fecha de pago (D-3, R-1).
+ * FE-S14-IVA §4.1: con el modo ON el recaudo se muestra BRUTO (× 1.19 — el
+ * ingreso siempre genera IVA, D-S10-5); con OFF el neto crudo de siempre.
+ */
 const entradasPivot = computed(() =>
-  buildPivot((line) => line.line_type === 'income' && line.behavior_type === 'fixed', cfMonth)
+  buildPivot(
+    (line) => line.line_type === 'income' && line.behavior_type === 'fixed',
+    cfMonth,
+    grossLineAmount
+  )
 )
 
-/** Bloque "Salidas — Gastos fijos" (§4.2): gastos fijos por fecha de pago. */
+/**
+ * Bloque "Salidas — Gastos fijos" (§4.2): gastos fijos por fecha de pago.
+ * FE-S14-IVA §4.1: × 1.19 según el flag efectivo de la línea (NULL≡True);
+ * flag `false` ⇒ neto sin gross-up (AC-FE14-4).
+ */
 const fijosPivot = computed(() =>
-  buildPivot((line) => line.line_type === 'expense' && line.behavior_type === 'fixed', cfMonth)
+  buildPivot(
+    (line) => line.line_type === 'expense' && line.behavior_type === 'fixed',
+    cfMonth,
+    grossLineAmount
+  )
 )
 
 /* ─────────── FE-S9-PURCHASES-BODEGA §2.4: bloque "Compras del mes" ─────────── */
@@ -364,7 +451,11 @@ const variablesPivot = computed(() => {
     const month = monthIndexOf(line.budget_date)
     if (month < 0) continue
     const rate = Number(line.variable_rate) || 0
-    const amount = rate * base[month]
+    // FE-S14-IVA §4.1: la BASE de la estimación sigue siendo neta (igual que
+    // E3/E4 del motor BE, backend.02_20 §4.3); el gross-up × 1.19 se aplica
+    // al MONTO DERIVADO según el flag efectivo de la línea variable
+    // (NULL≡True). Con modo OFF `grossDerived` es identidad: cifra idéntica.
+    const amount = grossDerived(rate * base[month], lineChargesIva(line))
     row.months[month] += amount
     row.total += amount
     columnTotals[month] += amount
@@ -380,8 +471,19 @@ const VARIABLE_PIVOT_NOTE =
   'Monto estimado = tasa × ingresos fijos presupuestados del mes de causación. ' +
   'No se almacena en las líneas del escenario; se recalcula al ajustar el presupuesto.'
 
-/** Nota al pie del bloque Entradas (D-4, §4.3): montos netos, sin gross-up de IVA. */
-const ENTRADAS_NOTE = 'Montos netos, sin IVA. El pilar de analítica de flujo de caja sí lo incluye.'
+/**
+ * Nota al pie del bloque Entradas (D-4, §4.3) — FE-S14-IVA D-FE14-1 la
+ * RE-SEMANTIZA: con el modo "Con IVA" activo declara la fórmula bruta
+ * mostrada (porcentaje derivado de `tax_rate_used`/`IVA_RATE`, cero
+ * hardcode); apagado el modo vuelve el literal neto de siempre (AC-FE14-1:
+ * cero regresión byte-a-byte).
+ */
+const ENTRADAS_NOTE = computed(() =>
+  ivaActive.value
+    ? `Recaudo bruto = neto × (1 + ${settlementTaxRateLabel.value}). ` +
+      'Modo "Con IVA": caja bruta proyectada.'
+    : 'Montos netos, sin IVA. El pilar de analítica de flujo de caja sí lo incluye.'
+)
 
 /* ─────────── FE-S7-COGS-PAYFLOW §5: derivación "Pago a proveedores (costo de ventas)" ─────────── */
 
@@ -398,6 +500,13 @@ const COGS_PAYMENT_NOTE =
 /** Nota de degradación §5 (catálogo de términos caído): literal de spec. */
 const COGS_TERMS_UNAVAILABLE_NOTE =
   'No fue posible calcular el pago a proveedores (catálogo de términos no disponible).'
+
+/* ── FE-S14-IVA D-FE14-3: fila única "IVA de importación" dentro de "Pago a proveedores" ── */
+
+/** Clave sintética de la fila agregada (NUNCA colisiona con un `id_cost_center`). */
+const IMPORT_VAT_ROW_KEY = 'iva-importacion'
+/** Etiqueta literal de la fila (AC-FE14-3). */
+const IMPORT_VAT_ROW_LABEL = 'IVA de importación'
 
 /**
  * Último día calendario del mes de una fecha ISO `YYYY-MM-DD` — la fecha de
@@ -659,6 +768,22 @@ const costPaymentRows = computed(() => {
     // §2.4-2: `provBase = amount / (1 + pctInt)` (pctInt 0 ⇒ amount EXACTO —
     // `x / 1 === x` en IEEE-754: cero regresión numérica, NFR-FE10-3).
     const provBase = amount / (1 + pctInt)
+    // FE-S14-IVA D-FE14-3/AC-FE14-3 (modo ON): el IVA de importación NO crea
+    // bloque nuevo ni embute en las cuotas — es UNA fila agregada "IVA de
+    // importación" del bloque "Pago a proveedores" en la FECHA DE COMPRA, con
+    // la MISMA descomposición §4 de backend.02_19/BE-S10 E5: base =
+    // Total/(1+%int) (`provBase` arriba; degradación %int = 0 sin tasa o sin
+    // Línea ⇒ base = Total) y monto = base × 19 % (`ivaOf`, cero hardcodes).
+    // Las cuotas del proveedor de abajo siguen NETAS (AC-FE14-3).
+    if (ivaActive.value) {
+      rows.push({
+        idCostCenter: line.id_cost_center,
+        rowKey: IMPORT_VAT_ROW_KEY,
+        label: IMPORT_VAT_ROW_LABEL,
+        amount: ivaOf(provBase, true),
+        effectiveDate: line.budget_date
+      })
+    }
     const terms = lineId === null ? undefined : termsByLine.get(lineId)
     if (terms && terms.length) {
       for (const term of terms) {
@@ -737,7 +862,10 @@ const internmentPaymentRows = computed(() => {
         if (!Number.isFinite(paymentPct)) continue
         rows.push({
           idCostCenter: line.id_cost_center,
-          amount: intBase * paymentPct,
+          // FE-S14-IVA §4.1/D-FE14-3/AC-FE14-3: cada cuota del bloque "Pago
+          // de internación" ×1.19 (el servicio de internación paga IVA; E6
+          // del motor BE). Con modo OFF `grossDerived` es identidad exacta.
+          amount: grossDerived(intBase * paymentPct),
           effectiveDate: addDaysISO(line.budget_date, Number(term.payment_days)) ?? line.budget_date
         })
       }
@@ -746,7 +874,7 @@ const internmentPaymentRows = computed(() => {
       // completo el día de la importación.
       rows.push({
         idCostCenter: line.id_cost_center,
-        amount: intBase,
+        amount: grossDerived(intBase),
         effectiveDate: line.budget_date
       })
     }
@@ -786,6 +914,87 @@ const internmentPaymentsPivot = computed(() => {
   if (!internmentPaymentsActive.value) return null
   return buildPivotFrom(internmentPaymentRows.value)
 })
+
+/* ─────────── FE-S14-IVA D-FE14-4: bloque "Pago de liquidación de IVA" (fuente settlementCache) ─────────── */
+
+/**
+ * Caché viva de la liquidación en el store (patrón `carryover`: SOLO lee,
+ * SD6-4 heredado — jamás dispara HTTP desde la derivación). La recurrencia
+ * con arrastre es el ÚNICO dato IVA que viaja del BE (D-FE14-4: no se
+ * recalcula en FE para evitar divergencia); el bloque se alimenta de ella.
+ */
+const settlement = computed(() => budgetPlanningStore.settlement)
+
+/**
+ * Pivote de los DESEMBOLSOS de liquidación (frontend.03_14 §4.1/AC-FE14-5):
+ * una fila por período con `payment > 0` (A8 del BE: `pago_p` es el único
+ * desembolso), ubicada en el MES de `payment_due_date` del Calendario IVA.
+ * Existe SOLO con el modo Con IVA activo (con OFF el DOM debe volver a los
+ * netos byte-a-byte, AC-FE14-1) y con calendario respondido — sin
+ * `iva_periods` el Flujo NO colapsa: simplemente no hay bloque (AC-FE14-5).
+ * Vencimientos del último período que caen en N+1 viven en la columna
+ * "Después de N" (regla FE-S8/AC-OY-9 intacta).
+ * @returns {object|null} shape idéntico al de `buildPivotFrom`.
+ */
+const settlementPaymentsPivot = computed(() => {
+  if (!ivaActive.value) return null
+  const data = settlement.value.data
+  const periods = data && Array.isArray(data.periods) ? data.periods : []
+  if (!periods.length) return null
+  const rows = []
+  const columnTotals = Array.from({ length: 12 }, () => 0)
+  let grandTotal = 0
+  let beforeTotal = 0
+  let afterTotal = 0
+  let beforeAfterRowCount = 0
+  for (const period of periods) {
+    const payment = Number(period?.payment)
+    if (!Number.isFinite(payment) || payment <= 0) continue
+    const dueDate = typeof period.payment_due_date === 'string' ? period.payment_due_date : null
+    const month = monthIndexOf(dueDate)
+    const bucket = outOfYearBucket(dueDate)
+    const months = Array.from({ length: 12 }, () => 0)
+    let before = 0
+    let after = 0
+    if (month >= 0 && bucket === 0) {
+      months[month] += payment
+      columnTotals[month] += payment
+    }
+    if (bucket === -1) before = payment
+    else if (bucket === 1) after = payment
+    if (before + after !== 0) beforeAfterRowCount += 1
+    beforeTotal += before
+    afterTotal += after
+    grandTotal += payment
+    const periodNo = Number(period.period_no)
+    rows.push({
+      id: `iva-liq-${Number.isFinite(periodNo) ? periodNo : rows.length + 1}`,
+      label: `Liquidación P${Number.isFinite(periodNo) ? periodNo : '—'} · vence ${formatDateEs(dueDate)}`,
+      months,
+      total: payment,
+      before,
+      after
+    })
+  }
+  if (!rows.length || grandTotal <= 0) return null
+  return { rows, columnTotals, grandTotal, beforeTotal, afterTotal, beforeAfterRowCount }
+})
+
+/**
+ * Degradación NFR-FE14-3: error de red/5xx en el settlement CON el modo
+ * activo ⇒ nota "sin dato de liquidación" + reintento (bloque del Flujo
+ * ausente, panel propio con su banner; jamás pantalla rota). Sin modo activo
+ * el settlement no se muestra ⇒ la nota tampoco.
+ */
+const settlementDegraded = computed(() => ivaActive.value && settlement.value.error === true)
+
+/** Nota del bloque de liquidación (porcentaje derivado, cero hardcodes). */
+const SETTLEMENT_PAYMENT_NOTE = computed(
+  () =>
+    `Pagos de la liquidación de IVA (${settlementTaxRateLabel.value} base caja) según los ` +
+    'vencimientos del Calendario IVA; el monto ya netea los descuentos y el arrastre de saldos ' +
+    'a favor. Fuente: motor de liquidación del escenario (dato server-side, no derivado).'
+)
 
 /**
  * Degradación §5 (espejo del patrón `costDegradation` de Ejecutiva): SOLO
@@ -842,7 +1051,12 @@ const costTermsDegraded = computed(() => {
  * las líneas materiales queda UNTOUCHED (cero riesgo de regresión sobre
  * Entradas/Salidas fijos; el shape de entrada es distinto a `BudgetLine` y
  * `effectiveDate` YA es la fecha de pago, no un `payment_date || budget_date`).
- * @param {Array<{ idCostCenter: number, amount: number, effectiveDate: string|null }>} rows
+ *
+ * FE-S14-IVA (D-FE14-3): las filas pueden traer `rowKey`/`label` opcionales ⇒
+ * se agrupan por esa clave SINTÉTICA con esa etiqueta fija (fila única "IVA de
+ * importación" que agrega el IVA de todas las compras sin mezclarse con los
+ * CECOS). Sin esas claves el comportamiento es idéntico al de FE-S7/FE-S10.
+ * @param {Array<{ idCostCenter: number, amount: number, effectiveDate: string|null, rowKey?: string|number, label?: string }>} rows
  */
 function buildPivotFrom(rows) {
   const byCeco = new Map()
@@ -853,11 +1067,14 @@ function buildPivotFrom(rows) {
     const amount = Number(item.amount)
     if (!Number.isFinite(amount)) continue
 
-    const key = item.idCostCenter
+    // FE-S14-IVA D-FE14-3: `rowKey`/`label` opcionales → agrupación SINTÉTICA
+    // (fila única "IVA de importación" que suma todas las compras sin
+    // mezclarse con CECOS). Sin ellos: comportamiento FE-S7 idéntico.
+    const key = item.rowKey ?? item.idCostCenter
     if (!byCeco.has(key)) {
       byCeco.set(key, {
         id: key,
-        label: budgetPlanningStore.costCenterLabel(key),
+        label: item.label ?? budgetPlanningStore.costCenterLabel(item.idCostCenter),
         months: Array.from({ length: 12 }, () => 0),
         total: 0,
         before: 0,
@@ -918,7 +1135,7 @@ const blocks = computed(() => {
       emptyName: 'entradas',
       pivot: entradasPivot.value,
       aria: 'Entradas (ingresos fijos) por centro de costo y mes según fecha de pago',
-      note: ENTRADAS_NOTE,
+      note: ENTRADAS_NOTE.value,
       // §6.2: pivotes PROPIOS con fechas de pago que pueden caer fuera de N.
       ooy: true
     }
@@ -989,6 +1206,22 @@ const blocks = computed(() => {
       note: VARIABLE_PIVOT_NOTE,
       // Estimados por causación ∈ N: before/after ≡ 0 ⇒ sin columnas §6.2.
       ooy: false
+    })
+  }
+  // FE-S14-IVA D-FE14-4: bloque NUEVO alimentado por `settlementCache` — los
+  // pagos de la liquidación (períodos con `payment > 0`) en el MES de su
+  // `payment_due_date`. Único dato IVA que viaja del BE (la recurrencia con
+  // arrastre no se recalcula en FE). Sin calendario ni respuesta ⇒ sin
+  // bloque (AC-FE14-5: el Flujo no colapsa); con modo OFF ⇒ sin bloque
+  // (AC-FE14-1). `ooy: true`: vencimientos del último período caen en N+1.
+  if (settlementPaymentsPivot.value) {
+    list.push({
+      title: 'Pago de liquidación de IVA',
+      emptyName: 'pagos de liquidación de IVA',
+      pivot: settlementPaymentsPivot.value,
+      aria: 'Salidas de pago de liquidación de IVA por período del calendario y mes de vencimiento',
+      note: SETTLEMENT_PAYMENT_NOTE.value,
+      ooy: true
     })
   }
   return list
@@ -1195,7 +1428,12 @@ const anyOutOfYear = computed(
       (costPaymentsPivot.value ? costPaymentsPivot.value.beforeAfterRowCount : 0) +
       // FE-S10 §2.5: mismo caso para "Pago de internación" (AC-OY-* siguen:
       // cuota int fuera de N vive solo en Antes/Después). Sin filas ⇒ 0.
-      (internmentPaymentsPivot.value ? internmentPaymentsPivot.value.beforeAfterRowCount : 0) >
+      (internmentPaymentsPivot.value ? internmentPaymentsPivot.value.beforeAfterRowCount : 0) +
+      // FE-S14-IVA: vencimiento de liquidación del último período puede caer
+      // en N+1 ("Después de N"). Sin bloque ⇒ sumando 0 (DOM idéntico).
+      (settlementPaymentsPivot.value
+        ? settlementPaymentsPivot.value.beforeAfterRowCount
+        : 0) >
     0
 )
 
@@ -1214,13 +1452,17 @@ const ooyColumns = computed(() => {
   const entradas = [entradasPivot.value.beforeTotal, entradasPivot.value.afterTotal]
   const costes = costPaymentsPivot.value
   const internment = internmentPaymentsPivot.value
+  // FE-S14-IVA: los vencimientos de liquidación fuera de N también bucketean.
+  const liquidation = settlementPaymentsPivot.value
   const salidas = [
     fijosPivot.value.beforeTotal +
       (costes ? costes.beforeTotal : 0) +
-      (internment ? internment.beforeTotal : 0),
+      (internment ? internment.beforeTotal : 0) +
+      (liquidation ? liquidation.beforeTotal : 0),
     fijosPivot.value.afterTotal +
       (costes ? costes.afterTotal : 0) +
-      (internment ? internment.afterTotal : 0)
+      (internment ? internment.afterTotal : 0) +
+      (liquidation ? liquidation.afterTotal : 0)
   ]
   return {
     visible: anyOutOfYear.value && showOutOfYear.value,
@@ -1262,6 +1504,8 @@ const resumen = computed(() => {
   // la MISMA agregación de pivotes (sin lista hard-coded de IDs de bloque);
   // sin filas el sumando es 0: resumen byte-idéntico a FE-S9 (NFR-FE10-3).
   const internment = internmentPaymentsPivot.value
+  // FE-S14-IVA D-FE14-4: la liquidación entra a salidas por la misma vía.
+  const liquidation = settlementPaymentsPivot.value
   const entradasPropias = entradasPivot.value.columnTotals
   const fijos = fijosPivot.value.columnTotals
   const variables = variablesPivot.value ? variablesPivot.value.columnTotals : null
@@ -1273,7 +1517,9 @@ const resumen = computed(() => {
       (variables ? variables[m] : 0) +
       (pagos ? pagos.columnTotals[m] : 0) +
       (costes ? costes.columnTotals[m] : 0) +
-      (internment ? internment.columnTotals[m] : 0)
+      (internment ? internment.columnTotals[m] : 0) +
+      // FE-S14-IVA: pago de liquidación al mes de su vencimiento (D-FE14-4).
+      (liquidation ? liquidation.columnTotals[m] : 0)
   )
   const neto = entradas.map((value, m) => value - salidas[m])
 
@@ -1289,7 +1535,8 @@ const resumen = computed(() => {
     (variablesPivot.value ? variablesPivot.value.grandTotal : 0) +
     (pagos ? pagos.grandTotal : 0) +
     (costes ? costes.grandTotal : 0) +
-    (internment ? internment.grandTotal : 0)
+    (internment ? internment.grandTotal : 0) +
+    (liquidation ? liquidation.grandTotal : 0)
   // FE-S8 C-3 (FR-4): neto ANUAL = entradas − salidas (ya no Σ de los 12
   // netos: con fuera-de-año esos importes no viven en ningún mes pero sí en
   // los totales; sin fuera-de-año el valor es idéntico — R-OY-2).
@@ -1605,6 +1852,9 @@ function negativeCell(row, value) {
           Arrastre automático del escenario {{ carrySourceYear }}: solo afecta a esta Vista Flujo;
           no genera líneas.
         </p>
+        <!-- FE-S14-IVA §4.1 (PQ-S10-2): la derivación de arrastre NO cambia
+             en v1 — siempre neta; con el modo bruto activo se declara. -->
+        <p v-if="ivaActive" class="cf-note cf-block-note">Los arrastres se muestran netos (v1).</p>
         <section v-for="carryTable in carryTables" :key="carryTable.title" class="cf-carry-table">
           <h5 class="cf-carry-subtitle">{{ carryTable.title }}</h5>
           <div class="cf-scroll">
@@ -1685,6 +1935,10 @@ function negativeCell(row, value) {
         </p>
         <p v-if="costPaymentsActive" class="cf-note cf-block-note">
           El resumen incluye pago a proveedores (costo de ventas).
+        </p>
+        <!-- FE-S14-IVA: misma familia de notas de cobertura del resumen. -->
+        <p v-if="settlementPaymentsPivot" class="cf-note cf-block-note">
+          El resumen incluye pago de liquidación de IVA (base caja, proyectado).
         </p>
         <p v-if="anyOutOfYear && showOutOfYear" class="cf-note cf-block-note">
           Σ meses + fuera de año = total anual
@@ -1777,6 +2031,22 @@ function negativeCell(row, value) {
         <p v-if="costTermsDegraded" class="cf-warn" role="status">
           {{ COGS_TERMS_UNAVAILABLE_NOTE }}
         </p>
+        <!-- FE-S14-IVA NFR-FE14-3: error de red en el settlement ⇒ nota "sin
+             dato de liquidación" + reintento (sin bloque, sin pantalla rota). -->
+        <div v-if="settlementDegraded" class="cf-warn cf-warn-row" role="status">
+          <span>
+            Sin dato de liquidación de IVA (no fue posible consultarla). El bloque “Pago de
+            liquidación de IVA” y el panel “Liquidación” quedan temporalmente sin cifras.
+          </span>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="settlement.loading"
+            @click="budgetPlanningStore.fetchIvaSettlement(scenario.id_budget, { force: true })"
+          >
+            Reintentar
+          </button>
+        </div>
       </section>
     </template>
   </div>
@@ -2038,8 +2308,16 @@ function negativeCell(row, value) {
   color: var(--color-text-secondary, #555555);
 }
 
-/* ---------- FE-S9 §2.6: negativos de "Bodega estimada" en ámbar ---------- */
+/* FE-S14-IVA NFR-FE14-3: variante con acción (nota de settlement + Reintentar). */
+.cf-warn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
 
+/* ---------- FE-S9 §2.6: negativos de "Bodega estimada" en ámbar ---------- */
 /* NO es rojo de caja (`cf-negative`): la bodega es una estimación
  * informativa de inventario; la familia ámbar es la del chip ⊘/`cf-warn`. */
 .cf-bodega-negative {

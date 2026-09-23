@@ -407,6 +407,14 @@ onBeforeUnmount(() => {
               hint-file="Formato Solicitud Presupuesto Gastos.xlsx"
             />
             <p class="bi-zone-note">Sin este archivo el escenario se crea solo con ingresos.</p>
+            <!-- FE-S14-IVA §5 (frontend.03_14): textos de ayuda sobre la
+                 columna `Con IVA` — literal de spec (backend.02_20 §5.6: la
+                 columna es OPCIONAL y NULL≡True, D-S10-3). -->
+            <p class="bi-zone-note">
+              El archivo debe incluir la columna Con IVA (Si/No) en la fila de encabezados.
+              Archivos sin la columna: todos los gastos se asumen CON IVA (ajustable renglón a
+              renglón).
+            </p>
           </section>
 
           <!-- FE-S9 §2.8: tercer input OPCIONAL — Plan de Importaciones

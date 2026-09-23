@@ -59,6 +59,17 @@
  * `internmentRateByLine`, reactiva sin refetch). Los payloads CREATE/UPDATE
  * de compra siguen BYTE-IDÉNTICOS a FE-S9 §6.1 (AC-FE10-7; guards BR-PUR-
  * 02/03/04 intactos: ningún campo nuevo viaja jamás).
+ *
+ * FE-S14-IVA (frontend.03_14 §5): checkbox `Con IVA` (label etiquetado,
+ * NFR-FE14-4) SOLO para líneas de GASTO — create ⇒ default MARCADO (BE
+ * §5.2: `None` en create equivale a True para expense; aquí se envía
+ * explícito); edit ⇒ valor persistido con la regla NULL≡True (D-FE14-2:
+ * `has_iva === null` sale marcado); el PUT incluye `has_iva` SOLO si Cambió
+ * respecto al valor efectivo original (contrato parcial backend.02_20 §5.2).
+ * En INGRESO/COMPRA el checkbox se OCULTA con la nota literal de la spec:
+ * "los ingresos y las compras siempre generan/pagan IVA (v1)" — D-S10-5: el
+ * backend ignora el flag en esos tipos (no viaja jamás ⇒ payloads viejos
+ * byte-idénticos cuando no se toca).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
@@ -102,7 +113,13 @@ const form = reactive({
   behaviorType: 'fixed',
   amountText: '',
   ratePct: '',
-  description: ''
+  description: '',
+  /**
+   * FE-S14-IVA: flag `Con IVA` — estado BOOLEANO (único campo no-string; el
+   * PUT/POST serializa `true|false` puro). create ⇒ default `true` (gasto
+   * gravado); edit ⇒ valor persistido con NULL≡True (D-FE14-2).
+   */
+  hasIva: true
 })
 
 /** Errores server inline por campo (§6) y alerta global. */
@@ -194,6 +211,25 @@ const BEHAVIOR_OPTIONS = Object.entries(BEHAVIOR_LABELS).map(([value, label]) =>
 watch(selectedType, (type) => {
   if (type === 'purchase') form.behaviorType = 'fixed'
 })
+
+/* ───────────── FE-S14-IVA §5: flag `Con IVA` (create/edit) ───────────── */
+
+/**
+ * El checkbox SOLO aplica a líneas de GASTO (D-FE14-2: por RENGLÓN expense;
+ * en create sigue al selector de tipo en vivo, en edit al tipo clavado de la
+ * línea — BR-LINE-06 ⇒ `props.line.line_type`).
+ */
+const showIvaFlag = computed(() =>
+  isEdit.value ? props.line?.line_type === 'expense' : selectedType.value === 'expense'
+)
+
+/** Nota literal §5 para INCOME/PURCHASE (el flag se oculta, D-S10-5). */
+const IVA_HIDDEN_NOTE = 'Los ingresos y las compras siempre generan/pagan IVA (v1).'
+
+/** Valor EFECTIVO original del flag en edit (NULL≡True, D-FE14-2). */
+function originalIvaFlag() {
+  return props.line ? props.line.has_iva !== false : true
+}
 
 /* ------------------------------- busy / guard ------------------------------- */
 
@@ -345,6 +381,12 @@ const createPayload = computed(() => {
   }
   if (isVariable.value) payload.variable_rate = rateDecimal.value
   else payload.projected_amount = amountParse.value.value
+  // FE-S14-IVA (backend.02_20 §5.2 `PlanningLineCreate.has_iva`): SOLO en
+  // gasto viaja el flag explícito del checkbox (create default true). En
+  // INCOME/PURCHASE NO se construye el campo (el formulario lo oculta con la
+  // nota "siempre generan/pagan IVA (v1)" y la derivación BE lo ignora,
+  // D-S10-5) ⇒ payload byte-idéntico al de FE-S4D/S9 para esos tipos.
+  if (selectedType.value === 'expense') payload.has_iva = form.hasIva
   return payload
 })
 
@@ -394,6 +436,14 @@ const updatePayload = computed(() => {
     rateDecimal.value !== Number(original.variable_rate ?? NaN)
   ) {
     payload.variable_rate = rateDecimal.value
+  }
+  // FE-S14-IVA: `has_iva` viaja SOLO si el checkbox cambió respecto al valor
+  // EFECTIVO original (NULL≡True, D-FE14-2 — backend.02_20 §5.2: PUT parcial
+  // `omitido = keep`). Efecto colateral aceptado: desmarcar y volver a
+  // marcar persiste `true` explícito en lugar de NULL — semánticamente
+  // idéntico en toda la derivación. Jamás viaja en income/purchase (D-S10-5).
+  if (original.line_type === 'expense' && form.hasIva !== originalIvaFlag()) {
+    payload.has_iva = form.hasIva
   }
   const description = form.description.trim()
   if (description && description !== (original.description ?? '')) payload.description = description
@@ -525,7 +575,10 @@ function resetForm() {
     behaviorType: 'fixed',
     amountText: '',
     ratePct: '',
-    description: ''
+    description: '',
+    // FE-S14-IVA: create ⇒ default CON IVA (D-FE14-2; el BE defaultea True
+    // en expense, §5.2 — aquí se envía explícito igualmente).
+    hasIva: true
   })
   // FE-S9 §2.2: en create el selector arranca en la sección que abrió el
   // modal; en edit queda clavado al tipo de la línea (selector deshabilitado).
@@ -548,7 +601,10 @@ function prefillFromLine(line) {
       line.variable_rate !== null && line.variable_rate !== undefined
         ? String(Number((Number(line.variable_rate) * 100).toFixed(2)))
         : '',
-    description: line.description ?? ''
+    description: line.description ?? '',
+    // FE-S14-IVA: edit ⇒ VALOR PERSISTIDO con la regla NULL≡True (D-FE14-2);
+    // el badge "asumido" lo muestra la cuadrícula, aquí basta el marcado.
+    hasIva: line.has_iva !== false
   })
 }
 
@@ -849,6 +905,22 @@ onBeforeUnmount(() => {
           </p>
         </div>
 
+        <!-- FE-S14-IVA §5: checkbox `Con IVA` (solo GASTOS). Create ⇒ default
+             true; edit ⇒ valor persistido (NULL sale marcado, D-FE14-2). En
+             INGRESO/COMPRA se OCULTA con la nota literal de la spec. -->
+        <div v-if="showIvaFlag" class="lf-field">
+          <label class="lf-check" for="lf-has-iva">
+            <input id="lf-has-iva" v-model="form.hasIva" type="checkbox" :disabled="busy" />
+            <span>Con IVA</span>
+          </label>
+          <p class="lf-hint">
+            Gasto gravado: en el modo “Con IVA” se muestra y programa su
+            recaudo/pago bruto (neto × 1.19). Desmárquelo solo para gastos sin
+            IVA (excluidos); no aplica a ingresos ni compras.
+          </p>
+        </div>
+        <p v-else class="lf-hint lf-iva-note" role="note">{{ IVA_HIDDEN_NOTE }}</p>
+
         <div class="lf-field">
           <label class="lf-label" for="lf-description">Descripción</label>
           <input
@@ -1037,6 +1109,37 @@ onBeforeUnmount(() => {
   font-size: 0.74rem;
   font-style: italic;
   color: var(--color-text-muted, #8a8a8a);
+}
+
+/* FE-S14-IVA: checkbox `Con IVA` etiquetado (NFR-FE14-4) + nota para los
+   tipos donde se oculta (ingresos/compras siempre gravados, D-S10-5). */
+.lf-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: auto;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--color-text-primary, #070707);
+  cursor: pointer;
+}
+
+.lf-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--color-brand, #03658c);
+  cursor: pointer;
+}
+
+.lf-check:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.lf-iva-note {
+  margin: -4px 0 0;
 }
 
 .lf-alert {

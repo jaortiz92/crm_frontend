@@ -31,6 +31,24 @@
  *
  * CERO dependencias: tabla HTML + estado local (patrón del repo). PQ-F5: sin
  * virtualización; slice "Mostrar 500 más" por sección.
+ *
+ * FE-S14-IVA (frontend.03_14 §5, prop `ivaMode`): CON el modo "Con IVA"
+ *  - Ingresos y Gastos ganan las columnas `IVA` y `Total` derivadas en vivo
+ *    (`planningFormat.withIva/ivaOf`, cero hardcodes — D-FE14-6): Ingresos
+ *    SIEMPRE gravados (D-S10-5); Gastos solo con flag EFECTIVO True/NULL
+ *    (D-FE14-2) — flag `false` ⇒ IVA "—" y Total = neto.
+ *  - Columna `Con IVA` (checkbox etiquetado, NFR-FE14-4) SOLO en filas
+ *    EXPENSE: cambio ⇒ `PUT /budget/planning/line/{id}` PARCIAL
+ *    `{ has_iva }` vía `updateScenarioLine` (la respuesta reemplaza la línea
+ *    en la caché; el settlement llega debounced por el store — AC-FE14-2).
+ *    Con `has_iva === NULL` el checkbox sale MARCADO con badge "asumido" y
+ *    tooltip "Asumido con IVA — edítalo si no" (AC-FE14-4, literal §5).
+ *  - Compras (§4.1): sin columnas nuevas (su monto YA es el total bruto de la
+ *    importación) ⇒ chip "IVA esperado" `prov×0.19 + Σ cuotas_int×0.19` con
+ *    tooltip desglosado (espejo E5/E6, backend.02_19/02_20; sin catálogo de
+ *    internación no se inventa la cifra: el chip simplemente no aparece).
+ * Con el modo OFF el DOM es byte-idéntico al del FE-S9 (AC-FE14-1: cero
+ * regresión visual) — las columnas nuevas ni se montan.
  */
 import { computed, nextTick, onBeforeUnmount, reactive, ref } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
@@ -41,12 +59,21 @@ import {
   BEHAVIOR_LABELS,
   LINE_TYPE_LABELS,
   formatMoney,
-  parseCellAmount
+  parseCellAmount,
+  lineChargesIva,
+  ivaOf,
+  withIva
 } from './planningFormat.js'
 
 const props = defineProps({
   /** `BudgetFull` + `parent_budget_name` de la caché del store. */
-  scenario: { type: Object, required: true }
+  scenario: { type: Object, required: true },
+  /**
+   * FE-S14-IVA: interruptor de modo "Neto / Con IVA" del escenario (dueño:
+   * `BudgetGridEditor` vía `budgetPlanningStore.ivaMode`; aquí SOLO se lee —
+   * columnas y checkbox existen únicamente con el modo ON).
+   */
+  ivaMode: { type: Boolean, default: false }
 })
 
 const budgetPlanningStore = useBudgetPlanningStore()
@@ -146,6 +173,98 @@ function sumAmount(rows) {
   return total
 }
 
+/* ───────────── FE-S14-IVA: derivación bruto por fila/columna (§4.1) ───────────── */
+
+/** Columna `Con IVA` (checkbox): solo GASTOS con el modo ON (§5). */
+function showFlagColumn(sectionType) {
+  return props.ivaMode && sectionType === 'expense'
+}
+
+/** Columnas `IVA`/`Total`: solo INGRESOS y GASTOS con el modo ON (§5). */
+function showIvaColumns(sectionType) {
+  return props.ivaMode && (sectionType === 'income' || sectionType === 'expense')
+}
+
+/** Cuota de IVA de la fila (0 si no está gravada; refleja el override en edición). */
+function ivaAmountFor(line) {
+  return lineChargesIva(line) ? ivaOf(displayAmount(line), true) : 0
+}
+
+/** Bruto mostrado de la fila: neto + IVA cuando está gravada (§4.1). */
+function totalFor(line) {
+  const net = displayAmount(line)
+  return lineChargesIva(line) ? withIva(net, true) : net
+}
+
+function sumIva(rows) {
+  let total = 0
+  for (const line of rows) total += ivaAmountFor(line)
+  return total
+}
+
+function sumBruto(rows) {
+  let total = 0
+  for (const line of rows) total += totalFor(line)
+  return total
+}
+
+/** `has_iva` NULL ⇒ checkbox marcado + badge "asumido" (D-FE14-2/AC-FE14-4). */
+function isAsumidoFlag(line) {
+  return line.line_type === 'expense' && (line.has_iva === null || line.has_iva === undefined)
+}
+
+/**
+ * FE-S14-IVA §4.1 (fila "Cuadrícula Compras"): el monto de una compra YA es
+ * el TOTAL bruto de la importación (BE-S9 A-1'), así que NO gana columnas
+ * propias — lo que añade el modo "Con IVA" es el **IVA esperado** con tooltip
+ * desglosado: `prov×0.19 + Σ cuotas_int×0.19` (espejo exacto de E5/E6 de
+ * backend.02_20 §4.3 con la misma descomposición §4 de backend.02_19:
+ * `provBase = Total/(1+%int)` con degradación `%int = 0` si la Línea no tiene
+ * tasa o el CECO no resuelve; sin términos ⇒ 100 % en la ancla, BR-INT-04).
+ * Degradación honesta (patrón D-FE10-3): sin el dúo de internación cargado no
+ * se puede partir la base ⇒ no hay tooltip (nunca una cifra inventada). Con el
+ * modo OFF devuelve `null` en O(1) ⇒ DOM byte-idéntico (AC-FE14-1).
+ * @param {object} line
+ * @returns {{ label: string, title: string }|null} chip + tooltip, o `null`.
+ */
+function purchaseIvaHint(line) {
+  if (!props.ivaMode || line.line_type !== 'purchase') return null
+  if (!budgetPlanningStore.internmentCatalogLoaded || budgetPlanningStore.internmentCatalogError) {
+    return null
+  }
+  const amount = Number(line.projected_amount)
+  if (!Number.isFinite(amount) || amount === 0) return null
+  const ceco = budgetPlanningStore.costCenters.find(
+    (item) => item.id_cost_center === line.id_cost_center
+  )
+  const lineId = typeof ceco?.id_line === 'number' ? ceco.id_line : null
+  const pctIntRaw = Number(budgetPlanningStore.internmentRateByLine.get(lineId) ?? 0)
+  const pctInt = !Number.isFinite(pctIntRaw) || pctIntRaw < 0 ? 0 : pctIntRaw
+  const provBase = amount / (1 + pctInt)
+  const intBase = amount - provBase
+  const terms = lineId === null ? undefined : budgetPlanningStore.internmentTermsByLine.get(lineId)
+  let coveredPct = 0
+  if (terms && terms.length) {
+    for (const term of terms) {
+      const paymentPct = Number(term.payment_pct)
+      if (Number.isFinite(paymentPct)) coveredPct += paymentPct
+    }
+  } else {
+    coveredPct = 1 // BR-INT-04 (espejo E6): sin términos ⇒ 100 % en la ancla
+  }
+  const importVat = ivaOf(provBase, true)
+  const internmentVat = intBase > 0 ? ivaOf(intBase * coveredPct, true) : 0
+  const totalVat = importVat + internmentVat
+  if (totalVat <= 0) return null
+  return {
+    label: `+IVA ${formatMoney(totalVat)}`,
+    title:
+      `IVA esperado de la importación (se paga en las fechas del Flujo): ${formatMoney(totalVat)} · ` +
+      `importación ${formatMoney(importVat)} + internación ${formatMoney(internmentVat)}. ` +
+      `Salida bruta de caja: ${formatMoney(amount + totalVat)}.`
+  }
+}
+
 /** Comparador original del FE-S4, ahora parametrizado por sección (FD-7). */
 function sortRows(rows, sortKey, sortAsc) {
   const accessor = SORT_ACCESSORS[sortKey]
@@ -187,8 +306,23 @@ function buildSection(type) {
   const visible = computed(() => sorted.value.slice(0, state.visibleCount))
   const subtotal = computed(() => sumAmount(all.value))
   const visibleSubtotal = computed(() => sumAmount(visible.value))
+  // FE-S14: Σ del tfoot sobre el slice visible (solo se usan con el modo ON;
+  // con OFF el DOM no las monta — cero costo visual, AC-FE14-1).
+  const visibleIva = computed(() => sumIva(visible.value))
+  const visibleBruto = computed(() => sumBruto(visible.value))
   const hasMore = computed(() => sorted.value.length > visible.value.length)
-  return { state, all, filtered, sorted, visible, subtotal, visibleSubtotal, hasMore }
+  return {
+    state,
+    all,
+    filtered,
+    sorted,
+    visible,
+    subtotal,
+    visibleSubtotal,
+    visibleIva,
+    visibleBruto,
+    hasMore
+  }
 }
 
 /** Strings literales §3.1/§3.2 de FE-S4D + tercera sección FE-S9 §2.3. */
@@ -309,6 +443,27 @@ function lineBusy(idBudgetLine) {
     Boolean(budgetPlanningStore.cellSaving[idBudgetLine]) ||
     Boolean(budgetPlanningStore.lineSaving[idBudgetLine])
   )
+}
+
+/**
+ * FE-S14-IVA §5: toggle del flag `Con IVA` de una fila EXPENSE ⇒ PUT PARCIAL
+ * `{ has_iva }` sobre `/budget/planning/line/{id}` (dueño del flag
+ * `lineSaving` y del cache-in-place: la respuesta reemplaza la línea, las
+ * columnas IVA/Total re-pivotan por reactividad y el settlement llega
+ * debounced desde el store — AC-FE14-2, ≤ 1 request nuevo). El checkbox es
+ * ONE-WAY (`:checked`): si el request falla vuelve a leer la caché (jamás
+ * queda marcado lo que el servidor no aceptó). 404 de línea: el store ya
+ * resincronizó el detalle (`lineGone`); otros fallos ⇒ toast simple.
+ * @param {object} line
+ * @param {Event} event
+ */
+async function onIvaFlagChange(line, event) {
+  const next = event.target.checked
+  const result = await budgetPlanningStore.updateScenarioLine(line.id_budget_line, {
+    has_iva: next
+  })
+  if (result.ok || result.kind === 'auth' || result.kind === 'busy') return
+  alertService.generalError(result.message || 'No se pudo guardar el flag de IVA. Reintenta.')
 }
 
 /* --------------------- edición de celda (stack FE-S4, verbatim) ------------ */
@@ -534,6 +689,14 @@ onBeforeUnmount(clearTimers)
                   </svg>
                 </div>
               </th>
+              <!-- FE-S14-IVA §5 (solo con el modo ON): checkbox por fila en
+                   Gastos, luego las columnas bruto de Ingresos y Gastos. Con
+                   el modo OFF estos `th` no existen ⇒ DOM idéntico al FE-S9. -->
+              <th v-if="showFlagColumn(section.type)" class="gl-col-ivaflag">Con IVA</th>
+              <template v-if="showIvaColumns(section.type)">
+                <th class="gl-col-iva">IVA</th>
+                <th class="gl-col-iva">Total</th>
+              </template>
               <th class="gl-col-actions">Acciones</th>
             </tr>
           </thead>
@@ -596,6 +759,17 @@ onBeforeUnmount(clearTimers)
                   @blur="commitEdit(line)"
                 />
                 <span v-else class="gl-amount">{{ formatMoney(displayAmount(line)) }}</span>
+                <!-- FE-S14-IVA §4.1 (fila Cuadrícula Compras, solo modo ON): IVA
+                     esperado = prov×0.19 + Σ cuotas_int×0.19 con tooltip
+                     desglosado; la compra ya muestra su TOTAL, sin columnas
+                     nuevas. Con modo OFF o catálogo caído `purchaseIvaHint` es
+                     `null` ⇒ DOM idéntico al FE-S9 (AC-FE14-1). -->
+                <span
+                  v-if="editingId !== line.id_budget_line && purchaseIvaHint(line)"
+                  class="gl-iva-hint"
+                  :title="purchaseIvaHint(line).title"
+                  >{{ purchaseIvaHint(line).label }}</span
+                >
                 <span
                   v-if="cellStatus[line.id_budget_line] === 'saving'"
                   class="gl-state gl-state-saving"
@@ -625,6 +799,35 @@ onBeforeUnmount(clearTimers)
                   </template>
                 </p>
               </td>
+              <!-- FE-S14-IVA: checkbox `Con IVA` etiquetado (SOLO EXPENSE,
+                   modo ON; NFR-FE14-4). `has_iva === NULL` ⇒ marcado + badge
+                   con el literal §5 "Asumido con IVA — edítalo si no"
+                   (AC-FE14-4, D-S10-3). Un solo PUT parcial `{ has_iva }`;
+                   el dueño del flag `lineSaving` es la acción del store. -->
+              <td v-if="showFlagColumn(section.type)" class="gl-cell-ivaflag">
+                <label class="gl-iva-check">
+                  <input
+                    type="checkbox"
+                    class="gl-iva-input"
+                    :checked="lineChargesIva(line)"
+                    :disabled="lineBusy(line.id_budget_line)"
+                    @change="onIvaFlagChange(line, $event)"
+                  />
+                  <span class="gl-iva-check-text">Con IVA</span>
+                  <span
+                    v-if="isAsumidoFlag(line)"
+                    class="gl-iva-badge"
+                    title="El archivo no trajo la columna Con IVA: asumido gravado (D-S10-3)"
+                    >Asumido con IVA — edítalo si no</span
+                  >
+                </label>
+              </td>
+              <template v-if="showIvaColumns(section.type)">
+                <td class="gl-cell-money gl-cell-iva">
+                  {{ lineChargesIva(line) ? formatMoney(ivaAmountFor(line)) : '—' }}
+                </td>
+                <td class="gl-cell-money gl-cell-bruto">{{ formatMoney(totalFor(line)) }}</td>
+              </template>
               <td class="gl-cell-actions">
                 <button
                   type="button"
@@ -649,7 +852,15 @@ onBeforeUnmount(clearTimers)
               </td>
             </tr>
             <tr v-if="!section.vm.visible.length" class="gl-row-nomatch">
-              <td :colspan="SORT_COLUMNS.length + 1" class="gl-no-match">
+              <td
+                :colspan="
+                  SORT_COLUMNS.length +
+                  1 +
+                  (showFlagColumn(section.type) ? 1 : 0) +
+                  (showIvaColumns(section.type) ? 2 : 0)
+                "
+                class="gl-no-match"
+              >
                 Sin coincidencias con los filtros aplicados.
               </td>
             </tr>
@@ -660,6 +871,16 @@ onBeforeUnmount(clearTimers)
               <td class="gl-cell-money" aria-live="polite">
                 {{ formatMoney(section.vm.visibleSubtotal) }}
               </td>
+              <!-- FE-S14-IVA: Σ IVA y Σ bruto del slice visible (modo ON). -->
+              <td v-if="showFlagColumn(section.type)"></td>
+              <template v-if="showIvaColumns(section.type)">
+                <td class="gl-cell-money gl-cell-iva" aria-live="polite">
+                  {{ formatMoney(section.vm.visibleIva) }}
+                </td>
+                <td class="gl-cell-money gl-cell-bruto" aria-live="polite">
+                  {{ formatMoney(section.vm.visibleBruto) }}
+                </td>
+              </template>
               <td></td>
             </tr>
           </tfoot>
@@ -1072,5 +1293,108 @@ onBeforeUnmount(clearTimers)
 .gl-more {
   display: flex;
   justify-content: center;
+}
+
+/* ───────── FE-S14-IVA: flag `Con IVA` + columnas bruto (solo modo ON) ───────── */
+
+/* Regla aprendida (FE-S4C §6.2): los `th` nuevos pintan sobre la banda clara
+   del header ⇒ `--color-text-primary` (el `th { color:#fff }` de `main.css`
+   los volvería invisibles en tema claro). */
+.gl-table thead th.gl-col-ivaflag,
+.gl-table thead th.gl-col-iva {
+  color: var(--color-text-primary, #070707);
+}
+
+.gl-col-ivaflag {
+  min-width: 190px;
+  text-align: center;
+}
+
+.gl-col-iva {
+  min-width: 128px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.gl-cell-ivaflag {
+  white-space: nowrap;
+}
+
+.gl-iva-check {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.gl-iva-input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--color-brand, #03658c);
+  cursor: pointer;
+}
+
+.gl-iva-check:has(.gl-iva-input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.gl-iva-check-text {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #555555);
+}
+
+/* Badge NULL≡True (AC-FE14-4): familia ámbar "informativo", nunca roja. */
+.gl-iva-badge {
+  padding: 1px 7px;
+  border: 1px solid rgba(180, 83, 9, 0.4);
+  border-radius: 999px;
+  background-color: rgba(245, 158, 11, 0.1);
+  font-size: 0.62rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #96590a;
+}
+
+:root[data-theme='dark'] .gl-iva-badge {
+  color: #f6c177;
+}
+
+/* Chip "IVA esperado" de COMPRAS (§4.1): informativo ámbar suave bajo el
+   total, NUNCA compite con el monto (fonte menor, tabular). */
+.gl-iva-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #96590a;
+  cursor: help;
+}
+
+:root[data-theme='dark'] .gl-iva-hint {
+  color: #f6c177;
+}
+
+.gl-cell-iva {
+  min-width: 128px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.gl-cell-bruto {
+  min-width: 140px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 </style>
