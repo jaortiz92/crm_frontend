@@ -40,10 +40,13 @@ async function confirmTarget() {
   const result = await budgetPlanningStore.setTarget(props.scenario.id_budget)
 
   if (result.ok) {
+    const payrollLines = Number(result.data?.payroll_lines_created ?? 0)
+    const payrollNote =
+      payrollLines > 0 ? ` Nómina proyectada automáticamente: ${payrollLines} líneas.` : ''
     alertService.generalSucces(
-      props.demotedName
+      (props.demotedName
         ? `"${targetName.value}" es la meta ${targetYear.value}; "${props.demotedName}" quedó Cerrado.`
-        : `"${targetName.value}" es la meta ${targetYear.value}.`
+        : `"${targetName.value}" es la meta ${targetYear.value}.`) + payrollNote
     )
     emit('done')
     emit('close')

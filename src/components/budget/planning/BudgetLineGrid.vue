@@ -101,6 +101,27 @@ const lines = computed(() =>
   props.scenario && Array.isArray(props.scenario.budget_lines) ? props.scenario.budget_lines : []
 )
 
+/**
+ * BE-S11 what-if: una línea `is_simulated` (o sin `id_budget_line`) es
+ * proyección de nómina de un escenario NO activo: NO persiste en el
+ * servidor, así que PUT de celda, PUT/DELETE de línea y flag IVA están
+ * todos cerrados para ella (la misma razón por la que LineFormModal ya la
+ * trata como línea de motor: `source_engine` `collaborator_*`, D-FE15-7).
+ */
+function isSimulated(line) {
+  return (
+    line.is_simulated === true ||
+    line.id_budget_line === null ||
+    line.id_budget_line === undefined
+  )
+}
+
+/** Clave v-for estable: id real en líneas persistidas, compuesta en simuladas. */
+function rowKey(line) {
+  if (!isSimulated(line)) return line.id_budget_line
+  return `sim-${line.id_collaborator}-${line.budget_date}-${line.cost_component_code}`
+}
+
 /* --------------------------------- orden ----------------------------------- */
 
 /** Columnas ordenables por encabezado (orden = presentación de la tabla). */
@@ -278,7 +299,7 @@ function sortRows(rows, sortKey, sortAsc) {
         ? valA - valB
         : String(valA).localeCompare(String(valB), 'es')
     if (cmp !== 0) return cmp * direction
-    return a.id_budget_line - b.id_budget_line
+    return (a.id_budget_line ?? 0) - (b.id_budget_line ?? 0)
   })
 }
 
@@ -458,6 +479,7 @@ function lineBusy(idBudgetLine) {
  * @param {Event} event
  */
 async function onIvaFlagChange(line, event) {
+  if (isSimulated(line)) return
   const next = event.target.checked
   const result = await budgetPlanningStore.updateScenarioLine(line.id_budget_line, {
     has_iva: next
@@ -475,7 +497,7 @@ function cellBusy(idBudgetLine) {
 
 /** §8.2: solo líneas `fixed` editables por celda (las variables llevan tasa). */
 function isEditable(line) {
-  return line.behavior_type === 'fixed'
+  return line.behavior_type === 'fixed' && !isSimulated(line)
 }
 
 function displayAmount(line) {
@@ -489,6 +511,7 @@ function cellLabel(line) {
 
 function cellTitle(line) {
   const id = line.id_budget_line
+  if (isSimulated(line)) return 'Línea simulada de nómina (what-if): no editable'
   if (cellStatus[id] === 'error' && cellMessages[id]) return cellMessages[id]
   if (!isEditable(line)) return 'línea variable: edítela con ✏️ (tasa/fechas)'
   if (cellStatus[id] === 'saved') return 'Guardado ✓'
@@ -500,12 +523,12 @@ async function startEdit(line) {
   // Una edición previa abierta con valor INVÁLIDO (el blur no cerró porque
   // no se disparó PUT) se descarta al abrir otra celda: jamás bloquea la rejilla.
   if (editingId.value !== null && !editInvalid.value) return
-  editingId.value = line.id_budget_line
+  editingId.value = rowKey(line)
   editValue.value = String(line.projected_amount ?? '')
   editInvalid.value = false
   editMessage.value = ''
   await nextTick()
-  const input = document.getElementById(`cell-input-${line.id_budget_line}`)
+  const input = document.getElementById(`cell-input-${rowKey(line)}`)
   if (input) {
     input.focus()
     input.select()
@@ -559,7 +582,7 @@ function markSaved(idBudgetLine) {
  * requests por la misma edición).
  */
 async function commitEdit(line) {
-  if (editingId.value !== line.id_budget_line) return
+  if (editingId.value !== rowKey(line)) return
 
   const parsed = parseCellAmount(editValue.value)
   if (!parsed.valid) {
@@ -701,7 +724,7 @@ onBeforeUnmount(clearTimers)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="line in section.vm.visible" :key="line.id_budget_line">
+            <tr v-for="line in section.vm.visible" :key="rowKey(line)">
               <td
                 class="gl-cell-ceco"
                 :title="budgetPlanningStore.costCenterLabel(line.id_cost_center)"
@@ -724,6 +747,11 @@ onBeforeUnmount(clearTimers)
                 >
                   {{ BEHAVIOR_LABELS[line.behavior_type] || line.behavior_type }}
                 </span>
+                <span
+                  v-if="isSimulated(line)"
+                  class="gl-chip gl-chip-sim"
+                  title="Proyección what-if del motor de nómina (BE-S11): no está materializada en este escenario"
+                >Simulada</span>
               </td>
               <td>{{ budgetPlanningStore.collectionLabel(line.id_collection) }}</td>
               <td
@@ -737,15 +765,15 @@ onBeforeUnmount(clearTimers)
                 }"
                 :tabindex="isEditable(line) ? 0 : -1"
                 :aria-label="cellLabel(line)"
-                :aria-describedby="`cell-note-${line.id_budget_line}`"
+                :aria-describedby="`cell-note-${rowKey(line)}`"
                 :title="cellTitle(line)"
                 role="gridcell"
                 @dblclick="startEdit(line)"
                 @keydown="onCellKeydown($event, line)"
               >
                 <input
-                  v-if="editingId === line.id_budget_line"
-                  :id="`cell-input-${line.id_budget_line}`"
+                  v-if="editingId !== null && editingId === rowKey(line)"
+                  :id="`cell-input-${rowKey(line)}`"
                   v-model="editValue"
                   class="gl-input"
                   :class="{ 'is-invalid': editInvalid }"
@@ -765,7 +793,7 @@ onBeforeUnmount(clearTimers)
                      nuevas. Con modo OFF o catálogo caído `purchaseIvaHint` es
                      `null` ⇒ DOM idéntico al FE-S9 (AC-FE14-1). -->
                 <span
-                  v-if="editingId !== line.id_budget_line && purchaseIvaHint(line)"
+                  v-if="(editingId === null || editingId !== rowKey(line)) && purchaseIvaHint(line)"
                   class="gl-iva-hint"
                   :title="purchaseIvaHint(line).title"
                   >{{ purchaseIvaHint(line).label }}</span
@@ -785,13 +813,13 @@ onBeforeUnmount(clearTimers)
                   ✓
                 </span>
                 <span
-                  v-if="editInvalid && editingId === line.id_budget_line"
+                  v-if="editInvalid && editingId !== null && editingId === rowKey(line)"
                   class="gl-state gl-state-error"
                 >
                   !
                 </span>
-                <p :id="`cell-note-${line.id_budget_line}`" class="gl-cell-note" aria-live="polite">
-                  <template v-if="editingId === line.id_budget_line && editInvalid">
+                <p :id="`cell-note-${rowKey(line)}`" class="gl-cell-note" aria-live="polite">
+                  <template v-if="editingId !== null && editingId === rowKey(line) && editInvalid">
                     {{ editMessage }}
                   </template>
                   <template v-else-if="cellStatus[line.id_budget_line] === 'error'">
@@ -810,7 +838,7 @@ onBeforeUnmount(clearTimers)
                     type="checkbox"
                     class="gl-iva-input"
                     :checked="lineChargesIva(line)"
-                    :disabled="lineBusy(line.id_budget_line)"
+                    :disabled="isSimulated(line) || lineBusy(line.id_budget_line)"
                     @change="onIvaFlagChange(line, $event)"
                   />
                   <span class="gl-iva-check-text">Con IVA</span>
@@ -832,8 +860,8 @@ onBeforeUnmount(clearTimers)
                 <button
                   type="button"
                   class="btn-icon-sm"
-                  title="Editar línea"
-                  :disabled="lineBusy(line.id_budget_line)"
+                  :title="isSimulated(line) ? 'Línea simulada: no editable' : 'Editar línea'"
+                  :disabled="isSimulated(line) || lineBusy(line.id_budget_line)"
                   :aria-label="`Editar línea ${budgetPlanningStore.costCenterLabel(line.id_cost_center)} ${line.budget_date}`"
                   @click="openEdit(line)"
                 >
@@ -842,8 +870,8 @@ onBeforeUnmount(clearTimers)
                 <button
                   type="button"
                   class="btn-icon-sm"
-                  title="Eliminar línea"
-                  :disabled="lineBusy(line.id_budget_line)"
+                  :title="isSimulated(line) ? 'Línea simulada: no se puede eliminar (no existe en BD)' : 'Eliminar línea'"
+                  :disabled="isSimulated(line) || lineBusy(line.id_budget_line)"
                   :aria-label="`Eliminar línea ${budgetPlanningStore.costCenterLabel(line.id_cost_center)} ${line.budget_date}`"
                   @click="openDelete(line)"
                 >
@@ -1139,8 +1167,20 @@ onBeforeUnmount(clearTimers)
   color: #14718f;
 }
 
+/* BE-S11 what-if: chip ÁMBAR para proyecciones de nómina no materializadas */
+
+.gl-chip-sim {
+  border-color: rgba(217, 119, 6, 0.45);
+  background-color: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
 :root[data-theme='dark'] .gl-chip-var {
   color: #7fd4ef;
+}
+
+:root[data-theme='dark'] .gl-chip-sim {
+  color: #fbbf24;
 }
 
 /* Celda de monto: editable (input a mano alzada) vs read-only */

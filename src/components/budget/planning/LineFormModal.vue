@@ -140,6 +140,23 @@ const flagged = ref(new Set())
 const isEdit = computed(() => props.mode === 'edit')
 const isVariable = computed(() => form.behaviorType !== 'fixed')
 
+/* ────── FE-S15-COLLAB §5 (D-FE15-7): líneas del motor de nómina ────── */
+
+/**
+ * Línea generada por el motor de colaboradores (`id_collaborator` poblado o
+ * `source_engine` que empieza por `collaborator_`: BE-S11 §7/D-S11-5). El
+ * formulario pasa a MODO LECTURA con chip "Nómina": la edición manual sería
+ * pisada por el reemplazo idempotente R-13 (import/recálculo). Cero cambios
+ * de contrato: solo presentación + bloqueo de submit.
+ */
+const isEngineLine = computed(() => {
+  if (!isEdit.value || !props.line) return false
+  if (props.line.id_collaborator !== null && props.line.id_collaborator !== undefined) {
+    return true
+  }
+  return String(props.line.source_engine ?? '').startsWith('collaborator_')
+})
+
 /* ------------------------ selector de tipo (FE-S9 §2.2) ------------------------ */
 
 /**
@@ -451,6 +468,8 @@ const updatePayload = computed(() => {
 })
 
 const canSave = computed(() => {
+  // D-FE15-7: una línea del motor de nómina NO se edita (R-13 la pisaría).
+  if (isEngineLine.value) return false
   if (busy.value || !props.scenario?.id_budget) return false
   if (cecoError.value || budgetDateError.value || amountError.value || rateError.value) {
     return false
@@ -543,6 +562,7 @@ function applyServerError(result) {
 }
 
 async function handleSave() {
+  if (isEngineLine.value) return
   attempted.value = true
   clearServerErrors()
   if (!canSave.value) return
@@ -682,7 +702,17 @@ onBeforeUnmount(() => {
     >
       <header class="lf-header">
         <div class="lf-header-text">
-          <h3 id="line-form-title" class="lf-title">{{ dialogTitle }}</h3>
+          <h3 id="line-form-title" class="lf-title">
+            {{ dialogTitle }}
+            <!-- FE-S15-COLLAB (D-FE15-7): chip "Nómina" (TEXTO, no solo
+                 color — NFR-FE-3) en líneas del motor de colaboradores. -->
+            <span
+              v-if="isEngineLine"
+              class="lf-chip-nomina"
+              title="Generada por el motor de nómina (BE-S11)"
+              >Nómina</span
+            >
+          </h3>
           <p class="lf-subtitle">{{ scenario.budget_name }} · {{ scenario.budget_year }}</p>
         </div>
         <button
@@ -697,6 +727,14 @@ onBeforeUnmount(() => {
       </header>
 
       <form class="lf-body" @submit.prevent="handleSave">
+        <!-- FE-S15-COLLAB (D-FE15-7): en líneas del motor el formulario
+             completo queda en lectura (fieldset nativo deshabilita los
+             controles sin reescribir la lógica de campos/payloads) y se pinta
+             la nota literal de la spec. -->
+        <p v-if="isEngineLine" class="lf-engine-note" role="note">
+          Generada por el motor — se regenera con el import/recálculo de nómina.
+        </p>
+        <fieldset class="lf-fields" :disabled="isEngineLine">
         <div class="lf-field">
           <label class="lf-label" for="lf-line-type">Tipo de línea *</label>
           <!-- FE-S9 §2.2: tres opciones (Ingreso/Gasto/Compra). En create el
@@ -936,6 +974,7 @@ onBeforeUnmount(() => {
             Revisa este valor.
           </p>
         </div>
+        </fieldset>
 
         <p v-if="alertMessage" class="lf-alert" role="alert" aria-live="assertive">
           {{ alertMessage }}
@@ -944,9 +983,11 @@ onBeforeUnmount(() => {
 
       <footer class="lf-footer">
         <button type="button" class="btn btn-secondary" :disabled="busy" @click="tryClose">
-          Cancelar
+          {{ isEngineLine ? 'Cerrar' : 'Cancelar' }}
         </button>
+        <!-- FE-S15-COLLAB (D-FE15-7): en líneas del motor no hay "Guardar". -->
         <button
+          v-if="!isEngineLine"
           type="button"
           class="btn btn-primary lf-submit"
           :disabled="!canSave"
@@ -1053,6 +1094,52 @@ onBeforeUnmount(() => {
   gap: 14px;
   padding: 16px 18px;
   overflow-y: auto;
+}
+
+/* FE-S15-COLLAB (D-FE15-7): fieldset transparente que conserva el layout del
+   body y deshabilita TODOS los controles cuando la línea es del motor. */
+.lf-fields {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.lf-fields:disabled {
+  opacity: 0.72;
+}
+
+.lf-chip-nomina {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 10px;
+  border: 1px solid rgba(30, 142, 90, 0.45);
+  border-radius: 999px;
+  background-color: rgba(30, 142, 90, 0.12);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: 2px;
+  color: #1e8e5a;
+}
+
+:root[data-theme='dark'] .lf-chip-nomina {
+  color: #7bd89a;
+}
+
+.lf-engine-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 4px solid #1e8e5a;
+  border-radius: 6px;
+  background-color: rgba(30, 142, 90, 0.08);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary, #555555);
 }
 
 .lf-field {

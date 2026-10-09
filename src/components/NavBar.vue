@@ -110,6 +110,15 @@ const navGroups = [
         to: '/budget/planning',
         permission: 'high',
         roles: BUDGET_UPLOAD_ROLES
+      },
+      {
+        // Colaboradores — nómina (FE-S15-COLLAB §5): visible igual que
+        // reglas/costos (mismo gate del módulo; la edición salarial fina la
+        // decide el backend con COLLAB_*_ROLES + salary_masked).
+        label: 'Colaboradores',
+        to: '/budget/collaborators',
+        permission: 'high',
+        roles: BUDGET_UPLOAD_ROLES
       }
     ]
   },

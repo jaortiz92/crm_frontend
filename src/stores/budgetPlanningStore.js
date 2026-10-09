@@ -395,6 +395,23 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
       error: false
     },
 
+    /**
+     * BE-S11 what-if: caché del `PayrollSimulationOut` de escenarios NO
+     * activos (la pide el editor al abrir; degrada en silencio con banner +
+     * reintento, patrón NFR-FE14-3). Se RESETA al cambiar de escenario y un
+     * escenario ACTIVO jamás la consume (AC-SIM-2: ni una línea simulada
+     * junto a las reales del motor).
+     */
+    payrollSim: {
+      /** @type {object|null} `PayrollSimulationOut` crudo */
+      data: null,
+      /** escenario al que pertenece `data` (descarte de respuestas tardías) */
+      budgetId: null,
+      loaded: false,
+      loading: false,
+      error: false
+    },
+
     /** Flags anti-doble-submit (NFR-F4/AC-FE-8). */
     uploading: false,
     cloning: false,
@@ -744,6 +761,8 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         // fetch del detalle al de la liquidación).
         this.applyIvaModeForBudget(idBudget)
         this.resetSettlementCache()
+        // BE-S11 what-if: la simulación de OTRO escenario tampoco se asoma.
+        this.resetPayrollSimCache()
         return { ok: true }
       } catch (err) {
         this.currentScenario = null
@@ -1399,6 +1418,59 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         if (this.currentScenario?.id_budget !== idBudget) return
         void this.fetchIvaSettlement(idBudget, { force: true })
       }, delayMs)
+    },
+
+    /** BE-S11 what-if: deja la caché de simulación limpia. */
+    resetPayrollSimCache() {
+      this.payrollSim.data = null
+      this.payrollSim.budgetId = null
+      this.payrollSim.loaded = false
+      this.payrollSim.loading = false
+      this.payrollSim.error = false
+    },
+
+    /**
+     * GET `/budget/planning/{id}/payroll-simulation` (BE-S11 what-if de
+     * escenarios NO activos). Espejo de `fetchIvaSettlement`: single-flight
+     * (spam del "Reintentar" ⇒ un solo GET), caché por escenario, respuesta
+     * tardía descartada y degradación SILENTE — el editor muestra banner +
+     * reintento; la vista jamás rompe (NFR-FE14-3). El 400 de escenario
+     * activo queda como `error` sin data (el editor no lo pide en ese caso,
+     * defensa en profundidad).
+     * @param {number|string} idBudget
+     * @param {{ force?: boolean }} [options]
+     * @returns {Promise<{ ok: boolean, kind?: string, [key: string]: any }>}
+     */
+    async fetchPayrollSimulation(idBudget, { force = false } = {}) {
+      const target = Number(idBudget)
+      if (!Number.isFinite(target) || target <= 0) return { ok: false, kind: 'notfound' }
+      if (this.payrollSim.loading) return { ok: true }
+      if (!force && this.payrollSim.loaded && this.payrollSim.budgetId === target) {
+        return { ok: true }
+      }
+      this.payrollSim.loading = true
+      try {
+        const response = await budgetPlanningService.fetchPayrollSimulation(target)
+        if (this.currentScenario?.id_budget !== target) return { ok: true }
+        const data = response?.data ?? null
+        this.payrollSim.data = data && typeof data === 'object' ? data : null
+        this.payrollSim.budgetId = target
+        this.payrollSim.loaded = true
+        this.payrollSim.error = false
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyPlanningError(err)
+        this.handleAuth(classified)
+        if (classified.kind !== 'auth') {
+          this.payrollSim.error = true
+          this.payrollSim.loaded = false
+          this.payrollSim.data = null
+          this.payrollSim.budgetId = target
+        }
+        return { ok: false, ...classified }
+      } finally {
+        this.payrollSim.loading = false
+      }
     }
   }
 })

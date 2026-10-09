@@ -50,6 +50,10 @@ import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import { useUserStore } from '@/stores/userStore.js'
 import { canSetBudgetTarget } from '@/router/index.js'
 import { alertService } from '@/services/alertService.js'
+import {
+  budgetCollaboratorService,
+  classifyCollaboratorError
+} from '@/services/budgetCollaboratorService.js'
 import { formatMoney, statusChipOf } from '@/components/budget/planning/planningFormat.js'
 
 const TAB_ORDER = ['executive', 'flow', 'editor', 'settlement']
@@ -194,6 +198,108 @@ watch(
   }
 )
 
+/* ============ BE-S11 enmienda (Opcion A): banner de nómina sin proyectar ============
+ * Al abrir un escenario ACTIVO se consulta materialization-status (solo
+ * conteos, auth simple). needs_materialization = nómina cargada (planes
+ * abiertos) pero cero líneas del motor en este escenario — típico cuando la
+ * meta se creó DESPUÉS del import o cuando el import avisó "no materialized".
+ * El botón reusa POST recalculate con ancla enero del año del escenario
+ * (R-13 idempotente: nunca duplica, jamás toca líneas ajenas al motor). */
+const payrollStatus = ref(null)
+const payrollBusy = ref(false)
+
+const payrollNoticeText = computed(() => {
+  if (!payrollStatus.value) return ''
+  const n = payrollStatus.value.collaborators_with_open_plan
+  return `Hay ${n} colaborador(es) con salario vigente, pero la nómina no está proyectada en este escenario.`
+})
+
+async function checkPayrollStatus() {
+  const year = Number(scenario.value?.budget_year)
+  if (!year || scenario.value?.status !== 'active') {
+    payrollStatus.value = null
+    return
+  }
+  try {
+    const res = await budgetCollaboratorService.fetchMaterializationStatus(year)
+    payrollStatus.value = res?.data?.needs_materialization ? res.data : null
+  } catch (err) {
+    payrollStatus.value = null
+  }
+}
+
+async function projectPayrollNow() {
+  const year = Number(scenario.value?.budget_year)
+  if (!year || payrollBusy.value) return
+  payrollBusy.value = true
+  try {
+    const res = await budgetCollaboratorService.recalculate({ month: `${year}-01` })
+    const created = Number(res?.data?.created_lines ?? 0)
+    const warns = res?.data?.warnings ?? []
+    alertService.generalSucces(
+      `Nómina proyectada en el escenario: ${created} líneas.` +
+        (warns.length ? ` Aviso: ${warns[0]}` : '')
+    )
+    await load(true)
+  } catch (err) {
+    const classified = classifyCollaboratorError(err)
+    alertService.generalError(classified.message || 'No se pudo proyectar la nómina.')
+  } finally {
+    payrollBusy.value = false
+  }
+}
+
+/* ============ BE-S11 what-if: nómina simulada (escenarios NO activos) ============
+ * El motor SOLO materializa líneas en el escenario activo (Opción C): los
+ * borradores quedarían sin coste laboral visible, así que el editor pide la
+ * SIMULACIÓN (GET payroll-simulation, cero escrituras) y la fusiona a las
+ * líneas como filas read-only. El análisis de funcionalidad (ingresos vs
+ * nómina) ocurre ANTES de marcar meta. AC-SIM-2: con status 'active' nunca
+ * se inyecta (las reales ya están); la puerta es el status, no el timing. */
+const payrollSim = computed(() => budgetPlanningStore.payrollSim)
+
+const simLines = computed(() => {
+  const base = scenario.value
+  if (!base || base.status === 'active') return []
+  const sim = payrollSim.value.data
+  if (!sim || payrollSim.value.budgetId !== base.id_budget) return []
+  return (sim.lines || []).map((l) => ({
+    id_budget_line: null,
+    id_budget: base.id_budget,
+    id_cost_center: l.id_cost_center,
+    id_collection: l.id_collection ?? null,
+    line_type: 'expense',
+    behavior_type: 'fixed',
+    budget_date: l.budget_date,
+    payment_date: l.payment_date ?? null,
+    projected_amount: Number(l.amount),
+    has_iva: false,
+    description: l.description,
+    cost_component_code: l.cost_component_code,
+    variable_rate: null,
+    source_engine: 'collaborator_cost_sim',
+    id_collaborator: l.id_collaborator,
+    is_simulated: true
+  }))
+})
+
+/** Lo que consumen Ejecutiva/Flujo/Cuadrícula: líneas reales + simuladas. */
+const scenarioView = computed(() => {
+  const base = scenario.value
+  if (!base) return base
+  const extra = simLines.value
+  if (!extra.length) return base
+  return { ...base, budget_lines: [...(base.budget_lines || []), ...extra] }
+})
+
+const payrollSimCount = computed(() => simLines.value.length)
+const payrollSimTotal = computed(() => Number(payrollSim.value.data?.total_annual ?? 0))
+
+async function loadPayrollSimulation(force = false) {
+  if (!scenario.value || scenario.value.status === 'active') return
+  await budgetPlanningStore.fetchPayrollSimulation(idBudget.value, { force })
+}
+
 function goDashboard() {
   router.push({ name: 'BudgetPlanning' })
 }
@@ -210,6 +316,8 @@ async function load(force = false) {
     // degrada panel/Flujo con "sin dato de liquidación" + reintento, nunca
     // toast ni pantalla rota — NFR-FE14-3).
     void budgetPlanningStore.fetchIvaSettlement(idBudget.value)
+    void checkPayrollStatus()
+    void loadPayrollSimulation()
     return
   }
   if (result.kind === 'auth') return
@@ -331,7 +439,7 @@ function backToPlanning() {
           <p class="ge-totals" aria-live="polite">
             Σ Ingresos <strong>{{ formatMoney(headerTotals.income) }}</strong> · Σ Gastos
             <strong>{{ formatMoney(headerTotals.expense) }}</strong>
-            <span class="ge-lines">· {{ (scenario.budget_lines || []).length }} líneas</span>
+            <span class="ge-lines">· {{ (scenarioView?.budget_lines || []).length }} líneas</span>
           </p>
         </div>
         <div class="ge-header-actions">
@@ -404,6 +512,48 @@ function backToPlanning() {
         </div>
       </header>
 
+      <div v-if="payrollStatus" class="ge-payroll-notice" role="status">
+        <span>{{ payrollNoticeText }}</span>
+        <button
+          type="button"
+          class="ge-payroll-action"
+          :disabled="payrollBusy"
+          @click="projectPayrollNow"
+        >
+          {{ payrollBusy ? 'Proyectando...' : 'Proyectar nómina ahora' }}
+        </button>
+      </div>
+
+      <div
+        v-if="
+          scenario.status !== 'active' &&
+          (payrollSim.loading || payrollSim.loaded || payrollSim.error)
+        "
+        class="ge-payroll-notice ge-payroll-notice-sim"
+        role="status"
+      >
+        <span v-if="payrollSim.loading">Proyectando nómina simulada…</span>
+        <span v-else-if="payrollSim.error">
+          No se pudo simular la nómina en este escenario (¿faltan parámetros de la
+          vigencia?).
+        </span>
+        <span v-else-if="payrollSimCount">
+          Nómina simulada: {{ payrollSimCount }} líneas · Σ anual
+          {{ formatMoney(payrollSimTotal) }} — cifras what-if (no materializadas);
+          marca Meta Activa para proyectarlas de verdad.
+        </span>
+        <span v-else>Nómina simulada: sin colaboradores con salario vigente proyectable.</span>
+        <button
+          v-if="payrollSim.error"
+          type="button"
+          class="ge-payroll-action"
+          :disabled="payrollSim.loading"
+          @click="loadPayrollSimulation(true)"
+        >
+          Reintentar
+        </button>
+      </div>
+
       <!-- =============================== Tabs =============================== -->
       <div class="ge-tabs" role="tablist" aria-label="Vistas del escenario">
         <button
@@ -431,7 +581,7 @@ function backToPlanning() {
         role="tabpanel"
         aria-labelledby="planning-tab-executive"
       >
-        <ExecutivePivotTable :scenario="scenario" />
+        <ExecutivePivotTable :scenario="scenarioView" />
       </div>
       <!-- FE-S4B §3.2: v-show (no v-if) → sigue reactiva a los PUT sin recompilar. -->
       <div
@@ -441,7 +591,7 @@ function backToPlanning() {
         role="tabpanel"
         aria-labelledby="planning-tab-flow"
       >
-        <CashFlowPivotTable :scenario="scenario" />
+        <CashFlowPivotTable :scenario="scenarioView" />
       </div>
       <div
         id="planning-panel-editor"
@@ -452,7 +602,7 @@ function backToPlanning() {
       >
         <!-- FE-S14-IVA: la bandera de modo viaja como prop (§5): columnas
              IVA/Total + checkbox `Con IVA` solo con el modo ON. -->
-        <BudgetLineGrid :scenario="scenario" :iva-mode="ivaMode" />
+        <BudgetLineGrid :scenario="scenarioView" :iva-mode="ivaMode" />
       </div>
       <!-- FE-S14-IVA §5: pestaña nueva "Liquidación" — monta el panel de
            liquidación IVA (fuente: settlement cacheado en el store; el
@@ -868,5 +1018,50 @@ function backToPlanning() {
   .ge-page {
     padding: 20px 16px;
   }
+}
+.ge-payroll-notice {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #d97706;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+}
+
+/* BE-S11 what-if: variante ámbar (simulada, no materializada) */
+
+.ge-payroll-notice-sim {
+  border-style: dashed;
+}
+
+.ge-payroll-notice-sim .ge-payroll-action {
+  border-color: rgba(217, 119, 6, 0.45);
+  background-color: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
+:root[data-theme='dark'] .ge-payroll-notice-sim .ge-payroll-action {
+  color: #fbbf24;
+}
+.ge-payroll-action {
+  border: 1px solid #d97706;
+  border-radius: 6px;
+  background: #fff;
+  color: #b45309;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ge-payroll-action:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 </style>

@@ -75,6 +75,21 @@ export const canSetBudgetTarget = () => {
   return userStore.hasPermission('high') || userStore.hasRole(BUDGET_TARGET_ROLES)
 }
 
+/**
+ * FE-S15-COLLAB (D-FE15-4/D-FE15-5): permiso de EDICIÓN del maestro de
+ * colaboradores y del tab de parámetros laborales. La UI solo OCULTA/BLOQUEA:
+ * la autoridad real es el allow-list del backend (`COLLAB_VIEW_ROLES` /
+ * `COLLAB_EDIT_ROLES`, OQ-BE-2) que refuerza con 403 y con el masking
+ * binario `salary_masked` por fila. Mientras el BE no publique los nombres
+ * exactos, el FE reutiliza el gate del módulo (high/all + Gerente/Financiero).
+ */
+export const BUDGET_COLLAB_ROLES = BUDGET_UPLOAD_ROLES
+
+export const canManageCollaborators = () => {
+  const userStore = useUserStore()
+  return userStore.hasPermission('high') || userStore.hasRole(BUDGET_COLLAB_ROLES)
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -415,6 +430,18 @@ const router = createRouter({
           path: 'planning/:idBudget',
           name: 'BudgetPlanningGrid',
           component: () => import('@/views/budget/planning/BudgetGridEditor.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => {
+            next(canAccessBudgetUpload() ? undefined : '/')
+          }
+        },
+        {
+          // FE-S15-COLLAB: maestro de colaboradores (nómina). Cuarta rama de
+          // /budget, hermana de upload/rules/planning; reutiliza el gate del
+          // módulo (la edición fina la refuerza el BE con COLLAB_*_ROLES).
+          path: 'collaborators',
+          name: 'BudgetCollaborators',
+          component: () => import('@/views/budget/CollaboratorsView.vue'),
           meta: { requiresAuth: true },
           beforeEnter: (to, from, next) => {
             next(canAccessBudgetUpload() ? undefined : '/')

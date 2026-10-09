@@ -15,7 +15,19 @@ const copFormatter = new Intl.NumberFormat('es-CO', {
   maximumFractionDigits: 0
 })
 
-const intFormatter = new Intl.NumberFormat('es-CO')
+/**
+ * FE-S15-COLLAB §7.1: formato de montos de NÓMINA con DOS decimales visibles
+ * (el motor cuantiza a 2 dec. con ROUND_HALF_UP — NFR-04 BE — y el desglose
+ * debe mostrar centavos para poder cuadrar contra contabilidad). No reemplaza
+ * a `formatMoney` (cero decimales) usado en la cuadrícula SIIGO, donde los
+ * montos son enteros y mostrar ",00" ensucia las celdas.
+ */
+const copDetailedFormatter = new Intl.NumberFormat('es-CO', {
+  style: 'currency',
+  currency: 'COP',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+})
 
 /**
  * @param {number|string|null|undefined} value
@@ -25,6 +37,18 @@ export function formatMoney(value) {
   const num = Number(value)
   return Number.isFinite(num) ? copFormatter.format(num) : '—'
 }
+
+/**
+ * Monto de nómina COP con 2 decimales (`$ 2.750.440,00`).
+ * @param {number|string|null|undefined} value
+ * @returns {string} `$ …,00` o '—' si no es número finito.
+ */
+export function formatCOP(value) {
+  const num = Number(value)
+  return Number.isFinite(num) ? copDetailedFormatter.format(num) : '—'
+}
+
+const intFormatter = new Intl.NumberFormat('es-CO')
 
 /**
  * @param {number|string|null|undefined} value

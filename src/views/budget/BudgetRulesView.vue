@@ -30,17 +30,30 @@ import RateEditorModal from '@/components/budget/rates/RateEditorModal.vue'
 import PayableTermsPanel from '@/components/budget/rates/PayableTermsPanel.vue'
 import InternmentPanel from '@/components/budget/rates/InternmentPanel.vue'
 import IvaCalendarPanel from '@/components/budget/rules/IvaCalendarPanel.vue'
+import LaborParamsPanel from '@/components/budget/rules/LaborParamsPanel.vue'
 import { RATE_KINDS } from '@/components/budget/rates/ratesConfig.js'
 import { useBudgetRulesStore } from '@/stores/budgetRulesStore.js'
 import { useUserStore } from '@/stores/userStore.js'
 import { alertService } from '@/services/alertService.js'
+import { canManageCollaborators } from '@/router/index.js'
 
 /** Pilares de tasas: paneles FE-S3 con `ratesConfig.js` como única fuente. */
 const RATE_TABS = ['cost', 'commission']
 
-/** Orden de los cinco tabs (FE-S5 §3.1 + FE-S10 §2.3 + FE-S14 §5): los paneles
- *  propios (`payable`, `internment`, `iva`) se renderizan aparte de los pilares. */
-const TAB_ORDER = ['cost', 'commission', 'payable', 'internment', 'iva']
+/**
+ * Orden de los tabs (FE-S5 §3.1 + FE-S10 §2.3 + FE-S14 §5 + FE-S15 §5): los
+ * paneles propios (`payable`, `internment`, `iva`, `labor`) se renderizan
+ * aparte de los pilares. FE-S15-COLLAB (D-FE15-4): la SEXTA pestaña
+ * 'labor' ("Parámetros laborales") se ofrece solo con permiso de
+ * administración del dominio de colaboradores — el mismo predicado de la
+ * vista de Colaboradores (`canManageCollaborators`); el 403 del backend
+ * (PUT /budget/labor-params, admin-only) sigue siendo la autoridad.
+ */
+const BASE_TAB_ORDER = ['cost', 'commission', 'payable', 'internment', 'iva']
+
+const TAB_ORDER = computed(() =>
+  canManageCollaborators() ? [...BASE_TAB_ORDER, 'labor'] : BASE_TAB_ORDER
+)
 
 /** Etiquetas del pill: las dos tasas salen de `RATE_KINDS` (sin tocarla). */
 const TAB_LABELS = {
@@ -48,7 +61,8 @@ const TAB_LABELS = {
   commission: RATE_KINDS.commission.tabLabel,
   payable: 'Términos de pago',
   internment: 'Internación',
-  iva: 'Calendario IVA'
+  iva: 'Calendario IVA',
+  labor: 'Parámetros laborales'
 }
 
 const budgetRulesStore = useBudgetRulesStore()
@@ -63,7 +77,7 @@ const route = useRoute()
  */
 function initialTab() {
   const requested = Array.isArray(route.query.tab) ? route.query.tab[0] : route.query.tab
-  return TAB_ORDER.includes(requested) ? requested : 'cost'
+  return TAB_ORDER.value.includes(requested) ? requested : 'cost'
 }
 
 const activeTab = ref(initialTab())
@@ -104,7 +118,7 @@ onMounted(async () => {
  * @param {'cost'|'commission'|'payable'|'internment'} kind
  */
 function activateTab(kind) {
-  if (!TAB_ORDER.includes(kind) || activeTab.value === kind) return
+  if (!TAB_ORDER.value.includes(kind) || activeTab.value === kind) return
   activeTab.value = kind
   if (kind === 'payable') {
     if (!budgetRulesStore.payableTermsLoaded) {
@@ -128,7 +142,8 @@ function onTabKeydown(event, index) {
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
   event.preventDefault()
   const delta = event.key === 'ArrowRight' ? 1 : -1
-  const nextKind = TAB_ORDER[(index + delta + TAB_ORDER.length) % TAB_ORDER.length]
+  const order = TAB_ORDER.value
+  const nextKind = order[(index + delta + order.length) % order.length]
   activateTab(nextKind)
   document.getElementById(`rates-tab-${nextKind}`)?.focus()
 }
@@ -371,10 +386,28 @@ async function onRestore(kind, row) {
       <IvaCalendarPanel />
     </div>
 
+    <!-- FE-S15-COLLAB §5 (D-FE15-4): SEXTA pestaña "Parámetros laborales" —
+         catálogo de compañía por vigencia (SMLV/auxilio/tarifas/ARL/fechas).
+         Solo aparece con permiso de administración del dominio (mismo
+         predicado de la vista de Colaboradores); el panel trae su vigencia
+         al montarse (lazy espejo, NFR-2). -->
+    <div
+      v-if="activeTab === 'labor'"
+      id="rates-panel-labor"
+      class="rates-panel"
+      role="tabpanel"
+      aria-labelledby="rates-tab-labor"
+    >
+      <LaborParamsPanel />
+    </div>
+
     <RateEditorModal
       :open="modalOpen"
       :kind="
-        activeTab === 'payable' || activeTab === 'internment' || activeTab === 'iva'
+        activeTab === 'payable' ||
+        activeTab === 'internment' ||
+        activeTab === 'iva' ||
+        activeTab === 'labor'
           ? 'cost'
           : activeTab
       "

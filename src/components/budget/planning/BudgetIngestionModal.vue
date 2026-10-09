@@ -428,6 +428,13 @@ onBeforeUnmount(() => {
               :disabled="busy"
               hint-file="Plantilla Plan de Importaciones.xlsx"
             />
+
+            <p class="bi-nomina-note">
+              La <strong>nómina de colaboradores</strong> no se carga aquí: se importa en
+              <RouterLink :to="{ name: 'BudgetCollaborators' }">Colaboradores</RouterLink>
+              y el sistema la proyecta en este escenario automáticamente (o con «Proyectar nómina
+              ahora» al abrirlo).
+            </p>
             <p class="bi-zone-note">
               Formato SIIGO (hoja 1, encabezados en la fila 8): Centro de Costo · Fecha Importacion
               · Temporada · Monto · Descripción. Una fila = una importación; las cuotas al proveedor
@@ -766,5 +773,13 @@ onBeforeUnmount(() => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.bi-nomina-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+.bi-nomina-note a {
+  font-weight: 600;
 }
 </style>

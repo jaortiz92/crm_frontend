@@ -109,6 +109,15 @@ export const budgetPlanningService = {
   },
 
   /**
+   * BE-S11 what-if: nómina SIMULADA de un escenario NO activo (solo lectura,
+   * cero escrituras server-side). Escenario ACTIVO ⇒ 400 (sus líneas reales
+   * ya viven en budget_lines; la simulación nunca se mezcla con ellas).
+   */
+  fetchPayrollSimulation(idBudget) {
+    return axiosInstance.get(`/budget/planning/${idBudget}/payroll-simulation`)
+  },
+
+  /**
    * Crea el Presupuesto Base subiendo los Excel SIIGO en una sola petición
    * multipart (ASM-10 vinculante: `file_ingresos` requerido, `file_gastos`
    * opcional y —desde FE-S9/BE-S8 §5.3— `file_compras` opcional como TERCER
