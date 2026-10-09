@@ -43,10 +43,36 @@ async function confirmTarget() {
     const payrollLines = Number(result.data?.payroll_lines_created ?? 0)
     const payrollNote =
       payrollLines > 0 ? ` Nómina proyectada automáticamente: ${payrollLines} líneas.` : ''
+    const financingLinesValue = result.data?.financing_lines_created
+    const financingLines = Number(financingLinesValue)
+    const financingNote =
+      financingLinesValue !== null &&
+      financingLinesValue !== undefined &&
+      Number.isFinite(financingLines)
+      ? ` Financiación materializada: ${financingLines} líneas de interés/seguro.`
+      : ''
+    const financingWarnings = result.data?.financing_warnings
+    const warningList = Array.isArray(financingWarnings)
+      ? financingWarnings
+      : financingWarnings !== null && financingWarnings !== undefined && financingWarnings !== ''
+        ? [financingWarnings]
+        : []
+    const financingWarningNote = warningList.length
+      ? ` Aviso de financiación: ${warningList
+          .map((warning) =>
+            typeof warning === 'string'
+              ? warning
+              : warning?.message || warning?.detail || JSON.stringify(warning)
+          )
+          .join(' ')}`
+      : ''
     alertService.generalSucces(
       (props.demotedName
         ? `"${targetName.value}" es la meta ${targetYear.value}; "${props.demotedName}" quedó Cerrado.`
-        : `"${targetName.value}" es la meta ${targetYear.value}.`) + payrollNote
+        : `"${targetName.value}" es la meta ${targetYear.value}.`) +
+        payrollNote +
+        financingNote +
+        financingWarningNote
     )
     emit('done')
     emit('close')

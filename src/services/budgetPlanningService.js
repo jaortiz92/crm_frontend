@@ -118,6 +118,27 @@ export const budgetPlanningService = {
   },
 
   /**
+   * Simulación what-if de intereses/seguros de financiación para escenarios
+   * NO activos. Solo lectura: principal nunca se convierte en gasto P&L.
+   * El backend materializa estas líneas al activar la meta; para escenarios
+   * activos responde 400 porque sus líneas reales ya existen.
+   */
+  fetchFinancingSimulation(idBudget) {
+    return axiosInstance.get(`/budget/planning/${idBudget}/financing-simulation`)
+  },
+
+  /**
+   * Flujo de principal por vencimiento del schedule activo del crédito.
+   * Read-only e independiente de `budget_lines`: se consulta para escenarios
+   * active, draft y closed y nunca se incorpora a P&L.
+   * @param {number|string} idBudget
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  fetchFinancingPrincipalFlow(idBudget) {
+    return axiosInstance.get(`/budget/planning/${idBudget}/financing-principal-flow`)
+  },
+
+  /**
    * Crea el Presupuesto Base subiendo los Excel SIIGO en una sola petición
    * multipart (ASM-10 vinculante: `file_ingresos` requerido, `file_gastos`
    * opcional y —desde FE-S9/BE-S8 §5.3— `file_compras` opcional como TERCER

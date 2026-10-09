@@ -119,6 +119,13 @@ const navGroups = [
         to: '/budget/collaborators',
         permission: 'high',
         roles: BUDGET_UPLOAD_ROLES
+      },
+      {
+        // Deuda de financiación empresarial; separado de créditos de cartera.
+        label: 'Financiación empresarial',
+        to: '/budget/financing-credits',
+        permission: 'high',
+        roles: BUDGET_UPLOAD_ROLES
       }
     ]
   },

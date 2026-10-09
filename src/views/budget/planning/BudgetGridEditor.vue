@@ -283,11 +283,51 @@ const simLines = computed(() => {
   }))
 })
 
+/* ============ BE-S12 what-if: gastos de financiación (interés/seguro) ============
+ * El endpoint entrega únicamente gastos presupuestarios. Capital jamás forma
+ * parte de estas filas/P&L; su flujo específico del presupuesto se consulta
+ * aparte y se presenta solo en CashFlowPivotTable. */
+const financingSim = computed(() => budgetPlanningStore.financingSim)
+const financingPrincipalFlow = computed(() => budgetPlanningStore.financingPrincipalFlow)
+
+const financingPrincipalLines = computed(() => {
+  const base = scenario.value
+  const flow = financingPrincipalFlow.value
+  if (!base || flow.budgetId !== base.id_budget || !flow.data) return []
+  return Array.isArray(flow.data.lines) ? flow.data.lines : []
+})
+
+const financingSimLines = computed(() => {
+  const base = scenario.value
+  if (!base || base.status === 'active') return []
+  const sim = financingSim.value.data
+  if (!sim || financingSim.value.budgetId !== base.id_budget) return []
+  return (sim.lines || []).map((line) => ({
+    id_budget_line: null,
+    id_budget: base.id_budget,
+    id_cost_center: line.id_cost_center,
+    id_collection: null,
+    line_type: 'expense',
+    behavior_type: 'fixed',
+    budget_date: line.budget_date,
+    payment_date: line.payment_date ?? null,
+    projected_amount: Number(line.amount),
+    has_iva: false,
+    description: line.description || line.component_name || 'Gasto de financiación',
+    cost_component_code: line.cost_component_code,
+    variable_rate: null,
+    source_engine: 'financing_credit_sim',
+    id_financing_credit: line.id_financing_credit,
+    id_financing_credit_installment: line.id_financing_credit_installment,
+    is_simulated: true
+  }))
+})
+
 /** Lo que consumen Ejecutiva/Flujo/Cuadrícula: líneas reales + simuladas. */
 const scenarioView = computed(() => {
   const base = scenario.value
   if (!base) return base
-  const extra = simLines.value
+  const extra = [...simLines.value, ...financingSimLines.value]
   if (!extra.length) return base
   return { ...base, budget_lines: [...(base.budget_lines || []), ...extra] }
 })
@@ -298,6 +338,28 @@ const payrollSimTotal = computed(() => Number(payrollSim.value.data?.total_annua
 async function loadPayrollSimulation(force = false) {
   if (!scenario.value || scenario.value.status === 'active') return
   await budgetPlanningStore.fetchPayrollSimulation(idBudget.value, { force })
+}
+
+const financingSimCount = computed(() => financingSimLines.value.length)
+const financingSimInterest = computed(() =>
+  Number(financingSim.value.data?.total_interest ?? 0)
+)
+const financingSimInsurance = computed(() =>
+  Number(financingSim.value.data?.total_insurance ?? 0)
+)
+const financingSimTotal = computed(() =>
+  Number(financingSim.value.data?.total_annual_expenses ?? 0)
+)
+
+async function loadFinancingSimulation(force = false) {
+  if (!scenario.value || scenario.value.status === 'active') return
+  await budgetPlanningStore.fetchFinancingSimulation(idBudget.value, { force })
+}
+
+/** Principal de schedule activo; independiente de las líneas presupuestarias. */
+async function loadFinancingPrincipalFlow(force = false) {
+  if (!scenario.value) return
+  await budgetPlanningStore.fetchFinancingPrincipalFlow(idBudget.value, { force })
 }
 
 function goDashboard() {
@@ -318,6 +380,10 @@ async function load(force = false) {
     void budgetPlanningStore.fetchIvaSettlement(idBudget.value)
     void checkPayrollStatus()
     void loadPayrollSimulation()
+    void loadFinancingSimulation()
+    // Aplica por igual a presupuestos active, draft y closed. Este endpoint
+    // solo alimenta la Vista Flujo, nunca `scenarioView` ni la P&L.
+    void loadFinancingPrincipalFlow()
     return
   }
   if (result.kind === 'auth') return
@@ -369,7 +435,9 @@ function onTabKeydown(event, index) {
 
 function onTargetDone() {
   targetOpen.value = false
-  // El store ya mutó la caché del detalle (chip al instante, AC-FE-5).
+  // El store mutó el estado al instante; recargar también trae las líneas de
+  // nómina/financiación que el backend acaba de materializar al activar.
+  void load(true)
 }
 
 function backToPlanning() {
@@ -554,6 +622,41 @@ function backToPlanning() {
         </button>
       </div>
 
+      <div
+        v-if="
+          scenario.status !== 'active' &&
+          (financingSim.loading || financingSim.loaded || financingSim.error)
+        "
+        class="ge-payroll-notice ge-payroll-notice-sim"
+        role="status"
+      >
+        <span v-if="financingSim.loading">Simulando gastos de financiación…</span>
+        <span v-else-if="financingSim.error">
+          No se pudo cargar la simulación de financiación para este escenario.
+        </span>
+        <span v-else-if="financingSimCount">
+          Financiación simulada: {{ financingSimCount }} líneas de gasto
+          ({{ financingSim.data?.financing_credits_count ?? 0 }} créditos) · Intereses
+          {{ formatMoney(financingSimInterest) }} · Seguros
+          {{ formatMoney(financingSimInsurance) }} · Σ gastos anuales
+          {{ formatMoney(financingSimTotal) }} — cifras what-if/no materializadas; al marcar Meta
+          Activa se materializan.
+        </span>
+        <span v-else>
+          Financiación simulada: sin líneas de interés o seguro proyectables. Estas cifras what-if
+          no se materializan hasta marcar Meta Activa.
+        </span>
+        <button
+          v-if="financingSim.error"
+          type="button"
+          class="ge-payroll-action"
+          :disabled="financingSim.loading"
+          @click="loadFinancingSimulation(true)"
+        >
+          Reintentar
+        </button>
+      </div>
+
       <!-- =============================== Tabs =============================== -->
       <div class="ge-tabs" role="tablist" aria-label="Vistas del escenario">
         <button
@@ -591,7 +694,27 @@ function backToPlanning() {
         role="tabpanel"
         aria-labelledby="planning-tab-flow"
       >
-        <CashFlowPivotTable :scenario="scenarioView" />
+        <CashFlowPivotTable
+          :scenario="scenarioView"
+          :financing-principal-lines="financingPrincipalLines"
+        />
+        <div
+          v-if="financingPrincipalFlow.loading || financingPrincipalFlow.error"
+          class="ge-payroll-notice ge-payroll-notice-sim"
+          role="status"
+        >
+          <span v-if="financingPrincipalFlow.loading">Cargando pagos de capital…</span>
+          <span v-else>No se pudo cargar el flujo de capital de financiación.</span>
+          <button
+            v-if="financingPrincipalFlow.error"
+            type="button"
+            class="ge-payroll-action"
+            :disabled="financingPrincipalFlow.loading"
+            @click="loadFinancingPrincipalFlow(true)"
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
       <div
         id="planning-panel-editor"

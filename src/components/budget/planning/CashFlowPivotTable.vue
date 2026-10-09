@@ -4,8 +4,9 @@
  *
  * Tercer tab del detalle de escenario (D-1: Ejecutiva → Flujo → Editor):
  * perspectiva de LIQUIDEZ de la matriz CECO × Ene–Dic — cuándo entra y sale
- * el efectivo. 100 % client-side desde `props.scenario.budget_lines` (D-2,
- * misma caché que Editor/Ejecutiva → AC-FE-6, cero HTTP, NFR-FV-2).
+ * el efectivo. Los flujos existentes se derivan de `props.scenario.budget_lines`;
+ * el capital de financiación llega por `financingPrincipalLines`, una fuente
+ * read-only separada que nunca forma parte del P&L.
  *
  * Reglas de ubicación del mes (D-3/D-5):
  *  - Entradas  (income + fixed)  → `cfMonth(line) = payment_date || budget_date`
@@ -148,7 +149,9 @@ import {
 
 const props = defineProps({
   /** `BudgetFull` + `parent_budget_name` de la caché del store. */
-  scenario: { type: Object, required: true }
+  scenario: { type: Object, required: true },
+  /** Líneas del endpoint financing-principal-flow; separadas de budget_lines. */
+  financingPrincipalLines: { type: Array, default: () => [] }
 })
 
 const budgetPlanningStore = useBudgetPlanningStore()
@@ -157,8 +160,10 @@ const lines = computed(() =>
   props.scenario && Array.isArray(props.scenario.budget_lines) ? props.scenario.budget_lines : []
 )
 
-/** Vacío extremo (§5.3): sin ninguna línea → único mensaje, ni tablas ni resumen. */
-const hasLines = computed(() => lines.value.length > 0)
+/** Vacío extremo: capital independiente también habilita el resumen de caja. */
+const hasLines = computed(
+  () => lines.value.length > 0 || financingPrincipalPivot.value?.rows.length > 0
+)
 
 /** Mes de cobro/pago (D-3): `payment_date` con fallback a `budget_date` (R-1). */
 const cfMonth = (line) => monthIndexOf(line.payment_date || line.budget_date)
@@ -1114,6 +1119,19 @@ const costPaymentsPivot = computed(() => {
   return buildPivotFrom(costPaymentRows.value)
 })
 
+/** Capital servido por BE: bucket por CECO y fecha real de pago/vencimiento. */
+const financingPrincipalPivot = computed(() => {
+  const rows = props.financingPrincipalLines
+    .filter((line) => Number.isFinite(Number(line.amount)) && Number(line.amount) !== 0)
+    .map((line) => ({
+      idCostCenter: line.id_cost_center,
+      amount: line.amount,
+      effectiveDate: line.payment_date
+    }))
+  if (!rows.length) return null
+  return buildPivotFrom(rows)
+})
+
 /** Nota del bloque "Compras del mes (importaciones)" (literal §2.4): destino del pago. */
 const COMPRAS_NOTE =
   'Valor de la mercancía importada por fecha de importación. El pago al proveedor se muestra, ' +
@@ -1183,6 +1201,19 @@ const blocks = computed(() => {
       pivot: internmentPaymentsPivot.value,
       aria: 'Pago de internación del escenario por centro de costo y mes de vencimiento',
       note: INTERNMENT_PAYMENT_NOTE,
+      ooy: true
+    })
+  }
+
+  // Capital viene de un endpoint independiente del escenario y no se mezcla
+  // con gastos fijos/variables ni con las líneas usadas por la P&L.
+  if (financingPrincipalPivot.value) {
+    list.push({
+      title: 'Salidas — Capital de financiación',
+      emptyName: 'pagos de capital de financiación',
+      pivot: financingPrincipalPivot.value,
+      aria: 'Pagos de capital de financiación por centro de costo y fecha de pago',
+      note: 'Pago de capital: salida de financiación, no gasto P&L',
       ooy: true
     })
   }
@@ -1429,6 +1460,9 @@ const anyOutOfYear = computed(
       // FE-S10 §2.5: mismo caso para "Pago de internación" (AC-OY-* siguen:
       // cuota int fuera de N vive solo en Antes/Después). Sin filas ⇒ 0.
       (internmentPaymentsPivot.value ? internmentPaymentsPivot.value.beforeAfterRowCount : 0) +
+      (financingPrincipalPivot.value
+        ? financingPrincipalPivot.value.beforeAfterRowCount
+        : 0) +
       // FE-S14-IVA: vencimiento de liquidación del último período puede caer
       // en N+1 ("Después de N"). Sin bloque ⇒ sumando 0 (DOM idéntico).
       (settlementPaymentsPivot.value
@@ -1452,16 +1486,19 @@ const ooyColumns = computed(() => {
   const entradas = [entradasPivot.value.beforeTotal, entradasPivot.value.afterTotal]
   const costes = costPaymentsPivot.value
   const internment = internmentPaymentsPivot.value
+  const principal = financingPrincipalPivot.value
   // FE-S14-IVA: los vencimientos de liquidación fuera de N también bucketean.
   const liquidation = settlementPaymentsPivot.value
   const salidas = [
     fijosPivot.value.beforeTotal +
       (costes ? costes.beforeTotal : 0) +
       (internment ? internment.beforeTotal : 0) +
+      (principal ? principal.beforeTotal : 0) +
       (liquidation ? liquidation.beforeTotal : 0),
     fijosPivot.value.afterTotal +
       (costes ? costes.afterTotal : 0) +
       (internment ? internment.afterTotal : 0) +
+      (principal ? principal.afterTotal : 0) +
       (liquidation ? liquidation.afterTotal : 0)
   ]
   return {
@@ -1504,6 +1541,7 @@ const resumen = computed(() => {
   // la MISMA agregación de pivotes (sin lista hard-coded de IDs de bloque);
   // sin filas el sumando es 0: resumen byte-idéntico a FE-S9 (NFR-FE10-3).
   const internment = internmentPaymentsPivot.value
+  const principal = financingPrincipalPivot.value
   // FE-S14-IVA D-FE14-4: la liquidación entra a salidas por la misma vía.
   const liquidation = settlementPaymentsPivot.value
   const entradasPropias = entradasPivot.value.columnTotals
@@ -1518,6 +1556,7 @@ const resumen = computed(() => {
       (pagos ? pagos.columnTotals[m] : 0) +
       (costes ? costes.columnTotals[m] : 0) +
       (internment ? internment.columnTotals[m] : 0) +
+      (principal ? principal.columnTotals[m] : 0) +
       // FE-S14-IVA: pago de liquidación al mes de su vencimiento (D-FE14-4).
       (liquidation ? liquidation.columnTotals[m] : 0)
   )
@@ -1536,6 +1575,7 @@ const resumen = computed(() => {
     (pagos ? pagos.grandTotal : 0) +
     (costes ? costes.grandTotal : 0) +
     (internment ? internment.grandTotal : 0) +
+    (principal ? principal.grandTotal : 0) +
     (liquidation ? liquidation.grandTotal : 0)
   // FE-S8 C-3 (FR-4): neto ANUAL = entradas − salidas (ya no Σ de los 12
   // netos: con fuera-de-año esos importes no viven en ningún mes pero sí en
@@ -1730,11 +1770,12 @@ function negativeCell(row, value) {
 <template>
   <div class="cf-zone">
     <p class="cf-note">
-      Matriz de <strong>solo lectura</strong> generada desde las líneas del escenario
-      {{ scenario.budget_year }}. Los importes se ajustan en “Editor de Celdas”. El mes se asigna
-      por <strong>fecha de pago</strong> (no por causación), por lo que puede diferir de la “Vista
-      Ejecutiva”. Los montos con fecha de pago fuera del año {{ scenario.budget_year }} no aparecen
-      en las columnas Ene–Dic; use “Mostrar fuera de año” para verlos.
+      Matriz de <strong>solo lectura</strong> del presupuesto {{ scenario.budget_year }}. Las líneas
+      presupuestarias se ajustan en “Editor de Celdas”; el capital se consulta aparte desde el
+      schedule activo y nunca se incorpora al P&L. El mes se asigna por <strong>fecha de pago</strong>
+      (no por causación), por lo que puede diferir de la “Vista Ejecutiva”. Los montos con fecha de
+      pago fuera del año {{ scenario.budget_year }} no aparecen en las columnas Ene–Dic; use
+      “Mostrar fuera de año” para verlos.
     </p>
 
     <!-- FE-S6 §6.2: toggle de sesión "fuera de año" junto a la cabecera de la
@@ -1750,9 +1791,10 @@ function negativeCell(row, value) {
       {{ showOutOfYear ? 'Ocultar fuera de año' : 'Mostrar fuera de año' }}
     </button>
 
-    <!-- Estado vacío extremo (§5.3): sin líneas propias NI arrastre. -->
+    <!-- Estado vacío extremo: sin líneas presupuestarias, capital NI arrastre. -->
     <p v-if="!hasLines && !carryActive" class="cf-empty">
-      Este escenario no tiene líneas presupuestadas. Cárguelas o édítelas en “Editor de Celdas”.
+      Este escenario no tiene líneas presupuestadas ni pagos de capital de financiación. Cárguelas
+      o édítelas en “Editor de Celdas”.
     </p>
 
     <template v-else>
@@ -1939,6 +1981,9 @@ function negativeCell(row, value) {
         <!-- FE-S14-IVA: misma familia de notas de cobertura del resumen. -->
         <p v-if="settlementPaymentsPivot" class="cf-note cf-block-note">
           El resumen incluye pago de liquidación de IVA (base caja, proyectado).
+        </p>
+        <p v-if="financingPrincipalPivot" class="cf-note cf-block-note">
+          El resumen incluye pagos de capital de financiación; no son gastos P&L.
         </p>
         <p v-if="anyOutOfYear && showOutOfYear" class="cf-note cf-block-note">
           Σ meses + fuera de año = total anual

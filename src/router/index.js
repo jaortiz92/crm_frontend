@@ -90,6 +90,12 @@ export const canManageCollaborators = () => {
   return userStore.hasPermission('high') || userStore.hasRole(BUDGET_COLLAB_ROLES)
 }
 
+/** RBAC concreto de financiación sigue pendiente en BE; UX comparte el gate presupuestal. */
+export const canManageFinancingCredits = () => {
+  const userStore = useUserStore()
+  return userStore.hasPermission('high') || userStore.hasRole(BUDGET_UPLOAD_ROLES)
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -443,6 +449,20 @@ const router = createRouter({
           name: 'BudgetCollaborators',
           component: () => import('@/views/budget/CollaboratorsView.vue'),
           meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => {
+            next(canAccessBudgetUpload() ? undefined : '/')
+          }
+        },
+        {
+          // FE-S16-FINANCING-CREDITS: deuda financiera empresarial, separada
+          // de créditos de cartera. La API conserva la autorización final.
+          path: 'financing-credits',
+          name: 'financing-credits',
+          component: () => import('@/views/budget/FinancingCreditsView.vue'),
+          meta: {
+            requiresAuth: true,
+            breadcrumb: ['Presupuesto', 'Financiación empresarial']
+          },
           beforeEnter: (to, from, next) => {
             next(canAccessBudgetUpload() ? undefined : '/')
           }

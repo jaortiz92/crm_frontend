@@ -412,6 +412,28 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
       error: false
     },
 
+    /** BE-S12 financing what-if: gastos de interés/seguro en escenarios no activos. */
+    financingSim: {
+      /** @type {object|null} resultado crudo de FinancingSimulationOut */
+      data: null,
+      /** escenario al que pertenece `data` (descarte de respuestas tardías) */
+      budgetId: null,
+      loaded: false,
+      loading: false,
+      error: false
+    },
+
+    /** Flujo de capital del schedule activo; separado de toda línea P&L. */
+    financingPrincipalFlow: {
+      /** @type {object|null} respuesta cruda del endpoint */
+      data: null,
+      /** presupuesto al que pertenece la respuesta */
+      budgetId: null,
+      loaded: false,
+      loading: false,
+      error: false
+    },
+
     /** Flags anti-doble-submit (NFR-F4/AC-FE-8). */
     uploading: false,
     cloning: false,
@@ -763,6 +785,8 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         this.resetSettlementCache()
         // BE-S11 what-if: la simulación de OTRO escenario tampoco se asoma.
         this.resetPayrollSimCache()
+        this.resetFinancingSimCache()
+        this.resetFinancingPrincipalFlowCache()
         return { ok: true }
       } catch (err) {
         this.currentScenario = null
@@ -1470,6 +1494,109 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         return { ok: false, ...classified }
       } finally {
         this.payrollSim.loading = false
+      }
+    },
+
+    /** Limpia la caché what-if de financiación al cambiar de escenario. */
+    resetFinancingSimCache() {
+      this.financingSim.data = null
+      this.financingSim.budgetId = null
+      this.financingSim.loaded = false
+      this.financingSim.loading = false
+      this.financingSim.error = false
+    },
+
+    /**
+     * GET financing-simulation, read-only y cacheado por escenario. La
+     * respuesta tardía se descarta; errores no bloquean la vista y quedan
+     * disponibles para el banner/reintento del editor.
+     * @param {number|string} idBudget
+     * @param {{ force?: boolean }} [options]
+     */
+    async fetchFinancingSimulation(idBudget, { force = false } = {}) {
+      const target = Number(idBudget)
+      if (!Number.isFinite(target) || target <= 0) return { ok: false, kind: 'notfound' }
+      if (this.financingSim.loading) return { ok: true }
+      if (!force && this.financingSim.loaded && this.financingSim.budgetId === target) {
+        return { ok: true }
+      }
+      this.financingSim.loading = true
+      try {
+        const response = await budgetPlanningService.fetchFinancingSimulation(target)
+        if (this.currentScenario?.id_budget !== target) return { ok: true }
+        const data = response?.data ?? null
+        this.financingSim.data = data && typeof data === 'object' ? data : null
+        this.financingSim.budgetId = target
+        this.financingSim.loaded = true
+        this.financingSim.error = false
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyPlanningError(err)
+        this.handleAuth(classified)
+        if (classified.kind !== 'auth') {
+          this.financingSim.error = true
+          this.financingSim.loaded = false
+          this.financingSim.data = null
+          this.financingSim.budgetId = target
+        }
+        return { ok: false, ...classified }
+      } finally {
+        this.financingSim.loading = false
+      }
+    },
+
+    /** Limpia la caché de capital al cambiar de presupuesto. */
+    resetFinancingPrincipalFlowCache() {
+      this.financingPrincipalFlow.data = null
+      this.financingPrincipalFlow.budgetId = null
+      this.financingPrincipalFlow.loaded = false
+      this.financingPrincipalFlow.loading = false
+      this.financingPrincipalFlow.error = false
+    },
+
+    /**
+     * Consulta y cachea el capital del schedule activo por id de presupuesto.
+     * Es una consulta read-only válida para active/draft/closed; errores no
+     * bloquean el flujo presupuestario restante y permiten reintento explícito.
+     * @param {number|string} idBudget
+     * @param {{ force?: boolean }} [options]
+     */
+    async fetchFinancingPrincipalFlow(idBudget, { force = false } = {}) {
+      const target = Number(idBudget)
+      if (!Number.isFinite(target) || target <= 0) return { ok: false, kind: 'notfound' }
+      if (this.financingPrincipalFlow.loading) return { ok: true }
+      if (
+        !force &&
+        this.financingPrincipalFlow.loaded &&
+        this.financingPrincipalFlow.budgetId === target
+      ) {
+        return { ok: true }
+      }
+      this.financingPrincipalFlow.loading = true
+      try {
+        const response = await budgetPlanningService.fetchFinancingPrincipalFlow(target)
+        if (this.currentScenario?.id_budget !== target) return { ok: true }
+        const data = response?.data ?? null
+        this.financingPrincipalFlow.data =
+          data && typeof data === 'object'
+            ? { ...data, lines: Array.isArray(data.lines) ? data.lines : [] }
+            : null
+        this.financingPrincipalFlow.budgetId = target
+        this.financingPrincipalFlow.loaded = true
+        this.financingPrincipalFlow.error = false
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyPlanningError(err)
+        this.handleAuth(classified)
+        if (classified.kind !== 'auth') {
+          this.financingPrincipalFlow.error = true
+          this.financingPrincipalFlow.loaded = false
+          this.financingPrincipalFlow.data = null
+          this.financingPrincipalFlow.budgetId = target
+        }
+        return { ok: false, ...classified }
+      } finally {
+        this.financingPrincipalFlow.loading = false
       }
     }
   }

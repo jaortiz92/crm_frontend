@@ -119,7 +119,9 @@ function isSimulated(line) {
 /** Clave v-for estable: id real en líneas persistidas, compuesta en simuladas. */
 function rowKey(line) {
   if (!isSimulated(line)) return line.id_budget_line
-  return `sim-${line.id_collaborator}-${line.budget_date}-${line.cost_component_code}`
+  const sourceId = line.id_financing_credit ?? line.id_collaborator ?? 'engine'
+  const componentId = line.id_financing_credit_installment ?? line.cost_component_code ?? ''
+  return `sim-${sourceId}-${componentId}-${line.budget_date}-${line.cost_component_code}`
 }
 
 /* --------------------------------- orden ----------------------------------- */
@@ -511,7 +513,11 @@ function cellLabel(line) {
 
 function cellTitle(line) {
   const id = line.id_budget_line
-  if (isSimulated(line)) return 'Línea simulada de nómina (what-if): no editable'
+  if (isSimulated(line)) {
+    return line.source_engine === 'financing_credit_sim'
+      ? 'Línea simulada de financiación (what-if): no editable'
+      : 'Línea simulada de nómina (what-if): no editable'
+  }
   if (cellStatus[id] === 'error' && cellMessages[id]) return cellMessages[id]
   if (!isEditable(line)) return 'línea variable: edítela con ✏️ (tasa/fechas)'
   if (cellStatus[id] === 'saved') return 'Guardado ✓'
@@ -750,8 +756,12 @@ onBeforeUnmount(clearTimers)
                 <span
                   v-if="isSimulated(line)"
                   class="gl-chip gl-chip-sim"
-                  title="Proyección what-if del motor de nómina (BE-S11): no está materializada en este escenario"
-                >Simulada</span>
+                  :title="
+                    line.source_engine === 'financing_credit_sim'
+                      ? 'Proyección what-if de financiación: solo interés/seguro; no materializada en este escenario'
+                      : 'Proyección what-if del motor de nómina (BE-S11): no está materializada en este escenario'
+                  "
+                >{{ line.source_engine === 'financing_credit_sim' ? 'Financiación simulada' : 'Simulada' }}</span>
               </td>
               <td>{{ budgetPlanningStore.collectionLabel(line.id_collection) }}</td>
               <td
