@@ -297,6 +297,13 @@ const financingPrincipalLines = computed(() => {
   return Array.isArray(flow.data.lines) ? flow.data.lines : []
 })
 
+const financingDisbursementLines = computed(() => {
+  const base = scenario.value
+  const flow = financingPrincipalFlow.value
+  if (!base || flow.budgetId !== base.id_budget || !flow.data) return []
+  return Array.isArray(flow.data.disbursement_lines) ? flow.data.disbursement_lines : []
+})
+
 const financingSimLines = computed(() => {
   const base = scenario.value
   if (!base || base.status === 'active') return []
@@ -697,6 +704,7 @@ function backToPlanning() {
         <CashFlowPivotTable
           :scenario="scenarioView"
           :financing-principal-lines="financingPrincipalLines"
+          :financing-disbursement-lines="financingDisbursementLines"
         />
         <div
           v-if="financingPrincipalFlow.loading || financingPrincipalFlow.error"

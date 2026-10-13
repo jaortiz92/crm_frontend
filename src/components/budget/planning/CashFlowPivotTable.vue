@@ -151,7 +151,9 @@ const props = defineProps({
   /** `BudgetFull` + `parent_budget_name` de la caché del store. */
   scenario: { type: Object, required: true },
   /** Líneas del endpoint financing-principal-flow; separadas de budget_lines. */
-  financingPrincipalLines: { type: Array, default: () => [] }
+  financingPrincipalLines: { type: Array, default: () => [] },
+  /** New-credit disbursements: cash inflows on disbursement date. */
+  financingDisbursementLines: { type: Array, default: () => [] }
 })
 
 const budgetPlanningStore = useBudgetPlanningStore()
@@ -162,7 +164,10 @@ const lines = computed(() =>
 
 /** Vacío extremo: capital independiente también habilita el resumen de caja. */
 const hasLines = computed(
-  () => lines.value.length > 0 || financingPrincipalPivot.value?.rows.length > 0
+  () =>
+    lines.value.length > 0 ||
+    financingPrincipalPivot.value?.rows.length > 0 ||
+    financingDisbursementPivot.value?.rows.length > 0
 )
 
 /** Mes de cobro/pago (D-3): `payment_date` con fallback a `budget_date` (R-1). */
@@ -1132,6 +1137,19 @@ const financingPrincipalPivot = computed(() => {
   return buildPivotFrom(rows)
 })
 
+/** New-credit disbursements are inflows, never expenses. */
+const financingDisbursementPivot = computed(() => {
+  const rows = props.financingDisbursementLines
+    .filter((line) => Number.isFinite(Number(line.amount)) && Number(line.amount) !== 0)
+    .map((line) => ({
+      idCostCenter: line.id_cost_center,
+      amount: line.amount,
+      effectiveDate: line.payment_date
+    }))
+  if (!rows.length) return null
+  return buildPivotFrom(rows)
+})
+
 /** Nota del bloque "Compras del mes (importaciones)" (literal §2.4): destino del pago. */
 const COMPRAS_NOTE =
   'Valor de la mercancía importada por fecha de importación. El pago al proveedor se muestra, ' +
@@ -1158,6 +1176,16 @@ const blocks = computed(() => {
       ooy: true
     }
   ]
+  if (financingDisbursementPivot.value) {
+    list.splice(0, 0, {
+      title: 'Entradas - Desembolso de financiación',
+      emptyName: 'desembolsos de financiación',
+      pivot: financingDisbursementPivot.value,
+      aria: 'Entradas por desembolso de créditos de financiación',
+      note: 'Desembolso de crédito nuevo: entrada de caja en la fecha de desembolso',
+      ooy: true
+    })
+  }
   // FE-S9 §2.4: causación de importación ∈ N ⇒ `ooy: false` (sin columnas
   // extra ni chip): el bucket de una compra es 0 por construcción.
   if (comprasPivot.value.rows.length) {
@@ -1463,6 +1491,7 @@ const anyOutOfYear = computed(
       (financingPrincipalPivot.value
         ? financingPrincipalPivot.value.beforeAfterRowCount
         : 0) +
+      (financingDisbursementPivot.value ? financingDisbursementPivot.value.beforeAfterRowCount : 0) +
       // FE-S14-IVA: vencimiento de liquidación del último período puede caer
       // en N+1 ("Después de N"). Sin bloque ⇒ sumando 0 (DOM idéntico).
       (settlementPaymentsPivot.value
@@ -1483,7 +1512,11 @@ const anyOutOfYear = computed(
  * salidas por columna.
  */
 const ooyColumns = computed(() => {
-  const entradas = [entradasPivot.value.beforeTotal, entradasPivot.value.afterTotal]
+  const disbursement = financingDisbursementPivot.value
+  const entradas = [
+    entradasPivot.value.beforeTotal + (disbursement ? disbursement.beforeTotal : 0),
+    entradasPivot.value.afterTotal + (disbursement ? disbursement.afterTotal : 0)
+  ]
   const costes = costPaymentsPivot.value
   const internment = internmentPaymentsPivot.value
   const principal = financingPrincipalPivot.value
@@ -1534,6 +1567,7 @@ const ooyColumns = computed(() => {
  * acumulado sigue arrancando en 0 (ningún saldo nuevo arriba de la corrida).
  */
 const resumen = computed(() => {
+  const disbursement = financingDisbursementPivot.value
   const cobros = cobrosArrastre.value
   const pagos = pagosArrastre.value
   const costes = costPaymentsPivot.value
@@ -1548,7 +1582,7 @@ const resumen = computed(() => {
   const fijos = fijosPivot.value.columnTotals
   const variables = variablesPivot.value ? variablesPivot.value.columnTotals : null
 
-  const entradas = entradasPropias.map((value, m) => value + (cobros ? cobros.columnTotals[m] : 0))
+  const entradas = entradasPropias.map((value, m) => value + (cobros ? cobros.columnTotals[m] : 0) + (disbursement ? disbursement.columnTotals[m] : 0))
   const salidas = entradas.map(
     (_, m) =>
       fijos[m] +
@@ -1568,7 +1602,7 @@ const resumen = computed(() => {
     return acc
   })
 
-  const entradasTotal = entradasPivot.value.grandTotal + (cobros ? cobros.grandTotal : 0)
+  const entradasTotal = entradasPivot.value.grandTotal + (cobros ? cobros.grandTotal : 0) + (disbursement ? disbursement.grandTotal : 0)
   const salidasTotal =
     fijosPivot.value.grandTotal +
     (variablesPivot.value ? variablesPivot.value.grandTotal : 0) +
