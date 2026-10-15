@@ -77,12 +77,27 @@
  * Costo de ventas, Gastos fijos/variables, P&G, Acumulado y sus %) quedan
  * SOBRE NETOS, byte-idénticas a FE-S4C (AC-FE14-8). El IVA solo genera efecto
  * en la Vista Flujo (`CashFlowPivotTable`) — cero gross-up aquí.
+ *
+ * FE-S16-CECO-DRILLDOWN (spec `frontend.03_19` RF-1): la PRIMERA celda de
+ * cada fila de datos de los bloques BASE (Ingresos, Gastos fijos) enlaza con
+ * `RouterLink` a la ruta nueva `BudgetCecoDetail`
+ * (`/budget/planning/:idBudget/ceco/:costCenterCode`, códigos encajados
+ * contra el catálogo con `cecoMovements.costCenterCodeOf`). Affordance:
+ * cursor pointer + hover/focus de la CELDA + aria-label "Ver detalle de
+ * movimientos de CECO {code}" (RF-1.3/RF-7.3). Las demás celdas permanecen
+ * sin interacción (RF-1.2) y el click NO dispara HTTP (RF-1.4: la vista de
+ * detalle deriva de la MISMA caché del store). Los bloques DERIVADOS
+ * (Costo de ventas estimado / Gastos variables calculados) no enlazan:
+ * no hay `budget_lines` que los reproduzcan (RF-3.4).
  */
 import { computed } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import ScenarioTaxPnlSection from '@/components/budget/taxes/ScenarioTaxPnlSection.vue'
 import PivotMonthTable from './PivotMonthTable.vue'
-import { pnlTaxMonthly, taxCalculationAvailable } from '@/components/budget/taxes/taxPresentation.js'
+import {
+  pnlTaxMonthly,
+  taxCalculationAvailable
+} from '@/components/budget/taxes/taxPresentation.js'
 import {
   BEHAVIOR_LABELS,
   LINE_TYPE_LABELS,
@@ -95,6 +110,7 @@ import {
   monthIndexOf,
   resolveCogsPctFromPool
 } from './planningFormat.js'
+import { costCenterCodeOf } from './cecoMovements.js'
 
 const props = defineProps({
   /** `BudgetFull` + `parent_budget_name` de la caché del store. */
@@ -102,6 +118,36 @@ const props = defineProps({
 })
 
 const budgetPlanningStore = useBudgetPlanningStore()
+
+/* ─────────── FE-S16 (frontend.03_19) RF-1: celda CECO → drill-down ─────────── */
+
+/** Catálogo CECO cacheado (fuente del encaje código de ruta ↔ id). */
+const costCenters = computed(() => budgetPlanningStore.costCenters)
+
+/**
+ * FE-S16 (frontend.03_19 RF-1.1): destino del drill-down de una fila cuyo
+ * rótulo es un CECO. `null` (fila sintética sin CECO, o catálogo caído) ⇒ el
+ * llamador NO enlaza la celda (degradación honesta: jamás se navega a un
+ * código que la vista de detalle no puede resolver). SOLO el click del CECO
+ * navega (RF-1.2: ninguna otra celda es interactiva; RF-1.4: el click no
+ * dispara HTTP — la vista de detalle lee la MISMA caché del store).
+ * @param {number|string|null|undefined} rowId `id_cost_center` de la fila
+ * @returns {{ to: object, code: string }|null}
+ */
+function cecoLink(rowId) {
+  const code = costCenterCodeOf(costCenters.value, rowId)
+  if (code === null) return null
+  return {
+    to: {
+      name: 'BudgetCecoDetail',
+      params: {
+        idBudget: props.scenario?.id_budget ?? budgetPlanningStore.currentScenarioId ?? '',
+        costCenterCode: code
+      }
+    },
+    code
+  }
+}
 
 /**
  * Tax expense is read from the same cached calculation used by the tax
@@ -509,8 +555,16 @@ const pnl = computed(() => {
  * FE-S12/S14: % del resultado después de impuestos al final de la cola.
  */
 const pnlRows = computed(() => {
-  const { ingresos, costo, fijos, variables, impuestos, margen, resultado, resultadoDespuesImpuestos } =
-    pnl.value
+  const {
+    ingresos,
+    costo,
+    fijos,
+    variables,
+    impuestos,
+    margen,
+    resultado,
+    resultadoDespuesImpuestos
+  } = pnl.value
   const nulls = Array.from({ length: 12 }, () => null)
   const zeros = Array.from({ length: 12 }, () => 0)
   const costoV = costo || nulls
@@ -679,11 +733,16 @@ const costWarnText = computed(() => {
  * "Con IVA" no altera esta vista (el IVA solo genera efecto en el Flujo).
  */
 const blocks = computed(() => {
+  // FE-S16 RF-1.1: SOLO las filas base del P&G (Ingresos/Gastos fijos) son
+  // navegables al drill-down de movimientos (AC-1). Los bloques DERIVADOS
+  // ("Costo de ventas (estimado)" y "Gastos variables (calculados)") no lo
+  // son: no hay `budget_lines` que reproduzcan esos montos — RF-3.4.
   const list = [
     {
       title: 'Ingresos',
       emptyText: 'Sin líneas fijas de ingresos en este escenario.',
-      pivot: incomePivot.value
+      pivot: incomePivot.value,
+      linkable: true
     }
   ]
   if (hasIncomeRows.value) {
@@ -699,7 +758,8 @@ const blocks = computed(() => {
   list.push({
     title: 'Gastos fijos',
     emptyText: 'Sin líneas fijas de gastos fijos en este escenario.',
-    pivot: expensePivot.value
+    pivot: expensePivot.value,
+    linkable: true
   })
   if (variablePivot.value) {
     list.push({
@@ -767,10 +827,7 @@ const blocks = computed(() => {
           <td
             v-for="(cell, index) in row.cells"
             :key="index"
-            :class="[
-              row.isPct ? 'pt-cell-pct' : 'pt-cell-money',
-              { 'pt-negative': cell.negative }
-            ]"
+            :class="[row.isPct ? 'pt-cell-pct' : 'pt-cell-money', { 'pt-negative': cell.negative }]"
             :title="cell.title"
           >
             {{ cell.text }}
@@ -807,7 +864,20 @@ const blocks = computed(() => {
       >
         <tr v-for="row in block.pivot.rows" :key="row.id">
           <th class="pt-row-label" scope="row" :title="row.title ?? row.label">
-            {{ row.label }}
+            <!-- FE-S16 RF-1: ÚNICA celda interactiva del pivote — el código
+                 del CECO enlaza al detalle de movimientos (cursor + hover +
+                 focus visible; hover en la CELDA, no en la fila, RF-1.3).
+                 Filas de bloques no enlazables o catálogo caído ⇒ texto
+                 plano sin interacción (RF-1.2). -->
+            <RouterLink
+              v-if="block.linkable && cecoLink(row.id)"
+              class="pv-ceco-link"
+              :to="cecoLink(row.id).to"
+              :aria-label="`Ver detalle de movimientos de CECO ${cecoLink(row.id).code}`"
+            >
+              {{ row.label }}
+            </RouterLink>
+            <template v-else>{{ row.label }}</template>
           </th>
           <td
             v-for="(value, index) in row.months"
@@ -902,6 +972,30 @@ const blocks = computed(() => {
   font-weight: 400;
   color: var(--color-text-muted, #8a8a8a);
   cursor: help;
+}
+
+/* FE-S16 (frontend.03_19) RF-1.3/RF-7.3: affordance de la celda CECO —
+ * cursor pointer, hover de la CELDA (subrayado + tono de marca, jamás de la
+ * fila completa) y focus visible. Un router-link heredado: color del rótulo
+ * intacto para no romper la lectura de la matriz. */
+.pv-ceco-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.pv-ceco-link:hover {
+  color: var(--color-brand, #03658c);
+  text-decoration: underline;
+}
+
+:root[data-theme='dark'] .pv-ceco-link:hover {
+  color: #56c8ee;
+}
+
+.pv-ceco-link:focus-visible {
+  outline: 2px solid var(--color-brand, #03658c);
+  outline-offset: 2px;
 }
 
 /* FE-S18 RF-2.1: el markup/estilos de las tablas pivote (scroll, colgroup,

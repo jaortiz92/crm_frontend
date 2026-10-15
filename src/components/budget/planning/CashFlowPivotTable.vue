@@ -148,6 +148,16 @@
  *  usa rates ⇒ byte-idéntica (A-8/§2.4-6). Arrastre §2.6: origin normalizado
  *  también a 'internment' (rank line < cogs < purchase < internment), fila
  *  "⌁ Internación {N−1}" con tooltip propio (comparte resolvedor de año).
+ *
+ * FE-S16-CECO-DRILLDOWN (spec `frontend.03_19` RF-1): en los bloques BASE
+ * derivados de `budget_lines` del propio escenario (Entradas, Compras del
+ * mes, Gastos fijos) la PRIMERA celda de cada fila enlaza con `RouterLink`
+ * a la ruta nueva `BudgetCecoDetail`
+ * (`/budget/planning/:idBudget/ceco/:costCenterCode`, código encajado
+ * contra el catálogo con `cecoMovements.costCenterCodeOf`); cursor pointer
+ * + hover/focus de la CELDA + aria-label (RF-1.3/RF-7.3). El resto de
+ * celdas no interactúa (RF-1.2) y el click NO dispara HTTP (RF-1.4: la
+ * vista de detalle usa la MISMA caché del store). Los bloques de movimientos del Motor (capital y desembolsos de financiación) TAMBIÉN enlazan desde la Revisión 2 del drill-down (RF-8 de la spec 03_19: el detalle reproduce esos movimientos). El resto de DERIVADOS (pago a proveedores, internación, variables, liquidación e impuestos) NO enlaza: el detalle no los reproduce.
  */
 import { computed, ref } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
@@ -166,6 +176,7 @@ import {
   withIva,
   ivaOf
 } from './planningFormat.js'
+import { costCenterCodeOf } from './cecoMovements.js'
 
 const props = defineProps({
   /** `BudgetFull` + `parent_budget_name` de la caché del store. */
@@ -177,6 +188,38 @@ const props = defineProps({
 })
 
 const budgetPlanningStore = useBudgetPlanningStore()
+
+/* ─────────── FE-S16 (frontend.03_19) RF-1: celda CECO → drill-down ─────────── */
+
+/** Catálogo CECO cacheado (fuente del encaje código de ruta ↔ id). */
+const costCenters = computed(() => budgetPlanningStore.costCenters)
+
+/**
+ * FE-S16 RF-1: destino del drill-down de una fila cuyo rótulo es un CECO.
+ * `null` (fila sintética de liquidación/impuestos/IVA de importación, o
+ * catálogo caído) ⇒ el llamador NO enlaza la celda (degradación honesta).
+ * RF-1.2/RF-1.4: SOLO la celda CECO navega y sin HTTP — la vista de detalle
+ * deriva de la MISMA caché del store.
+ * @param {number|string|null|undefined} rowId `id_cost_center` de la fila
+ * @returns {{ to: object, code: string }|null}
+ */
+function cecoLink(rowId) {
+  const code = costCenterCodeOf(costCenters.value, rowId)
+  if (code === null) return null
+  return {
+    to: {
+      name: 'BudgetCecoDetail',
+      // RF-8.10: al entrar DESDE la Vista Flujo el detalle abre en el tab "Flujo"
+      // directamente (la Vista Ejecutiva no manda query ⇒ default "Causado").
+      query: { tab: 'flow' },
+      params: {
+        idBudget: props.scenario?.id_budget ?? budgetPlanningStore.currentScenarioId ?? '',
+        costCenterCode: code
+      }
+    },
+    code
+  }
+}
 
 const lines = computed(() =>
   props.scenario && Array.isArray(props.scenario.budget_lines) ? props.scenario.budget_lines : []
@@ -263,8 +306,8 @@ const settlementTaxRate = computed(() => {
   return Number.isFinite(raw) && raw > 0 ? raw : IVA_RATE
 })
 /** P. ej. `19 %` (nunca hardcode: se deriva de `settlementTaxRate`). */
-const settlementTaxRateLabel = computed(() =>
-  `${Number((settlementTaxRate.value * 100).toFixed(2))} %`
+const settlementTaxRateLabel = computed(
+  () => `${Number((settlementTaxRate.value * 100).toFixed(2))} %`
 )
 
 /**
@@ -1096,14 +1139,16 @@ const taxPaymentsPivot = computed(() => {
 /** Nota del bloque de tributos (fuente server-side, cero hardcodes). */
 const TAX_PAYMENTS_NOTE = computed(() => {
   const pivot = taxPaymentsPivot.value
-  const undated = pivot && pivot.undatedTotal > 0
-    ? ` Excluye ${pivot.undatedTotal.toLocaleString('es-CO')} sin fecha de pago (ver Planeación tributaria).`
-    : ''
+  const undated =
+    pivot && pivot.undatedTotal > 0
+      ? ` Excluye ${pivot.undatedTotal.toLocaleString('es-CO')} sin fecha de pago (ver Planeación tributaria).`
+      : ''
   return (
     'Pagos netos de la planeación tributaria del escenario: anticipo de renta de diciembre del año, ' +
     'pagos bimestrales SIMPLE y vencimientos de ICA/reteIVA/retención/reteICA ' +
     'según el Calendario tributario configurado. El monto ya netea los créditos aplicados. ' +
-    'Fuente: motor server-side (dato del cálculo, no derivado).' + undated
+    'Fuente: motor server-side (dato del cálculo, no derivado).' +
+    undated
   )
 })
 
@@ -1282,6 +1327,12 @@ const COMPRAS_NOTE =
  * (NFR-FE9-3/NFR-FE10-3: sin configuraciones el DOM es idéntico al previo).
  */
 const blocks = computed(() => {
+  // FE-S16 RF-1.1 (linkable) + Revisión 2 RF-8: los bloques base (Entradas,
+  // Compras del mes, Gastos fijos) SON navegables al drill-down; los de
+  // movimientos del Motor (capital, desembolsos) TAMBIÉN — el detalle los
+  // reproduce con normalizePrincipalFlowLines. El resto de derivados (pago a
+  // proveedores, internación, variables, liquidación, impuestos) NO enlaza:
+  // el detalle no los reproduce.
   const list = [
     {
       title: 'Entradas',
@@ -1290,7 +1341,8 @@ const blocks = computed(() => {
       aria: 'Entradas (ingresos fijos) por centro de costo y mes según fecha de pago',
       note: ENTRADAS_NOTE.value,
       // §6.2: pivotes PROPIOS con fechas de pago que pueden caer fuera de N.
-      ooy: true
+      ooy: true,
+      linkable: true
     }
   ]
   if (financingDisbursementPivot.value) {
@@ -1300,7 +1352,10 @@ const blocks = computed(() => {
       pivot: financingDisbursementPivot.value,
       aria: 'Entradas por desembolso de créditos de financiación',
       note: 'Desembolso de crédito nuevo: entrada de caja en la fecha de desembolso',
-      ooy: true
+      ooy: true,
+      // Revisión 2 RF-8: el detalle reproduce estos movimientos
+      // (normalizePrincipalFlowLines, kind 'disbursement').
+      linkable: true
     })
   }
   // FE-S9 §2.4: causación de importación ∈ N ⇒ `ooy: false` (sin columnas
@@ -1312,7 +1367,8 @@ const blocks = computed(() => {
       pivot: comprasPivot.value,
       aria: 'Compras de importación del escenario por centro de costo y mes de importación',
       note: COMPRAS_NOTE,
-      ooy: false
+      ooy: false,
+      linkable: true
     })
   }
   // FE-S7 §5 (orden intacto desde FE-S8): después de Entradas (y ahora de
@@ -1359,7 +1415,10 @@ const blocks = computed(() => {
       pivot: financingPrincipalPivot.value,
       aria: 'Pagos de capital de financiación por centro de costo y fecha de pago',
       note: 'Pago de capital: salida de financiación, no gasto P&L',
-      ooy: true
+      ooy: true,
+      // Revisión 2 RF-8: el detalle reproduce estos movimientos
+      // (normalizePrincipalFlowLines, kind 'principal').
+      linkable: true
     })
   }
 
@@ -1369,7 +1428,8 @@ const blocks = computed(() => {
       emptyName: 'gastos fijos',
       pivot: fijosPivot.value,
       aria: 'Salidas de gastos fijos por centro de costo y mes según fecha de pago',
-      ooy: true
+      ooy: true,
+      linkable: true
     })
   }
 
@@ -1620,15 +1680,13 @@ const anyOutOfYear = computed(
       // FE-S10 §2.5: mismo caso para "Pago de internación" (AC-OY-* siguen:
       // cuota int fuera de N vive solo en Antes/Después). Sin filas ⇒ 0.
       (internmentPaymentsPivot.value ? internmentPaymentsPivot.value.beforeAfterRowCount : 0) +
-      (financingPrincipalPivot.value
-        ? financingPrincipalPivot.value.beforeAfterRowCount
+      (financingPrincipalPivot.value ? financingPrincipalPivot.value.beforeAfterRowCount : 0) +
+      (financingDisbursementPivot.value
+        ? financingDisbursementPivot.value.beforeAfterRowCount
         : 0) +
-      (financingDisbursementPivot.value ? financingDisbursementPivot.value.beforeAfterRowCount : 0) +
       // FE-S14-IVA: vencimiento de liquidación del último período puede caer
       // en N+1 ("Después de N"). Sin bloque ⇒ sumando 0 (DOM idéntico).
-      (settlementPaymentsPivot.value
-        ? settlementPaymentsPivot.value.beforeAfterRowCount
-        : 0) +
+      (settlementPaymentsPivot.value ? settlementPaymentsPivot.value.beforeAfterRowCount : 0) +
       // FE-S17: el saldo de renta ordinaria se paga en N+1 ⇒ el toggle
       // también existe por él (sin pivote ⇒ 0, DOM idéntico).
       (taxPaymentsPivot.value ? taxPaymentsPivot.value.beforeAfterRowCount : 0) >
@@ -1722,7 +1780,12 @@ const resumen = computed(() => {
   const fijos = fijosPivot.value.columnTotals
   const variables = variablesPivot.value ? variablesPivot.value.columnTotals : null
 
-  const entradas = entradasPropias.map((value, m) => value + (cobros ? cobros.columnTotals[m] : 0) + (disbursement ? disbursement.columnTotals[m] : 0))
+  const entradas = entradasPropias.map(
+    (value, m) =>
+      value +
+      (cobros ? cobros.columnTotals[m] : 0) +
+      (disbursement ? disbursement.columnTotals[m] : 0)
+  )
   // FE-S17: los pagos tributarios entran a salidas por la misma vía del
   // bloque IVA (D-FE14-4): el BE ya decidió mes/amount neto de créditos.
   const taxFlow = taxPaymentsPivot.value
@@ -1746,7 +1809,10 @@ const resumen = computed(() => {
     return acc
   })
 
-  const entradasTotal = entradasPivot.value.grandTotal + (cobros ? cobros.grandTotal : 0) + (disbursement ? disbursement.grandTotal : 0)
+  const entradasTotal =
+    entradasPivot.value.grandTotal +
+    (cobros ? cobros.grandTotal : 0) +
+    (disbursement ? disbursement.grandTotal : 0)
   const salidasTotal =
     fijosPivot.value.grandTotal +
     (variablesPivot.value ? variablesPivot.value.grandTotal : 0) +
@@ -1901,7 +1967,11 @@ const resumenRows = computed(() => {
   const unsignedCells = (series) =>
     series.map((value) => ({ text: moneyCell(value), negative: false, title: cellTitle(value) }))
   const signedCells = (series) =>
-    series.map((value) => ({ text: moneyCell(value), negative: value < 0, title: cellTitle(value) }))
+    series.map((value) => ({
+      text: moneyCell(value),
+      negative: value < 0,
+      title: cellTitle(value)
+    }))
   const dashCell = {
     text: '—',
     negative: false,
@@ -2063,8 +2133,8 @@ const carryBlockNote = computed(() => {
 
     <!-- Estado vacío extremo: sin líneas presupuestarias, capital NI arrastre. -->
     <p v-if="!hasLines && !carryActive" class="cf-empty">
-      Este escenario no tiene líneas presupuestadas ni pagos de capital de financiación. Cárguelas
-      o édítelas en “Editor de Celdas”.
+      Este escenario no tiene líneas presupuestadas ni pagos de capital de financiación. Cárguelas o
+      édítelas en “Editor de Celdas”.
     </p>
 
     <template v-else>
@@ -2186,7 +2256,21 @@ const carryBlockNote = computed(() => {
           :extra-columns="block.ooy && showOutOfYear ? ooyExtras : []"
         >
           <tr v-for="row in block.pivot.rows" :key="row.id">
-            <th class="pt-row-label" scope="row" :title="row.label">{{ row.label }}</th>
+            <th class="pt-row-label" scope="row" :title="row.label">
+              <!-- FE-S16 RF-1: única celda interactiva — el CECO enlaza al
+                   detalle de movimientos (hover/focus en la CELDA, RF-1.3).
+                   Filas sintéticas (IVA de importación, liquidación,
+                   impuestos) o catálogo caído ⇒ texto plano (RF-1.2). -->
+              <RouterLink
+                v-if="block.linkable && cecoLink(row.id)"
+                class="cf-ceco-link"
+                :to="cecoLink(row.id).to"
+                :aria-label="`Ver detalle de movimientos de CECO ${cecoLink(row.id).code}`"
+              >
+                {{ row.label }}
+              </RouterLink>
+              <template v-else>{{ row.label }}</template>
+            </th>
             <td
               v-for="(value, index) in row.months"
               :key="index"
@@ -2315,7 +2399,6 @@ const carryBlockNote = computed(() => {
           </PivotMonthTable>
         </section>
       </section>
-
     </template>
     <ScenarioTaxPaymentsBlock :scenario="scenario" />
   </div>
@@ -2458,6 +2541,30 @@ const carryBlockNote = computed(() => {
   gap: 10px;
   align-items: center;
   justify-content: space-between;
+}
+
+/* FE-S16 (frontend.03_19) RF-1.3/RF-7.3: affordance de la celda CECO —
+ * mismo lenguaje que la Ejecutiva (`pv-ceco-link`): cursor pointer, hover
+ * y focus de la CELDA (jamás de la fila completa/color de celdas de
+ * valores). */
+.cf-ceco-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cf-ceco-link:hover {
+  color: var(--color-brand, #03658c);
+  text-decoration: underline;
+}
+
+:root[data-theme='dark'] .cf-ceco-link:hover {
+  color: #56c8ee;
+}
+
+.cf-ceco-link:focus-visible {
+  outline: 2px solid var(--color-brand, #03658c);
+  outline-offset: 2px;
 }
 
 /* ---------- FE-S9 §2.6: negativos de "Bodega estimada" en ámbar ---------- */

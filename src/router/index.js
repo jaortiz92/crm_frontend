@@ -512,6 +512,21 @@ const router = createRouter({
           }
         },
         {
+          // FE-S16 / frontend.03_19 (RF-2.1): detail de MOVIMIENTOS por CECO
+          // (drill-down de los pivotes Ejecutiva/Flujo). :costCenterCode es
+          // el `cost_center_code` (p. ej. '310100'); el :idBudget no válido y
+          // el 404 del detalle se resuelven en la VISTA (toast + replace al
+          // planning) porque el `beforeEnter` solo valida el gate de rol —
+          // mismo gate canAccessBudgetUpload de la ruta hermana.
+          path: 'planning/:idBudget/ceco/:costCenterCode',
+          name: 'BudgetCecoDetail',
+          component: () => import('@/views/budget/planning/CecoDetailView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => {
+            next(canAccessBudgetUpload() ? undefined : '/')
+          }
+        },
+        {
           // FE-S15-COLLAB: maestro de colaboradores (nómina). Cuarta rama de
           // /budget, hermana de upload/rules/planning; reutiliza el gate del
           // módulo (la edición fina la refuerza el BE con COLLAB_*_ROLES).
