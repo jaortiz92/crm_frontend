@@ -34,8 +34,11 @@
  *    de esta vista idéntico (AC-PYG-1..12).
  *  - D-4 (§3.2): tasas cacheadas por sesión en `budgetPlanningStore`
  *    (`ensureCatalogs`), fallo silencioso → `lineCostRatesError`.
- *  - D-5 (§4): orden Ingresos → Costo de ventas → Gastos fijos → Gastos
- *    variables → Resultado (P&G) → Acumulado → Tasas variables.
+ *  - D-5 (§4, enmienda 2026-10-15 por solicitud stakeholder): orden
+ *    Resultado (P&G) → Acumulado (Ene→Mes) → Ingresos → Costo de ventas →
+ *    Gastos fijos → Gastos variables → Tasas variables → "Impuesto causado
+ *    en P&G" (bloque tributario `ScenarioTaxPnlSection` cierra la vista —
+ *    resumen primero, patrón Resumen de liquidez del Flujo).
  *  - D-6/D-7 (§4.2): filas P&G con prefijos (+)/(−)/=, signos positivos,
  *    % sobre ingresos del MES.
  *  - D-9/D-10/D-11 (§4.3, enmienda E-01): acumulado
@@ -53,6 +56,21 @@
  *
  * CERO dependencias: tabla HTML nativa + computados (patrón `RatesDataTable`).
  *
+ * FE-S18 (spec `frontend.03_18`) — FASE 2, migración al componente compartido
+ * `PivotMonthTable`: trio de bloques mensuales (P&G, Acumulado y pivotes por
+ * CECO) ahora usan `<colgroup>` explícito + `table-layout: fixed` (RF-1.1..1.4,
+ * misma cuadrícula AC-1/AC-2), zebra sutil/total destacado/negativos rojos
+ * (RF-6), notas descriptivas de bloque → ícono ⓘ con tooltip `title` (RF-3.2)
+ * y la intro "Matriz de solo lectura…" sale de este archivo (RF-4.2: la
+ * provee UNA vez a nivel tab `BudgetGridEditor` — Fase 4). Las cifras
+ * muestran COP SIN símbolo en formato plain `1.234.567`
+ * (`formatMoneyPlain`, RF-7.2) y, cuando el valor no cabe en la columna fija
+ * de 106px, compacto con `title` = valor completo (RF-2.2/AC-4). Los
+ * computados/salidas numéricas NO cambian (AC-7); los avisos de degradación
+ * técnica (`COST_EMPTY_*`, `block.warnText`) siguen visibles con `v-if`
+ * (RF-3.3). El detalle de tasas conserva su tabla privada (no es pivote
+ * mensual, fuera del grid RF-1).
+ *
  * FE-S14-IVA ENMIENDA D-FE14-1/§4.1 — 2026-09-23 (frontend.03_14 D-FE14-7):
  * esta vista es el P&G por causación y NUNCA muestra información de IVA: con
  * el modo "Con IVA" activo o apagado, TODAS sus cifras (bloques Ingresos,
@@ -63,13 +81,16 @@
 import { computed } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import ScenarioTaxPnlSection from '@/components/budget/taxes/ScenarioTaxPnlSection.vue'
+import PivotMonthTable from './PivotMonthTable.vue'
 import { pnlTaxMonthly, taxCalculationAvailable } from '@/components/budget/taxes/taxPresentation.js'
 import {
   BEHAVIOR_LABELS,
   LINE_TYPE_LABELS,
   MONTH_LABELS,
+  VARIABLE_PIVOT_NOTE,
   buildCogsRatePool,
-  formatMoney,
+  formatMoneyCompact,
+  formatMoneyPlain,
   formatVariableRate,
   monthIndexOf,
   resolveCogsPctFromPool
@@ -357,6 +378,36 @@ const costPivot = computed(() => {
 /* ─────────────── FE-S4C: helpers de formato local (§6.5 — no tocar `planningFormat.js`) ─────────────── */
 
 /**
+ * FE-S18 (spec frontend.03_18) RF-7/RF-2.2: UMBRAL de compactación de celda.
+ * Con la cuadrícula fija de 106px (RF-1.3) y `formatMoneyPlain`, un monto de
+ * ≥ 1.000.000.000 (13 caracteres «1.234.567.890») no cabe en la celda → se
+ * muestra compacto (`formatMoneyCompact`) y el valor completo vive en el
+ * `title` (AC-4: ninguna información se pierde). `formatMoneyCompact` también
+ * abrevia ≥ 1e6 en «1,2 M», pero ese rango SÍ cabe (RF-2.2 solo compacta
+ * cuando el render lo pide).
+ */
+const COMPACT_CELL_THRESHOLD = 1_000_000_000
+
+/** ¿La celda necesita `title` con el valor completo plain? (RF-2.2/AC-4). */
+function cellTitle(value) {
+  return value !== null && Math.abs(Number(value)) >= COMPACT_CELL_THRESHOLD
+    ? formatMoneyPlain(value)
+    : null
+}
+
+/**
+ * Celda monetaria con texto AJUSTADO a la columna fija (RF-7 sin `$` + RF-2.2
+ * compacto): full plain cuando cabe, compacto cuando no. El valor completo
+ * (`cellTitle`) lo pone el render en el atributo `title`.
+ * @param {number|null} value
+ */
+function fitMoney(value) {
+  return Math.abs(Number(value)) >= COMPACT_CELL_THRESHOLD
+    ? formatMoneyCompact(value)
+    : formatMoneyPlain(value)
+}
+
+/**
  * Puro 0–100 → texto con 1 decimal y ceros finales razonables:
  * 62.5 → '62.5', 58.0 → '58' (formato `pvPct`/tooltip §4.1).
  * @param {number} pct
@@ -380,11 +431,14 @@ function pvPct(ratio) {
   return `${pctText(num * 100)} %`
 }
 
-/** Celda monetaria derivada: `—` si no estimable (D-8); `·` si 0 (patrón vigente). */
+/** Celda monetaria derivada: `—` si no estimable (D-8); `·` si 0 (patrón
+ * vigente). FE-S18 RF-7: texto sin `$` con `fitMoney` (plain/compacto) y
+ * `title` = valor completo plain cuando la celda quedó compacta (AC-4). */
 function moneyCell(value) {
   return {
-    text: value === null ? '—' : value === 0 ? '·' : formatMoney(value),
-    negative: value !== null && value < 0
+    text: value === null ? '—' : value === 0 ? '·' : fitMoney(value),
+    negative: value !== null && value < 0,
+    title: cellTitle(value)
   }
 }
 
@@ -403,15 +457,16 @@ function runningSums(values) {
 
 /**
  * Celda de los bloques-pivote (Ingresos/Costo/Gastos): `·` para 0 o para
- * `null` (mes del costo sin tasa resuelta, §3.1) — el resto, COP.
+ * `null` (mes del costo sin tasa resuelta, §3.1) — el resto, COP sin símbolo
+ * (FE-S18 RF-7, `formatMoneyPlain`).
  */
 function pivotCell(value) {
-  return value === null || value === 0 ? '·' : formatMoney(value)
+  return value === null || value === 0 ? '·' : fitMoney(value)
 }
 
 /** Total de fila: `·` si el CECO quedó excluido de todo el año (§3.1 regla 4). */
 function rowTotal(value) {
-  return value === null ? '·' : formatMoney(value)
+  return value === null ? '·' : fitMoney(value)
 }
 
 /* ─────────────── FE-S4C: Resultado (P&G) y Acumulado — solo de columnas computadas (§3.3) ─────────────── */
@@ -449,7 +504,7 @@ const pnl = computed(() => {
 /**
  * Filas de §4.2 en orden; `Margen bruto`, `Resultado
  * operativo` y `Resultado
- * después de impuestos` fuertes (`pv-row-strong`); los % corren sobre ingresos del MES (Total:
+ * después de impuestos` fuertes (`pt-row-strong`); los % corren sobre ingresos del MES (Total:
  * sobre Σ 12) y valen `—` con ingresos 0 o costo degradado (fila fuente `—`).
  * FE-S12/S14: % del resultado después de impuestos al final de la cola.
  */
@@ -571,10 +626,9 @@ const acumulado = computed(() => {
   ]
 })
 
-/** Nota de cálculo del bloque estimado (los montos no se almacenan). */
-const VARIABLE_PIVOT_NOTE =
-  'Monto estimado = tasa × ingresos presupuestados del mes. No se almacena en ' +
-  'las líneas del escenario; se recalcula al ajustar el presupuesto.'
+/** Nota de cálculo del bloque estimado — FE-S18 RF-4.2: ahora se importa de
+ * `planningFormat.js` (ÚNICA definición, compartida con la Vista Flujo);
+ * en esta vista solo se muestra como tooltip ⓘ (RF-3.2). */
 
 /* ─────────────── FE-S4C: textos normativos de notas (§4/§5, literal de spec) ─────────────── */
 
@@ -592,7 +646,11 @@ const COST_EMPTY_NO_RATES =
 const COST_EMPTY_ERROR =
   'No fue posible cargar las tasas de costo (sin conexión). Reintente recargando la página.'
 
-/** Nota al pie del P&G (§4.2) + cierre aritmético del Total (§3.3, R-2). */
+/** Notas descriptivas del P&G — FE-S18 RF-3.2: ahora viven en el ícono ⓘ
+ * junto al subtítulo del bloque (tip tooltip nativo `title`), no como texto
+ * visible (RF-3.1/RF-4.1: la intro de la pestaña se provee a nivel tab —
+ * Fase 4 — y el texto entra en el máximo de RF-3.4).
+ * Nota al pie del P&G (§4.2) + aclaración del Total (§3.3, R-2). */
 const PNL_NOTE =
   'Cifras netas, sin IVA, por causación (budget_date). Impuestos causados vienen del cálculo tributario; ver “Vista Flujo” para liquidez.'
 const PNL_TOTAL_NOTE = 'No incluye montos sin fecha de causación asignable.'
@@ -656,143 +714,140 @@ const blocks = computed(() => {
 </script>
 
 <template>
+  <!-- FE-S18 RF-4.2/RF-3.1: la intro "Matriz de solo lectura…" ya NO vive
+       aquí — se provee UNA VEZ a nivel tab en BudgetGridEditor (Fase 4). -->
   <div class="pv-zone">
-    <p class="pv-note">
-      Matriz de <strong>solo lectura</strong> generada desde las líneas del escenario
-      {{ scenario.budget_year }}. Los montos se ajustan en “Editor de Celdas”. El costo de ventas se
-      ESTIMA con las tasas de Reglas Financieras; no se almacena en las líneas.
-    </p>
+    <section v-if="hasIncomeRows" class="pv-block">
+      <h4 class="pv-block-title">
+        Resultado (P&G)
+        <!-- RF-3.2: notas descriptivas → ícono ⓘ con tooltip nativo. -->
+        <span class="pv-info" :title="`${PNL_NOTE} ${PNL_TOTAL_NOTE}`">ⓘ</span>
+      </h4>
+      <PivotMonthTable
+        label-header="Concepto"
+        :month-labels="MONTH_LABELS"
+        aria-label="Resultado mensual (P&G) del escenario"
+        :total-title="PNL_TOTAL_TITLE"
+      >
+        <tr v-for="row in pnlRows" :key="row.label" :class="{ 'pt-row-strong': row.strong }">
+          <th class="pt-row-label" scope="row" :title="row.label">{{ row.label }}</th>
+          <td
+            v-for="(cell, index) in row.cells"
+            :key="index"
+            class="pt-cell-money"
+            :class="{ 'pt-negative': cell.negative }"
+            :title="cell.title"
+          >
+            {{ cell.text }}
+          </td>
+          <td
+            class="pt-cell-money pt-cell-total"
+            :class="{ 'pt-negative': row.total.negative }"
+            :title="row.total.title ?? PNL_TOTAL_TITLE"
+          >
+            {{ row.total.text }}
+          </td>
+        </tr>
+      </PivotMonthTable>
+    </section>
+
+    <section v-if="hasIncomeRows" class="pv-block">
+      <h4 class="pv-block-title">
+        Acumulado (Ene→Mes)
+        <span class="pv-info" :title="ACUMULADO_NOTE">ⓘ</span>
+      </h4>
+      <PivotMonthTable
+        label-header="Concepto"
+        :month-labels="MONTH_LABELS"
+        aria-label="Montos acumulados de enero a cada mes del escenario"
+        :total-title="ACUMULADO_TOTAL_TITLE"
+      >
+        <tr v-for="row in acumulado" :key="row.label" :class="{ 'pt-row-strong': row.strong }">
+          <th class="pt-row-label" scope="row" :title="row.label">{{ row.label }}</th>
+          <td
+            v-for="(cell, index) in row.cells"
+            :key="index"
+            :class="[
+              row.isPct ? 'pt-cell-pct' : 'pt-cell-money',
+              { 'pt-negative': cell.negative }
+            ]"
+            :title="cell.title"
+          >
+            {{ cell.text }}
+          </td>
+          <td
+            :class="[
+              row.isPct ? 'pt-cell-pct' : 'pt-cell-money pt-cell-total',
+              { 'pt-negative': row.total.negative }
+            ]"
+            :title="row.isPct ? ACUMULADO_TOTAL_TITLE : (row.total.title ?? ACUMULADO_TOTAL_TITLE)"
+          >
+            {{ row.total.text }}
+          </td>
+        </tr>
+      </PivotMonthTable>
+    </section>
 
     <!-- D-FE14-7: sin chip de modo IVA — esta vista SIEMPRE muestra netos. -->
 
     <section v-for="block in blocks" :key="block.title" class="pv-block">
-      <h4 class="pv-block-title">{{ block.title }}</h4>
-      <p v-if="block.note" class="pv-note pv-block-note">{{ block.note }}</p>
-      <div v-if="block.pivot && block.pivot.rows.length" class="pv-scroll">
-        <table
-          class="pv-table"
-          :aria-label="block.aria ?? `Pivote ${block.title} por centro de costo y mes`"
-        >
-          <thead>
-            <tr>
-              <th class="pv-col-ceco">CECO</th>
-              <th v-for="month in MONTH_LABELS" :key="month" class="pv-col-month">{{ month }}</th>
-              <th class="pv-col-total">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in block.pivot.rows" :key="row.id">
-              <th class="pv-row-label" scope="row" :title="row.title ?? row.label">
-                {{ row.label }}
-              </th>
-              <td v-for="(value, index) in row.months" :key="index" class="pv-cell-money">
-                {{ pivotCell(value) }}
-              </td>
-              <td class="pv-cell-money pv-cell-total">{{ rowTotal(row.total) }}</td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr>
-              <th class="pv-row-label" scope="row">Σ Total</th>
-              <td
-                v-for="(value, index) in block.pivot.columnTotals"
-                :key="index"
-                class="pv-cell-money"
-              >
-                {{ pivotCell(value) }}
-              </td>
-              <td class="pv-cell-money pv-cell-total">{{ formatMoney(block.pivot.grandTotal) }}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+      <h4 class="pv-block-title">
+        {{ block.title }}
+        <!-- RF-3.2: la nota descriptiva del bloque (COST_BLOCK_NOTE /
+             VARIABLE_PIVOT_NOTE) pasa a tooltip ⓘ; los avisos de
+             degradación técnica (v-else / warnText) SIGUEN visibles con
+             `v-if` (RF-3.3). -->
+        <span v-if="block.note" class="pv-info" :title="block.note">ⓘ</span>
+      </h4>
+      <PivotMonthTable
+        v-if="block.pivot && block.pivot.rows.length"
+        label-header="CECO"
+        :month-labels="MONTH_LABELS"
+        :aria-label="block.aria ?? `Pivote ${block.title} por centro de costo y mes`"
+      >
+        <tr v-for="row in block.pivot.rows" :key="row.id">
+          <th class="pt-row-label" scope="row" :title="row.title ?? row.label">
+            {{ row.label }}
+          </th>
+          <td
+            v-for="(value, index) in row.months"
+            :key="index"
+            class="pt-cell-money"
+            :title="cellTitle(value)"
+          >
+            {{ pivotCell(value) }}
+          </td>
+          <td class="pt-cell-money pt-cell-total" :title="cellTitle(row.total)">
+            {{ rowTotal(row.total) }}
+          </td>
+        </tr>
+        <template #tfoot>
+          <tr>
+            <th class="pt-row-label" scope="row">Σ Total</th>
+            <td
+              v-for="(value, index) in block.pivot.columnTotals"
+              :key="index"
+              class="pt-cell-money"
+              :title="cellTitle(value)"
+            >
+              {{ pivotCell(value) }}
+            </td>
+            <td class="pt-cell-money pt-cell-total" :title="cellTitle(block.pivot.grandTotal)">
+              {{ pivotCell(block.pivot.grandTotal) }}
+            </td>
+          </tr>
+        </template>
+      </PivotMonthTable>
       <p v-else class="pv-empty">{{ block.emptyText }}</p>
       <p v-if="block.warnText" class="pv-warn">{{ block.warnText }}</p>
     </section>
 
-    <section v-if="hasIncomeRows" class="pv-block">
-      <h4 class="pv-block-title">Resultado (P&G)</h4>
-      <p class="pv-note pv-block-note">{{ PNL_NOTE }}</p>
-      <p class="pv-note pv-block-note">{{ PNL_TOTAL_NOTE }}</p>
-      <div class="pv-scroll">
-        <table class="pv-table" aria-label="Resultado mensual (P&G) del escenario">
-          <thead>
-            <tr>
-              <th class="pv-col-ceco">Concepto</th>
-              <th v-for="month in MONTH_LABELS" :key="month" class="pv-col-month">{{ month }}</th>
-              <th class="pv-col-total" :title="PNL_TOTAL_TITLE">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in pnlRows" :key="row.label" :class="{ 'pv-row-strong': row.strong }">
-              <th class="pv-row-label" scope="row" :title="row.label">{{ row.label }}</th>
-              <td
-                v-for="(cell, index) in row.cells"
-                :key="index"
-                class="pv-cell-money"
-                :class="{ 'pv-negative': cell.negative }"
-              >
-                {{ cell.text }}
-              </td>
-              <td
-                class="pv-cell-money pv-cell-total"
-                :class="{ 'pv-negative': row.total.negative }"
-                :title="PNL_TOTAL_TITLE"
-              >
-                {{ row.total.text }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <ScenarioTaxPnlSection :scenario="scenario" />
-
-    <section v-if="hasIncomeRows" class="pv-block">
-      <h4 class="pv-block-title">Acumulado (Ene→Mes)</h4>
-      <p class="pv-note pv-block-note">{{ ACUMULADO_NOTE }}</p>
-      <div class="pv-scroll">
-        <table class="pv-table" aria-label="Montos acumulados de enero a cada mes del escenario">
-          <thead>
-            <tr>
-              <th class="pv-col-ceco">Concepto</th>
-              <th v-for="month in MONTH_LABELS" :key="month" class="pv-col-month">{{ month }}</th>
-              <th class="pv-col-total" :title="ACUMULADO_TOTAL_TITLE">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in acumulado" :key="row.label" :class="{ 'pv-row-strong': row.strong }">
-              <th class="pv-row-label" scope="row" :title="row.label">{{ row.label }}</th>
-              <td
-                v-for="(cell, index) in row.cells"
-                :key="index"
-                :class="[
-                  row.isPct ? 'pv-cell-pct' : 'pv-cell-money',
-                  { 'pv-negative': cell.negative }
-                ]"
-              >
-                {{ cell.text }}
-              </td>
-              <td
-                :class="[
-                  row.isPct ? 'pv-cell-pct' : 'pv-cell-money pv-cell-total',
-                  { 'pv-negative': row.total.negative }
-                ]"
-                :title="ACUMULADO_TOTAL_TITLE"
-              >
-                {{ row.total.text }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
     <section class="pv-block">
       <h4 class="pv-block-title">Tasas variables (solo lectura)</h4>
-      <div v-if="variableLines.length" class="pv-scroll">
-        <table class="pv-table pv-table-rates" aria-label="Líneas variables con tasa">
+      <!-- Tabla propia del detalle de tasas (NO es pivote mensual): conserva
+           su grid privada, sin la cuadrícula de meses de RF-1. -->
+      <div v-if="variableLines.length" class="rates-scroll">
+        <table class="rates-table" aria-label="Líneas variables con tasa">
           <thead>
             <tr>
               <th>CECO</th>
@@ -804,17 +859,22 @@ const blocks = computed(() => {
           </thead>
           <tbody>
             <tr v-for="row in variableLines" :key="row.id">
-              <td class="pv-cell-name" :title="row.ceco">{{ row.ceco }}</td>
-              <td class="pv-cell-date">{{ row.fecha || '—' }}</td>
+              <td class="rates-cell-name" :title="row.ceco">{{ row.ceco }}</td>
+              <td class="rates-cell-date">{{ row.fecha || '—' }}</td>
               <td>{{ row.tipoLinea }}</td>
               <td>{{ row.comportamiento }}</td>
-              <td class="pv-cell-rate">Tasa {{ row.tasa }}</td>
+              <td class="rates-cell-rate">Tasa {{ row.tasa }}</td>
             </tr>
           </tbody>
         </table>
       </div>
       <p v-else class="pv-empty">Este escenario no contiene líneas variables.</p>
     </section>
+
+    <!-- Impuesto causado en P&G (FE-S12/S14): al FINAL de la vista por decisión
+         stakeholder 2026-10-15 — el resumen P&G/Acumulado manda arriba, el
+         bloque tributario cierra la página. -->
+    <ScenarioTaxPnlSection :scenario="scenario" />
   </div>
 </template>
 
@@ -825,17 +885,6 @@ const blocks = computed(() => {
   gap: 18px;
 }
 
-.pv-note {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary, #555555);
-}
-
-/* Nota de cálculo dentro de un bloque (p. ej. "Gastos variables (calculados)"). */
-.pv-block-note {
-  margin: -2px 0 8px;
-}
-
 .pv-block-title {
   margin: 0 0 8px;
   font-size: 0.86rem;
@@ -843,7 +892,23 @@ const blocks = computed(() => {
   color: var(--color-text-primary, #070707);
 }
 
-.pv-scroll {
+/* FE-S18 RF-3.2: ícono ⓘ de nota descriptiva junto al subtítulo del bloque
+ * (tooltip nativo `title`). Disco gris con cursor help — texto estático,
+ * nunca interacción; los avisos de degradación (pv-empty/pv-warn) siguen
+ * visibles con `v-if` (RF-3.3). */
+.pv-info {
+  margin-left: 6px;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--color-text-muted, #8a8a8a);
+  cursor: help;
+}
+
+/* FE-S18 RF-2.1: el markup/estilos de las tablas pivote (scroll, colgroup,
+ * sticky, zebra, totales, negativos) viven EN `PivotMonthTable.vue` (clases
+ * `pt-*`) — aquí solo queda la tabla propia del detalle de tasas, que NO es
+ * pivote mensual y conserva su grid privada. */
+.rates-scroll {
   overflow: auto;
   border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
   border-radius: 8px;
@@ -851,95 +916,32 @@ const blocks = computed(() => {
   max-height: 60vh;
 }
 
-.pv-table {
-  min-width: 1240px;
+.rates-table {
+  min-width: 720px;
   border: none;
   border-radius: 0;
   box-shadow: none;
   font-size: 0.78rem;
 }
 
-.pv-table-rates {
-  min-width: 720px;
-}
-
-.pv-table thead th {
+.rates-table thead th {
   position: sticky;
   top: 0;
   z-index: 3;
+  background-color: var(--dark-color, #1a202c);
 }
 
-.pv-table tfoot th,
-.pv-table tfoot td {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  font-weight: 700;
-  background-color: var(--color-surface, #f7f7f7);
-}
-
-:root[data-theme='dark'] .pv-table tfoot th,
-:root[data-theme='dark'] .pv-table tfoot td {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.pv-col-ceco,
-.pv-row-label {
-  position: sticky;
-  left: 0;
-  z-index: 4;
-  max-width: 240px;
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background-color: var(--color-surface-card, #ffffff);
-}
-
-.pv-table thead .pv-col-ceco {
-  z-index: 5;
-}
-
-/* `th` pintados sobre fondo claro (esquina CECO, etiquetas de fila y `tfoot`):
- * el `th { color: #ffffff }` global de `main.css` los haría invisibles en
- * tema claro; `--color-text-primary` se adapta solo al tema oscuro. */
-.pv-table th.pv-col-ceco,
-.pv-table th.pv-row-label {
-  color: var(--color-text-primary, #070707);
-}
-
-.pv-table tfoot .pv-row-label {
-  background-color: var(--color-surface, #f7f7f7);
-}
-
-.pv-col-month,
-.pv-col-total {
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-
-.pv-cell-money,
-.pv-cell-total {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.pv-cell-total {
-  font-weight: 600;
-}
-
-.pv-cell-date {
+.rates-cell-date {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.pv-cell-rate {
+.rates-cell-rate {
   font-weight: 600;
   white-space: nowrap;
 }
 
-.pv-cell-name {
+.rates-cell-name {
   max-width: 260px;
   overflow: hidden;
   text-align: left;
@@ -957,38 +959,9 @@ const blocks = computed(() => {
   text-align: center;
 }
 
-/* ── FE-S4C §6.3: clases nuevas (mismos valores que `cf-negative`, FE-S4B) ── */
-
-/* Filas fuertes del P&G/Acumulado (Margen bruto, Resultado operativo, Neto). */
-.pv-row-strong th,
-.pv-row-strong td {
-  font-weight: 700;
-}
-
-/* Filas `%` del Acumulado (§4.3, E-01: una por concepto bajo su monto; antes,
- * fila única consolidada). */
-.pv-cell-pct {
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-  color: var(--color-text-secondary, #555555);
-}
-
-/* Negativos (margen/resultado/%, neto acumulado) en rojo. Definida DESPUÉS
- * de `.pv-cell-pct` (misma especificidad) para que el rojo gane también en
- * la fila `Margen %` del Acumulado cuando el neto acumulado es negativo. */
-.pv-negative {
-  color: #c53030;
-}
-
-:root[data-theme='dark'] .pv-negative {
-  color: #ff9b9b;
-}
-
 /* Nota de exclusión (§4.1): borde/fondo ámbar estilo `chip-closed` con texto
  * `--color-text-secondary` (token adaptativo, §6.3) — es información de
- * cobertura, NUNCA un error rojo. */
+ * cobertura, NUNCA un error rojo. RF-3.3: sigue VISIBLE con `v-if`. */
 .pv-warn {
   margin: 8px 0 0;
   padding: 8px 12px;

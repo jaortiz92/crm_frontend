@@ -29,7 +29,23 @@
  * ni deps nuevas (D-8).
  *
  * CERO dependencias: tabla HTML nativa + computados (patrón hermano
- * `ExecutivePivotTable`); CSS scoped propio prefijo `cf-*` (§5.4).
+ * `ExecutivePivotTable`).
+ *
+ * FE-S18 (spec `frontend.03_18`) — FASE 3, migración al componente compartido
+ * `PivotMonthTable`: TODAS las tablas mensuales (Resumen de liquidez, bloques
+ * Fuente/Usos y arrastre) comparten la misma cuadrícula `<colgroup>` +
+ * `table-layout: fixed` (RF-1.1..1.4, AC-1/AC-2); el toggle "fuera de año"
+ * usa la prop `extraColumns` (RF-1.5: «Antes/Después de {N}» DESPUÉS del
+ * Total, 106px). Cifras SIN `$` (`formatMoneyPlain`/`formatMoneyCompact` +
+ * `title` completo, RF-7.2/RF-2.2; los mapeos `0 → '·'`/`null → '—'`
+ * intactos). Notas descriptivas de bloque → ⓘ con tooltip `title` (RF-3.2),
+ * `VARIABLE_PIVOT_NOTE` UNIFICADA desde `planningFormat.js` (RF-4.2) y los
+ * pies «Σ meses + fuera de año = total anual»/«El total anual incluye N
+ * filas fuera de año» salen del render (la fórmula quedará en la intro de
+ * tab de Fase 4 — RF-4.3; la N exacta la sigue mostrando el chip ⊘). Los
+ * avisos de degradación (bodega negativa, catálogo de términos, settlement
+ * con Reintentar) siguen VISIBLES con `v-if` (RF-3.3). Computed de datos
+ * byte-idénticos (AC-7).
  *
  * FE-S6-CARRYOVER (aditivo, dos componentes):
  *  - B (arrastre): bloque "Saldos de {N−1} (arrastre)" con pivotes hermanos
@@ -136,9 +152,12 @@
 import { computed, ref } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import ScenarioTaxPaymentsBlock from '@/components/budget/taxes/ScenarioTaxPaymentsBlock.vue'
+import PivotMonthTable from './PivotMonthTable.vue'
 import {
   MONTH_LABELS,
-  formatMoney,
+  VARIABLE_PIVOT_NOTE,
+  formatMoneyCompact,
+  formatMoneyPlain,
   formatDateEs,
   monthIndexOf,
   resolveCogsPctByLine,
@@ -477,10 +496,9 @@ const variablesPivot = computed(() => {
   return { rows, columnTotals, grandTotal, beforeTotal: 0, afterTotal: 0, beforeAfterRowCount: 0 }
 })
 
-/** Nota del bloque estimado (§4.4): equivalente a `VARIABLE_PIVOT_NOTE` de Ejecutiva. */
-const VARIABLE_PIVOT_NOTE =
-  'Monto estimado = tasa × ingresos fijos presupuestados del mes de causación. ' +
-  'No se almacena en las líneas del escenario; se recalcula al ajustar el presupuesto.'
+/** Nota del bloque estimado (§4.4) — FE-S18 RF-4.2: se importa de
+ * `planningFormat.js` (ÚNICA definición compartida con la Ejecutiva);
+ * aquí solo se muestra como tooltip ⓘ (RF-3.2). */
 
 /**
  * Nota al pie del bloque Entradas (D-4, §4.3) — FE-S14-IVA D-FE14-1 la
@@ -1823,26 +1841,67 @@ const BODEGA_NEGATIVE_NOTE =
   'La bodega estimada quedó negativa: se está vendiendo costo de períodos previos al ' +
   'escenario o la tasa de costo está sub-calibrada.'
 
-/** `0` → '·' (patrón Ejecutiva); negativos con signo estándar de `formatMoney`. */
+/* ─────────── FE-S18 (spec frontend.03_18) Fase 3: celdas SIN símbolo ─────────── */
+
+/**
+ * RF-7/RF-2.2 — UMBRAL de compactación de celda (mismo patrón que la Vista
+ * Ejecutiva): con la cuadrícula fija de 106px (RF-1.3) y `formatMoneyPlain`,
+ * un monto ≥ 1.000.000.000 («1.234.567.890», 13 chars) no cabe en la celda →
+ * `formatMoneyCompact`; el valor completo vive en el `title` (AC-4).
+ */
+const COMPACT_CELL_THRESHOLD = 1_000_000_000
+
+/** ¿La celda necesita `title` con el valor completo plain? (RF-2.2/AC-4). */
+function cellTitle(value) {
+  return value !== null && Math.abs(Number(value)) >= COMPACT_CELL_THRESHOLD
+    ? formatMoneyPlain(value)
+    : null
+}
+
+/** Texto de celda AJUSTADO a la columna fija: plain cuando cabe, compacto cuando no (RF-7 + RF-2.2). */
+function fitMoney(value) {
+  return Math.abs(Number(value)) >= COMPACT_CELL_THRESHOLD
+    ? formatMoneyCompact(value)
+    : formatMoneyPlain(value)
+}
+
+/**
+ * Título de la celda Total del resumen (RF-2.2/AC-4): el título SEMÁNTICO
+ * manda (bodega, neto anual…); si además la celda quedó compacta (≥ 1e9) se
+ * le añade el valor plain para no perder la cifra exacta.
+ * @param {number} raw monto TOTAL crudo
+ * @param {string|null} [semantic=null] título semántico literal vigente
+ * @returns {string|null}
+ */
+function totalTitleText(raw, semantic = null) {
+  const full = cellTitle(raw)
+  if (!semantic) return full
+  return full ? `${semantic} · ${full}` : semantic
+}
+
+/** `0` → '·' (patrón Ejecutiva); el resto sin símbolo (RF-7: plain/compacto). */
 function resumenCell(value) {
-  return value === 0 ? '·' : formatMoney(value)
+  return value === 0 ? '·' : fitMoney(value)
 }
 
 /**
  * Filas del resumen de liquidez (§4.5). `signed`: neto/acumulado → rojos si < 0.
  * FE-S8 C-4: cada fila gana `ooy` = celdas `[Antes, Después]` derivadas de
  * `ooyColumns` (Σ Entradas/Σ Salidas: sus buckets; Flujo neto: el neto del
- * bucket con `cf-negative` si < 0, igual que sus hermanos; Flujo acumulado:
+ * bucket con `pt-negative` si < 0, igual que sus hermanos; Flujo acumulado:
  * literal `—` con `title` — la corrida solo cubre Ene–Dic de N).
+ * FE-S18 RF-7: TODAS las celdas sin símbolo (`fitMoney`); RF-2.2: `title`
+ * con el valor plain completo en las celdas compactas (`cellTitle`) y en el
+ * Total el semántico vigente se fusiona con la cifra (`totalTitleText`).
  */
 const resumenRows = computed(() => {
   const r = resumen.value
   const ooy = ooyColumns.value
-  const moneyCell = (value) => (value === 0 ? '·' : formatMoney(value))
+  const moneyCell = (value) => (value === 0 ? '·' : fitMoney(value))
   const unsignedCells = (series) =>
-    series.map((value) => ({ text: moneyCell(value), negative: false, title: undefined }))
+    series.map((value) => ({ text: moneyCell(value), negative: false, title: cellTitle(value) }))
   const signedCells = (series) =>
-    series.map((value) => ({ text: moneyCell(value), negative: value < 0, title: undefined }))
+    series.map((value) => ({ text: moneyCell(value), negative: value < 0, title: cellTitle(value) }))
   const dashCell = {
     text: '—',
     negative: false,
@@ -1852,21 +1911,21 @@ const resumenRows = computed(() => {
     {
       label: 'Σ Entradas',
       months: r.entradas,
-      totalText: formatMoney(r.entradasTotal),
+      totalText: fitMoney(r.entradasTotal),
       negativeTotal: false,
       signed: false,
       strong: false,
-      totalTitle: undefined,
+      totalTitle: totalTitleText(r.entradasTotal),
       ooy: unsignedCells(ooy.entradas)
     },
     {
       label: 'Σ Salidas',
       months: r.salidas,
-      totalText: formatMoney(r.salidasTotal),
+      totalText: fitMoney(r.salidasTotal),
       negativeTotal: false,
       signed: false,
       strong: false,
-      totalTitle: undefined,
+      totalTitle: totalTitleText(r.salidasTotal),
       ooy: unsignedCells(ooy.salidas)
     },
     {
@@ -1876,8 +1935,10 @@ const resumenRows = computed(() => {
       negativeTotal: r.netoTotal < 0,
       signed: true,
       strong: true,
-      totalTitle:
-        'Flujo neto anual: Σ entradas − Σ salidas. Incluye los montos con fecha de pago fuera del año.',
+      totalTitle: totalTitleText(
+        r.netoTotal,
+        'Flujo neto anual: Σ entradas − Σ salidas. Incluye los montos con fecha de pago fuera del año.'
+      ),
       ooy: signedCells(ooy.neto)
     },
     {
@@ -1887,15 +1948,17 @@ const resumenRows = computed(() => {
       negativeTotal: r.acumuladoTotal < 0,
       signed: true,
       strong: true,
-      totalTitle:
-        'Corrida acumulada desde enero; el total corresponde al valor de diciembre. Solo cubre los meses del año del escenario: con montos fuera de año NO equivale al flujo neto anual (ese es el Total de “Flujo neto”).',
+      totalTitle: totalTitleText(
+        r.acumuladoTotal,
+        'Corrida acumulada desde enero; el total corresponde al valor de diciembre. Solo cubre los meses del año del escenario: con montos fuera de año NO equivale al flujo neto anual (ese es el Total de “Flujo neto”).'
+      ),
       ooy: [dashCell, { ...dashCell }]
     },
     // FE-S9 §2.6: fila INFORMATIVA al final (se renderiza SIEMPRE — aun sin
     // compras, bodega = −Σ costos causados; única diferencia DOM admitida
     // frente a FE-S8 en un escenario sin compras, NFR-FE9-3). `bodega: true`
     // enruta los negativos al ámbar `.cf-bodega-negative` en el template, NO
-    // al rojo de caja `cf-negative`; `signed/strong: false`: no entra en
+    // al rojo de caja `pt-negative`; `signed/strong: false`: no entra en
     // entradas/salidas/neto/acumulado. Antes/Después: '—' (es por mes ∈ N).
     {
       label: 'Bodega estimada (cierre)',
@@ -1907,7 +1970,7 @@ const resumenRows = computed(() => {
       bodega: true,
       labelTitle:
         'Fila informativa: no entra en entradas, salidas, neto ni acumulado del resumen de caja.',
-      totalTitle: BODEGA_TOTAL_TITLE,
+      totalTitle: totalTitleText(bodegaMes.value[11], BODEGA_TOTAL_TITLE),
       ooy: [
         {
           text: '—',
@@ -1924,23 +1987,67 @@ const resumenRows = computed(() => {
   ]
 })
 
-/** Celda negativa (neto/acumulado < 0) → clase `cf-negative` (§4.5). */
+/** Celda negativa (neto/acumulado < 0) → clase `pt-negative` (§4.5, componente). */
 function negativeCell(row, value) {
   return row.signed && value < 0
 }
+
+/* ─────────── FE-S18 Fase 3: notas → tooltip ⓘ y columnas extra del toggle ─────────── */
+
+/**
+ * Cabeceras (y `<col>`s) de las columnas extra del toggle "fuera de año"
+ * (RF-1.5): las renderiza `PivotMonthTable` DESPUÉS de la col Total (mismo
+ * orden vigente del thead del resumen), heredan 106px y ganan el `title`
+ * D-OY vigente. Condición resumen = `ooyColumns.visible` (el idioma visual
+ * de los bloques es `showOutOfYear && block.ooy`, aplicado en el template).
+ */
+const ooyExtras = computed(() => {
+  if (!showOutOfYear.value || scenarioYear.value === null) return []
+  return [
+    {
+      label: `Antes de ${scenarioYear.value}`,
+      title: `Montos con fecha de pago anterior al 01/01/${scenarioYear.value}. No forman parte de los meses ni del acumulado Ene–Dic.`
+    },
+    {
+      label: `Después de ${scenarioYear.value}`,
+      title: `Montos con fecha de pago posterior al 31/12/${scenarioYear.value}. No forman parte de los meses ni del acumulado Ene–Dic.`
+    }
+  ]
+})
+
+/**
+ * RF-3.2: las notas de cobertura del resumen (antes `<p>` visibles
+ * condicionales) se juntan en el tooltip ⓘ del título del bloque — MISMOS
+ * literales, cero invención; el ícono solo existe cuando aplica al menos
+ * una (RF-3.3: si no hay nada que aclarar, sin badge).
+ */
+const resumenCoverageNote = computed(() => {
+  const parts = []
+  if (carryActive.value) parts.push(`El resumen incluye arrastre ${carrySourceYear.value}.`)
+  if (costPaymentsActive.value) {
+    parts.push('El resumen incluye pago a proveedores (costo de ventas).')
+  }
+  if (settlementPaymentsPivot.value) {
+    parts.push('El resumen incluye pago de liquidación de IVA (base caja, proyectado).')
+  }
+  if (financingPrincipalPivot.value) {
+    parts.push('El resumen incluye pagos de capital de financiación; no son gastos P&L.')
+  }
+  return parts.join(' ') || null
+})
+
+/** RF-3.2: nota descriptiva del bloque de arrastre (base + modo IVA si aplica). */
+const carryBlockNote = computed(() => {
+  const base = `Arrastre automático del escenario ${carrySourceYear.value}: solo afecta a esta Vista Flujo; no genera líneas.`
+  return ivaActive.value ? `${base} Los arrastres se muestran netos (v1).` : base
+})
 </script>
 
 <template>
+  <!-- FE-S18 Fase 3 (RF-3.1/RF-4.2): la intro "Matriz de solo lectura…" ya
+       NO vive aquí — se provee UNA VEZ a nivel tab en BudgetGridEditor, junto
+       con "Σ meses + fuera de año = total anual" (RF-4.3). -->
   <div class="cf-zone">
-    <p class="cf-note">
-      Matriz de <strong>solo lectura</strong> del presupuesto {{ scenario.budget_year }}. Las líneas
-      presupuestarias se ajustan en “Editor de Celdas”; el capital se consulta aparte desde el
-      schedule activo y nunca se incorpora al P&L. El mes se asigna por <strong>fecha de pago</strong>
-      (no por causación), por lo que puede diferir de la “Vista Ejecutiva”. Los montos con fecha de
-      pago fuera del año {{ scenario.budget_year }} no aparecen en las columnas Ene–Dic; use
-      “Mostrar fuera de año” para verlos.
-    </p>
-
     <!-- FE-S6 §6.2: toggle de sesión "fuera de año" junto a la cabecera de la
          vista. Solo existe si algún bloque propio tiene montos fuera de año
          (flag OFF + fechas dentro de N ⇒ DOM idéntico a FE-S4B, AC-S6-FE-6). -->
@@ -1961,281 +2068,74 @@ function negativeCell(row, value) {
     </p>
 
     <template v-else>
-      <section v-for="block in blocks" :key="block.title" class="cf-block">
-        <h4 class="cf-block-title">{{ block.title }}</h4>
-        <!-- Chip §6.2: columnas ocultas + pendientes fuera de año ⇒ NUNCA se
-             oculta (mentirle al banquero es el bug que matamos); clic = ON. -->
-        <button
-          v-if="block.ooy && !showOutOfYear && block.pivot.beforeAfterRowCount > 0"
-          type="button"
-          class="cf-ooy-chip"
-          :aria-label="`Mostrar las ${block.pivot.beforeAfterRowCount} filas con montos fuera de año en ${block.title}`"
-          @click="showOutOfYear = true"
-        >
-          ⊘ {{ block.pivot.beforeAfterRowCount }} filas con montos fuera de año
-        </button>
-        <p v-if="block.note" class="cf-note cf-block-note">{{ block.note }}</p>
-        <div v-if="block.pivot.rows.length" class="cf-scroll">
-          <table
-            class="cf-table"
-            :class="{ 'cf-table-ooy': showOutOfYear && block.ooy }"
-            :aria-label="block.aria"
-          >
-            <thead>
-              <tr>
-                <th class="cf-col-ceco">CECO</th>
-                <th v-for="month in MONTH_LABELS" :key="month" class="cf-col-month">{{ month }}</th>
-                <th class="cf-col-total">Total</th>
-                <template v-if="showOutOfYear && block.ooy">
-                  <th class="cf-col-ooy">Antes de {{ scenarioYear }}</th>
-                  <th class="cf-col-ooy">Después de {{ scenarioYear }}</th>
-                </template>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in block.pivot.rows" :key="row.id">
-                <th class="cf-row-label" scope="row" :title="row.label">{{ row.label }}</th>
-                <td v-for="(value, index) in row.months" :key="index" class="cf-cell-money">
-                  {{ value === 0 ? '·' : formatMoney(value) }}
-                </td>
-                <td class="cf-cell-money cf-cell-total">{{ formatMoney(row.total) }}</td>
-                <template v-if="showOutOfYear && block.ooy">
-                  <td class="cf-cell-money cf-cell-ooy">
-                    {{ row.before === 0 ? '·' : formatMoney(row.before) }}
-                  </td>
-                  <td class="cf-cell-money cf-cell-ooy">
-                    {{ row.after === 0 ? '·' : formatMoney(row.after) }}
-                  </td>
-                </template>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr>
-                <th class="cf-row-label" scope="row">Σ Total</th>
-                <td
-                  v-for="(value, index) in block.pivot.columnTotals"
-                  :key="index"
-                  class="cf-cell-money"
-                >
-                  {{ value === 0 ? '·' : formatMoney(value) }}
-                </td>
-                <td class="cf-cell-money cf-cell-total">
-                  {{ formatMoney(block.pivot.grandTotal) }}
-                </td>
-                <template v-if="showOutOfYear && block.ooy">
-                  <td class="cf-cell-money cf-cell-ooy">
-                    {{ block.pivot.beforeTotal === 0 ? '·' : formatMoney(block.pivot.beforeTotal) }}
-                  </td>
-                  <td class="cf-cell-money cf-cell-ooy">
-                    {{ block.pivot.afterTotal === 0 ? '·' : formatMoney(block.pivot.afterTotal) }}
-                  </td>
-                </template>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        <p v-else class="cf-empty">Sin líneas de {{ block.emptyName }} en este escenario.</p>
-        <!-- Pies §6.2: ON ⇒ reconciliación; OFF ⇒ admisión solo si aplica. -->
-        <p v-if="block.ooy && showOutOfYear" class="cf-note cf-block-foot">
-          Σ meses + fuera de año = total anual
-        </p>
-        <p
-          v-else-if="block.ooy && block.pivot.beforeAfterRowCount > 0"
-          class="cf-note cf-block-foot"
-        >
-          El total anual incluye {{ block.pivot.beforeAfterRowCount }} filas fuera de año
-        </p>
-      </section>
-
-      <!-- ================= Arrastre N−1 (FE-S6 §6.1, componente B) =================
-           UN bloque tras los propios; dos tablas (Cobros/Pagos) omitiendo la cara
-           vacía. Filas con prefijo tenue `←` + tooltip R-S6-1; sin columnas
-           fuera-de-año (las fechas efectivas del arrastre siempre son ∈ N). -->
-      <section v-if="carryActive" class="cf-block">
-        <h4 class="cf-block-title">Saldos de {{ carrySourceYear }} (arrastre)</h4>
-        <p class="cf-note cf-block-note">
-          Arrastre automático del escenario {{ carrySourceYear }}: solo afecta a esta Vista Flujo;
-          no genera líneas.
-        </p>
-        <!-- FE-S14-IVA §4.1 (PQ-S10-2): la derivación de arrastre NO cambia
-             en v1 — siempre neta; con el modo bruto activo se declara. -->
-        <p v-if="ivaActive" class="cf-note cf-block-note">Los arrastres se muestran netos (v1).</p>
-        <section v-for="carryTable in carryTables" :key="carryTable.title" class="cf-carry-table">
-          <h5 class="cf-carry-subtitle">{{ carryTable.title }}</h5>
-          <div class="cf-scroll">
-            <table class="cf-table" :aria-label="carryTable.aria">
-              <thead>
-                <tr>
-                  <th class="cf-col-ceco">CECO</th>
-                  <th v-for="month in MONTH_LABELS" :key="month" class="cf-col-month">
-                    {{ month }}
-                  </th>
-                  <th class="cf-col-total">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in carryTable.pivot.rows" :key="row.key">
-                  <th
-                    class="cf-row-label cf-carry-label"
-                    scope="row"
-                    :title="carryTitlesByOrigin[row.origin]"
-                  >
-                    <!-- FE-S7 §5: la fila MATERIAL se pinta byte-idéntica a
-                         FE-S6 (`← label`); la cuota derivada `origin:"cogs"`
-                         gana el prefijo "⌁ Costo {N−1}" y su tooltip propio.
-                         FE-S9 §2.7: la cuota `origin:"purchase"` (BE-S8)
-                         gana "⌁ Compra {N−1}" + tooltip de compra.
-                         FE-S10 §2.6: la cuota `origin:"internment"` (BE-S9)
-                         gana "⌁ Internación {N−1}" + tooltip propio. -->
-                    <template v-if="row.origin === 'cogs'"
-                      >⌁ Costo {{ carryCogsYear }} · {{ row.label }}</template
-                    >
-                    <template v-else-if="row.origin === 'purchase'"
-                      >⌁ Compra {{ carryCogsYear }} · {{ row.label }}</template
-                    >
-                    <template v-else-if="row.origin === 'internment'"
-                      >⌁ Internación {{ carryCogsYear }} · {{ row.label }}</template
-                    >
-                    <template v-else>← {{ row.label }}</template>
-                  </th>
-                  <td v-for="(value, index) in row.months" :key="index" class="cf-cell-money">
-                    {{ value === 0 ? '·' : formatMoney(value) }}
-                  </td>
-                  <td class="cf-cell-money cf-cell-total">{{ formatMoney(row.total) }}</td>
-                </tr>
-              </tbody>
-              <tfoot>
-                <tr>
-                  <th class="cf-row-label" scope="row">Σ Total</th>
-                  <td
-                    v-for="(value, index) in carryTable.pivot.columnTotals"
-                    :key="index"
-                    class="cf-cell-money"
-                  >
-                    {{ value === 0 ? '·' : formatMoney(value) }}
-                  </td>
-                  <td class="cf-cell-money cf-cell-total">
-                    {{ formatMoney(carryTable.pivot.grandTotal) }}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </section>
-      </section>
-
-      <!-- Resumen de liquidez (D-6, §4.5): SIEMPRE con líneas, aun con bloques vacíos. -->
+      <!-- Resumen de liquidez (D-6, §4.5): SIEMPRE con líneas, aun con bloques vacíos.
+           Enmienda 2026-10-15 (stakeholder): el resumen va PRIMERO en la vista —
+           antes de los bloques propios y del arrastre (antes quedaba al final). -->
       <section class="cf-block">
-        <h4 class="cf-block-title">Resumen de liquidez</h4>
-        <!-- Nota textual §6.1: el resumen cuadra CON el arrastre. La segunda es
-             el pie canónico §6.2 aplicado al resumen (toggle ON con montos
-             fuera de año en sus columnas extra): mismo texto, cero invención.
-             FE-S7 §5: la nota "incluye pago a proveedores" convive con la del
-             arrastre (AC-S7-FE-6). FE-S8 C-5 (FR-4): el pie se muestra con
-             `anyOutOfYear && showOutOfYear` SIN el guard de arrastre/costo —
-             sigue siendo exacto: sus montos ya viven en entradas/salidas y
-             en sus buckets. -->
-        <p v-if="carryActive" class="cf-note cf-block-note">
-          El resumen incluye arrastre {{ carrySourceYear }}.
-        </p>
-        <p v-if="costPaymentsActive" class="cf-note cf-block-note">
-          El resumen incluye pago a proveedores (costo de ventas).
-        </p>
-        <!-- FE-S14-IVA: misma familia de notas de cobertura del resumen. -->
-        <p v-if="settlementPaymentsPivot" class="cf-note cf-block-note">
-          El resumen incluye pago de liquidación de IVA (base caja, proyectado).
-        </p>
-        <p v-if="financingPrincipalPivot" class="cf-note cf-block-note">
-          El resumen incluye pagos de capital de financiación; no son gastos P&L.
-        </p>
-        <p v-if="anyOutOfYear && showOutOfYear" class="cf-note cf-block-note">
-          Σ meses + fuera de año = total anual
-        </p>
-        <div class="cf-scroll">
-          <table
-            class="cf-table"
-            :class="{ 'cf-table-ooy': ooyColumns.visible }"
-            aria-label="Resumen de liquidez mensual del escenario: entradas, salidas, flujo neto y flujo acumulado"
-          >
-            <thead>
-              <tr>
-                <th class="cf-col-ceco">Concepto</th>
-                <th v-for="month in MONTH_LABELS" :key="month" class="cf-col-month">{{ month }}</th>
-                <th class="cf-col-total">Total</th>
-                <!-- FE-S8 C-4 (FR-4/D-OY-4): columnas extra solo con toggle ON
-                     y montos fuera de año — mismo patrón `cf-col-ooy` bloques. -->
-                <template v-if="ooyColumns.visible">
-                  <th
-                    class="cf-col-ooy"
-                    :title="`Montos con fecha de pago anterior al 01/01/${scenarioYear}. No forman parte de los meses ni del acumulado Ene–Dic.`"
-                  >
-                    Antes de {{ scenarioYear }}
-                  </th>
-                  <th
-                    class="cf-col-ooy"
-                    :title="`Montos con fecha de pago posterior al 31/12/${scenarioYear}. No forman parte de los meses ni del acumulado Ene–Dic.`"
-                  >
-                    Después de {{ scenarioYear }}
-                  </th>
-                </template>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="row in resumenRows"
-                :key="row.label"
-                :class="{ 'cf-row-strong': row.strong }"
+        <h4 class="cf-block-title">
+          Resumen de liquidez
+          <!-- FE-S18 RF-3.2: las notas de cobertura del resumen (arrastre, pago a
+               proveedores, liquidación, capital) ya no son texto visible — se
+               unen en el tooltip ⓘ del título (mismos literales, condiciones
+               idénticas, RF-3.4). -->
+          <span v-if="resumenCoverageNote" class="cf-info" :title="resumenCoverageNote">ⓘ</span>
+        </h4>
+        <PivotMonthTable
+          label-header="Concepto"
+          :month-labels="MONTH_LABELS"
+          aria-label="Resumen de liquidez mensual del escenario: entradas, salidas, flujo neto y flujo acumulado"
+          :extra-columns="ooyColumns.visible ? ooyExtras : []"
+        >
+          <tr v-for="row in resumenRows" :key="row.label" :class="{ 'pt-row-strong': row.strong }">
+            <th class="pt-row-label" scope="row" :title="row.labelTitle">
+              {{ row.label }}
+            </th>
+            <td
+              v-for="(value, index) in row.months"
+              :key="index"
+              class="pt-cell-money"
+              :class="{
+                'pt-negative': negativeCell(row, value),
+                'cf-bodega-negative': row.bodega && value < 0
+              }"
+              :title="cellTitle(value)"
+            >
+              {{ resumenCell(value) }}
+            </td>
+            <td
+              class="pt-cell-money pt-cell-total"
+              :class="{
+                'pt-negative': row.negativeTotal && !row.bodega,
+                'cf-bodega-negative': row.bodega && row.negativeTotal
+              }"
+              :title="row.totalTitle"
+            >
+              {{ row.totalText }}
+            </td>
+            <!-- FE-S8 C-4: buckets [Antes, Después] de cada fila
+                 (acumulado: `—` con `title`, §FR-4). -->
+            <template v-if="ooyColumns.visible">
+              <td
+                v-for="(cell, index) in row.ooy"
+                :key="index"
+                class="pt-cell-money cf-cell-ooy"
+                :class="{ 'pt-negative': cell.negative }"
+                :title="cell.title"
               >
-                <th class="cf-row-label" scope="row" :title="row.labelTitle">
-                  {{ row.label }}
-                </th>
-                <td
-                  v-for="(value, index) in row.months"
-                  :key="index"
-                  class="cf-cell-money"
-                  :class="{
-                    'cf-negative': negativeCell(row, value),
-                    'cf-bodega-negative': row.bodega && value < 0
-                  }"
-                >
-                  {{ resumenCell(value) }}
-                </td>
-                <td
-                  class="cf-cell-money cf-cell-total"
-                  :class="{
-                    'cf-negative': row.negativeTotal && !row.bodega,
-                    'cf-bodega-negative': row.bodega && row.negativeTotal
-                  }"
-                  :title="row.totalTitle"
-                >
-                  {{ row.totalText }}
-                </td>
-                <!-- FE-S8 C-4: buckets [Antes, Después] de cada fila
-                     (acumulado: `—` con `title`, §FR-4). -->
-                <template v-if="ooyColumns.visible">
-                  <td
-                    v-for="(cell, index) in row.ooy"
-                    :key="index"
-                    class="cf-cell-money cf-cell-ooy"
-                    :class="{ 'cf-negative': cell.negative }"
-                    :title="cell.title"
-                  >
-                    {{ cell.text }}
-                  </td>
-                </template>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                {{ cell.text }}
+              </td>
+            </template>
+          </tr>
+        </PivotMonthTable>
         <!-- FE-S9 §2.6: nota bajo la tabla SOLO si algún mes de bodega < 0
-             (mismo lenguaje ámbar de la degradación — no es error rojo). -->
+             (mismo lenguaje ámbar de la degradación — no es error rojo). RF-3.3:
+             los avisos de degradación siguen VISIBLES con `v-if`. -->
         <p v-if="bodegaNegative" class="cf-warn" role="status">{{ BODEGA_NEGATIVE_NOTE }}</p>
         <!-- FE-S7 §5: aviso ámbar de degradación (CATÁLOGO DE TÉRMINOS CAÍDO
              con filas que se producirían — FE-S9: compras o ingresos de
              Líneas NO compradoras D-4'/A-02): el bloque derivado NO se
              renderiza y el resto del Flujo queda intacto (AC-S7-FE-7). Bajo
-             el resumen, junto al pie del §6.2 — el patrón `pv-warn` de
-             Ejecutiva es información, no error rojo. -->
+             el resumen, junto al pie del §6.2. -->
         <p v-if="costTermsDegraded" class="cf-warn" role="status">
           {{ COGS_TERMS_UNAVAILABLE_NOTE }}
         </p>
@@ -2256,29 +2156,182 @@ function negativeCell(row, value) {
           </button>
         </div>
       </section>
+      <section v-for="block in blocks" :key="block.title" class="cf-block">
+        <h4 class="cf-block-title">
+          {{ block.title }}
+          <!-- FE-S18 RF-3.2: la nota descriptiva del bloque (ENTRADAS_NOTE,
+               COMPRAS_NOTE, COGS_PAYMENT_NOTE, INTERNMENT_PAYMENT_NOTE,
+               SETTLEMENT_PAYMENT_NOTE, TAX_PAYMENTS_NOTE, VARIABLE_PIVOT_NOTE
+               e inline 1284/1343) pasa a tooltip ⓘ junto al subtítulo. -->
+          <span v-if="block.note" class="cf-info" :title="block.note">ⓘ</span>
+        </h4>
+        <!-- Chip §6.2: columnas ocultas + pendientes fuera de año ⇒ NUNCA se
+             oculta (mentirle al banquero es el bug que matamos); clic = ON.
+             RF-3.3: sigue visible con `v-if` — esta es la señal que antes
+             repetía el pie "El total anual incluye N filas fuera de año". -->
+        <button
+          v-if="block.ooy && !showOutOfYear && block.pivot.beforeAfterRowCount > 0"
+          type="button"
+          class="cf-ooy-chip"
+          :aria-label="`Mostrar las ${block.pivot.beforeAfterRowCount} filas con montos fuera de año en ${block.title}`"
+          @click="showOutOfYear = true"
+        >
+          ⊘ {{ block.pivot.beforeAfterRowCount }} filas con montos fuera de año
+        </button>
+        <PivotMonthTable
+          v-if="block.pivot.rows.length"
+          label-header="CECO"
+          :month-labels="MONTH_LABELS"
+          :aria-label="block.aria"
+          :extra-columns="block.ooy && showOutOfYear ? ooyExtras : []"
+        >
+          <tr v-for="row in block.pivot.rows" :key="row.id">
+            <th class="pt-row-label" scope="row" :title="row.label">{{ row.label }}</th>
+            <td
+              v-for="(value, index) in row.months"
+              :key="index"
+              class="pt-cell-money"
+              :title="cellTitle(value)"
+            >
+              {{ value === 0 ? '·' : fitMoney(value) }}
+            </td>
+            <td class="pt-cell-money pt-cell-total" :title="cellTitle(row.total)">
+              {{ fitMoney(row.total) }}
+            </td>
+            <template v-if="showOutOfYear && block.ooy">
+              <td class="pt-cell-money cf-cell-ooy" :title="cellTitle(row.before)">
+                {{ row.before === 0 ? '·' : fitMoney(row.before) }}
+              </td>
+              <td class="pt-cell-money cf-cell-ooy" :title="cellTitle(row.after)">
+                {{ row.after === 0 ? '·' : fitMoney(row.after) }}
+              </td>
+            </template>
+          </tr>
+          <template #tfoot>
+            <tr>
+              <th class="pt-row-label" scope="row">Σ Total</th>
+              <td
+                v-for="(value, index) in block.pivot.columnTotals"
+                :key="index"
+                class="pt-cell-money"
+                :title="cellTitle(value)"
+              >
+                {{ value === 0 ? '·' : fitMoney(value) }}
+              </td>
+              <td class="pt-cell-money pt-cell-total" :title="cellTitle(block.pivot.grandTotal)">
+                {{ fitMoney(block.pivot.grandTotal) }}
+              </td>
+              <template v-if="showOutOfYear && block.ooy">
+                <td class="pt-cell-money cf-cell-ooy" :title="cellTitle(block.pivot.beforeTotal)">
+                  {{ block.pivot.beforeTotal === 0 ? '·' : fitMoney(block.pivot.beforeTotal) }}
+                </td>
+                <td class="pt-cell-money cf-cell-ooy" :title="cellTitle(block.pivot.afterTotal)">
+                  {{ block.pivot.afterTotal === 0 ? '·' : fitMoney(block.pivot.afterTotal) }}
+                </td>
+              </template>
+            </tr>
+          </template>
+        </PivotMonthTable>
+        <p v-else class="cf-empty">Sin líneas de {{ block.emptyName }} en este escenario.</p>
+        <!-- FE-S18 RF-4.3: los pies por bloque — «Σ meses + fuera de año = total
+             anual» (ON) y «El total anual incluye N filas fuera de año» (OFF) —
+             SE QUITAN del render visible: la fórmula vive en la intro de tab
+             (Fase 4) y la N exacta la sigue mostrando el chip ⊘ de arriba. -->
+      </section>
+
+      <!-- ================= Arrastre N−1 (FE-S6 §6.1, componente B) =================
+           UN bloque tras los propios; dos tablas (Cobros/Pagos) omitiendo la cara
+           vacía. Filas con prefijo tenue `←` + tooltip R-S6-1; sin columnas
+           fuera-de-año (las fechas efectivas del arrastre siempre son ∈ N). -->
+      <section v-if="carryActive" class="cf-block">
+        <h4 class="cf-block-title">
+          Saldos de {{ carrySourceYear }} (arrastre)
+          <!-- FE-S18 RF-3.2: nota descriptiva §6.1 y la nota de netos (v1) →
+               tooltip ⓘ único (mismos literales; RF-3.4). -->
+          <span class="cf-info" :title="carryBlockNote">ⓘ</span>
+        </h4>
+        <section v-for="carryTable in carryTables" :key="carryTable.title" class="cf-carry-table">
+          <h5 class="cf-carry-subtitle">{{ carryTable.title }}</h5>
+          <PivotMonthTable
+            label-header="CECO"
+            :month-labels="MONTH_LABELS"
+            :aria-label="carryTable.aria"
+          >
+            <tr v-for="row in carryTable.pivot.rows" :key="row.key">
+              <th
+                class="pt-row-label pt-row-muted"
+                scope="row"
+                :title="carryTitlesByOrigin[row.origin]"
+              >
+                <!-- FE-S7 §5: la fila MATERIAL se pinta byte-idéntica a
+                     FE-S6 (`← label`); la cuota derivada `origin:"cogs"`
+                     gana el prefijo "⌁ Costo {N−1}" y su tooltip propio.
+                     FE-S9 §2.7: la cuota `origin:"purchase"` (BE-S8)
+                     gana "⌁ Compra {N−1}" + tooltip de compra.
+                     FE-S10 §2.6: la cuota `origin:"internment"` (BE-S9)
+                     gana "⌁ Internación {N−1}" + tooltip propio. -->
+                <template v-if="row.origin === 'cogs'"
+                  >⌁ Costo {{ carryCogsYear }} · {{ row.label }}</template
+                >
+                <template v-else-if="row.origin === 'purchase'"
+                  >⌁ Compra {{ carryCogsYear }} · {{ row.label }}</template
+                >
+                <template v-else-if="row.origin === 'internment'"
+                  >⌁ Internación {{ carryCogsYear }} · {{ row.label }}</template
+                >
+                <template v-else>← {{ row.label }}</template>
+              </th>
+              <td
+                v-for="(value, index) in row.months"
+                :key="index"
+                class="pt-cell-money"
+                :title="cellTitle(value)"
+              >
+                {{ value === 0 ? '·' : fitMoney(value) }}
+              </td>
+              <td class="pt-cell-money pt-cell-total" :title="cellTitle(row.total)">
+                {{ fitMoney(row.total) }}
+              </td>
+            </tr>
+            <template #tfoot>
+              <tr>
+                <th class="pt-row-label" scope="row">Σ Total</th>
+                <td
+                  v-for="(value, index) in carryTable.pivot.columnTotals"
+                  :key="index"
+                  class="pt-cell-money"
+                  :title="cellTitle(value)"
+                >
+                  {{ value === 0 ? '·' : fitMoney(value) }}
+                </td>
+                <td
+                  class="pt-cell-money pt-cell-total"
+                  :title="cellTitle(carryTable.pivot.grandTotal)"
+                >
+                  {{ fitMoney(carryTable.pivot.grandTotal) }}
+                </td>
+              </tr>
+            </template>
+          </PivotMonthTable>
+        </section>
+      </section>
+
     </template>
     <ScenarioTaxPaymentsBlock :scenario="scenario" />
   </div>
 </template>
 
 <style scoped>
-/* Mismo lenguaje visual que ExecutivePivotTable (§5.4), prefijo cf-* propio. */
+/* FE-S18 Fase 3 (RF-2.1/RF-6): el lenguaje visual de las tablas pivote
+ * (scroll, colgroup, sticky, zebra, totales, negativos) vive EN
+ * `PivotMonthTable.vue` (clases `pt-*`, compartido con la Ejecutiva).
+ * Aquí solo queda el chrome propio del Flujo: bloque/título/empty, toggle
+ * fuera-de-año, banda de celdas extra, arrastre, avisos de degradación. */
 
 .cf-zone {
   display: flex;
   flex-direction: column;
   gap: 18px;
-}
-
-.cf-note {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary, #555555);
-}
-
-/* Nota de cálculo dentro de un bloque (Entradas / Gastos variables). */
-.cf-block-note {
-  margin: -2px 0 8px;
 }
 
 .cf-block-title {
@@ -2288,101 +2341,16 @@ function negativeCell(row, value) {
   color: var(--color-text-primary, #070707);
 }
 
-.cf-scroll {
-  overflow: auto;
-  border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
-  border-radius: 8px;
-  background-color: var(--color-surface-card, #ffffff);
-  max-height: 60vh;
-}
-
-.cf-table {
-  min-width: 1240px;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  font-size: 0.78rem;
-}
-
-.cf-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-}
-
-.cf-table tfoot th,
-.cf-table tfoot td {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  font-weight: 700;
-  background-color: var(--color-surface, #f7f7f7);
-}
-
-:root[data-theme='dark'] .cf-table tfoot th,
-:root[data-theme='dark'] .cf-table tfoot td {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.cf-col-ceco,
-.cf-row-label {
-  position: sticky;
-  left: 0;
-  z-index: 4;
-  max-width: 240px;
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background-color: var(--color-surface-card, #ffffff);
-}
-
-.cf-table thead .cf-col-ceco {
-  z-index: 5;
-}
-
-/* `th` sobre fondo claro (esquina CECO/Concepto, etiquetas de fila y `tfoot`):
- * el `th { color: #ffffff }` global de `main.css` los volvería invisibles en
- * tema claro; `--color-text-primary` se adapta solo al tema oscuro. */
-.cf-table th.cf-col-ceco,
-.cf-table th.cf-row-label {
-  color: var(--color-text-primary, #070707);
-}
-
-.cf-table tfoot .cf-row-label {
-  background-color: var(--color-surface, #f7f7f7);
-}
-
-.cf-col-month,
-.cf-col-total {
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-
-.cf-cell-money,
-.cf-cell-total {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.cf-cell-total {
-  font-weight: 600;
-}
-
-/* Filas destacadas del resumen (Flujo neto / Flujo acumulado). */
-.cf-row-strong th,
-.cf-row-strong td {
-  font-weight: 700;
-}
-
-/* Negativos de neto/acumulado en rojo (§4.5, D-6); dark mode vía convención .ge-error. */
-.cf-negative {
-  color: #c53030;
-}
-
-:root[data-theme='dark'] .cf-negative {
-  color: #ff9b9b;
+/* FE-S18 RF-3.2: ícono ⓘ de nota descriptiva junto al subtítulo del bloque
+ * (tooltip nativo `title`) — MISMO estilo que la Vista Ejecutiva. Texto
+ * estático; los avisos con `v-if` (cf-empty/cf-warn/chip) siguen visibles
+ * (RF-3.3). */
+.cf-info {
+  margin-left: 6px;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--color-text-muted, #8a8a8a);
+  cursor: help;
 }
 
 .cf-empty {
@@ -2449,34 +2417,9 @@ function negativeCell(row, value) {
   color: #f6c177;
 }
 
-/* Pie reconciliador (§6.2): ON ⇒ identidad; OFF ⇒ admisión solo si aplica. */
-.cf-block-foot {
-  margin: 6px 0 0;
-}
-
-/* Con columnas extra la matriz pide más lienzo antes de scrollear. */
-.cf-table-ooy {
-  min-width: 1500px;
-}
-
-/* `th` fuera-de-año sobre banda clara propia (BANDA, no calendaria): aplica la
- * regla aprendida — el `th { color: #ffffff }` global de `main.css` los
- * volvería invisibles; `--color-text-primary` se adapta solo al tema oscuro
- * (paridad oscura vía tokens, espejo de `tfoot`). */
-.cf-table th.cf-col-ooy {
-  min-width: 118px;
-  background-color: var(--color-surface, #f7f7f7);
-  border-left: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--color-text-primary, #070707);
-  white-space: nowrap;
-}
-
-:root[data-theme='dark'] .cf-table th.cf-col-ooy {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
+/* Celdas "Antes/Después": borde izquierdo discontinuo sobre la banda clara
+ * del `th.pt-col-extra` del componente (solo la celda, una regla única — el
+ * markup/estilos de tabla viven en el componente). */
 .cf-cell-ooy {
   border-left: 1px dashed var(--color-border, rgba(97, 97, 97, 0.15));
 }
@@ -2494,19 +2437,10 @@ function negativeCell(row, value) {
   color: var(--color-text-secondary, #555555);
 }
 
-/* Prefijo tenue `←` en la etiqueta del CECO (R-S6-1): secundaria + cursiva;
- * sigue siendo `th` de fondo claro, por eso SOLO cambia color/estilo (la regla
- * primaria del `th` de etiqueta ya está arriba; misma especificidad → gana el
- * orden de fuente). */
-.cf-table th.cf-carry-label {
-  color: var(--color-text-secondary, #555555);
-  font-style: italic;
-}
-
 /* ---------- FE-S7 §5: aviso de degradación del bloque derivado ---------- */
 
 /* Mismo lenguaje ámbar `pv-warn` de la Ejecutiva (información de cobertura,
- * NUNCA error rojo) y colocación bajo el resumen, tras el pie §6.2. */
+ * NUNCA error rojo) y colocación bajo el resumen. RF-3.3: visible con `v-if`. */
 .cf-warn {
   margin: 8px 0 0;
   padding: 8px 12px;
@@ -2527,7 +2461,7 @@ function negativeCell(row, value) {
 }
 
 /* ---------- FE-S9 §2.6: negativos de "Bodega estimada" en ámbar ---------- */
-/* NO es rojo de caja (`cf-negative`): la bodega es una estimación
+/* NO es rojo de caja (`pt-negative`): la bodega es una estimación
  * informativa de inventario; la familia ámbar es la del chip ⊘/`cf-warn`. */
 .cf-bodega-negative {
   color: #b7791f;

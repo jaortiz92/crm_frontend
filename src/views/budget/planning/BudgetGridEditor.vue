@@ -38,6 +38,27 @@
  *    se pide AL ABRIR el escenario (§4.2), de nuevo con reintento perezoso
  *    al activar el tab y con el botón "Recalcular" del panel.
  *  - `BudgetLineGrid` recibe la bandera como prop (`iva-mode`, §5).
+ *
+ * FE-S18 (spec `frontend.03_18`) — FASE 4, cierre:
+ *  - RF-3.1/RF-4.1: intro «Matriz de solo lectura…» ÚNICA POR PESTAÑA, a
+ *    nivel tab (`EXECUTIVE_TAB_NOTE`/`FLOW_TAB_NOTE`); los componentes
+ *    pivote ya no la renderizan (RF-4.2).
+ *  - RF-4.3: la fórmula «Σ meses + fuera de año = total anual» vive SOLO en
+ *    la intro del tab Flujo (los pies por bloque de la pestaña se retiraron
+ *    del render visible en Fase 3); la N exacta sigue mostrada por el chip
+ *    ⊘ de cada bloque del Flujo (RF-3.3).
+ *  - RF-7.4/RF-7.3: «Montos en COP» se declara UNA vez por intro (las celdas
+ *    de las vistas no llevan símbolo desde la Fase 2/3) y las cifras de la
+ *    CABECERA (Σ Ingresos/Σ Gastos) y de los avisos what-if de
+ *    nómina/financiación usan `formatMoneyPlain` — sin `$` (formatMoney con
+ *    `$` queda para el resto del CRM, RF-7.6).
+ *  - RF-5: cabecera sticky POR TABLA (thead top:0 + rótulo left:0 en el
+ *    wrapper `max-height: 60vh` de cada bloque, provisto por
+ *    `PivotMonthTable`); NO se adopta el wrapper scroll único por pestaña
+ *    (opción B del spec): implica mover todas las secciones a un contenedor
+ *    común (mayor riesgo) sin que el usuario pierda cabecera en la práctica
+ *    (el P&G/Acumulado Ejecutivo y el Resumen de liquidez del Flujo abren
+ *    cada pestaña con su thead ya en pantalla).
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -54,9 +75,31 @@ import {
   budgetCollaboratorService,
   classifyCollaboratorError
 } from '@/services/budgetCollaboratorService.js'
-import { formatMoney, statusChipOf } from '@/components/budget/planning/planningFormat.js'
+import { formatMoneyPlain, statusChipOf } from '@/components/budget/planning/planningFormat.js'
 
 const TAB_ORDER = ['executive', 'flow', 'editor', 'settlement']
+
+/**
+ * FE-S18 (spec `frontend.03_18`) RF-3.1 + RF-4.1: la intro «Matriz de solo
+ * lectura…» vive UNA vez por pestaña, aquí a nivel tab (los componentes
+ * `ExecutivePivotTable`/`CashFlowPivotTable` ya no la renderizan). Los dos
+ * textos fusionan los intros vigentes de ambos componentes SIN perder
+ * información: «Montos en COP» declara la moneda UNA vez (RF-7.4) y el de
+ * Flujo incorpora la fórmula «Σ meses + fuera de año = total anual» (RF-4.3)
+ * con la semántica de fecha de pago/capital/Costos del §4 de cada vista.
+ */
+const EXECUTIVE_TAB_NOTE =
+  'Matriz de solo lectura generada desde las líneas del escenario (se ajustan en “Editor de ' +
+  'Celdas”). Montos en COP (sin símbolo). El costo de ventas se ESTIMA con las tasas de Reglas ' +
+  'Financieras: no se almacena en las líneas y se ubica por causación (budget_date).'
+
+const FLOW_TAB_NOTE =
+  'Matriz de solo lectura generada desde las líneas del escenario (se ajustan en “Editor de ' +
+  'Celdas”). Montos en COP (sin símbolo). El mes se asigna por fecha de pago (no por ' +
+  'causación), por lo que puede diferir de la “Vista Ejecutiva”; el capital se consulta aparte ' +
+  'desde el schedule activo y nunca se incorpora al P&L. Los montos con fecha de pago fuera ' +
+  'del año del escenario NO aparecen en las columnas Ene–Dic: active “Mostrar fuera de año” ' +
+  'para verlos; Σ meses + fuera de año = total anual.'
 
 /** Etiquetas de los pills (FE-S4B §3.1; FE-S14 suma "Liquidación"). */
 const TAB_LABELS = {
@@ -519,8 +562,8 @@ function backToPlanning() {
             </span>
           </p>
           <p class="ge-totals" aria-live="polite">
-            Σ Ingresos <strong>{{ formatMoney(headerTotals.income) }}</strong> · Σ Gastos
-            <strong>{{ formatMoney(headerTotals.expense) }}</strong>
+            Σ Ingresos <strong>{{ formatMoneyPlain(headerTotals.income) }}</strong> · Σ Gastos
+            <strong>{{ formatMoneyPlain(headerTotals.expense) }}</strong>
             <span class="ge-lines">· {{ (scenarioView?.budget_lines || []).length }} líneas</span>
           </p>
         </div>
@@ -629,7 +672,7 @@ function backToPlanning() {
         </span>
         <span v-else-if="payrollSimCount">
           Nómina simulada: {{ payrollSimCount }} líneas · Σ anual
-          {{ formatMoney(payrollSimTotal) }} — cifras what-if (no materializadas);
+          {{ formatMoneyPlain(payrollSimTotal) }} — cifras what-if (no materializadas);
           marca Meta Activa para proyectarlas de verdad.
         </span>
         <span v-else>Nómina simulada: sin colaboradores con salario vigente proyectable.</span>
@@ -659,9 +702,9 @@ function backToPlanning() {
         <span v-else-if="financingSimCount">
           Financiación simulada: {{ financingSimCount }} líneas de gasto
           ({{ financingSim.data?.financing_credits_count ?? 0 }} créditos) · Intereses
-          {{ formatMoney(financingSimInterest) }} · Seguros
-          {{ formatMoney(financingSimInsurance) }} · Σ gastos anuales
-          {{ formatMoney(financingSimTotal) }} — cifras what-if/no materializadas; al marcar Meta
+          {{ formatMoneyPlain(financingSimInterest) }} · Seguros
+          {{ formatMoneyPlain(financingSimInsurance) }} · Σ gastos anuales
+          {{ formatMoneyPlain(financingSimTotal) }} — cifras what-if/no materializadas; al marcar Meta
           Activa se materializan.
         </span>
         <span v-else>
@@ -706,6 +749,16 @@ function backToPlanning() {
         role="tabpanel"
         aria-labelledby="planning-tab-executive"
       >
+        <!-- FE-S18 RF-3.1/RF-4.1: ÚNICA intro por pestaña (los pivotes ya no
+             pintan las suyas). RF-5: decisión de implementación — se conserva
+             el sticky POR TABLA (thead top:0 + rótulo left:0 dentro del
+             wrapper `max-height: 60vh` de cada bloque, ya provisto por
+             `PivotMonthTable`); un wrapper scroll único por pestaña exigiría
+             mover todas las secciones a un contenedor común con columnas
+             sticky re-implicadas (refactor mayor, riesgo alto) sin ganar
+             visibilidad real, porque el resumen P&G + Acumulado ya abren
+             cada pestaña activos mientras se scrollea un bloque largo. -->
+        <p class="ge-tab-note">{{ EXECUTIVE_TAB_NOTE }}</p>
         <ExecutivePivotTable :scenario="scenarioView" />
       </div>
       <!-- FE-S4B §3.2: v-show (no v-if) → sigue reactiva a los PUT sin recompilar. -->
@@ -716,6 +769,11 @@ function backToPlanning() {
         role="tabpanel"
         aria-labelledby="planning-tab-flow"
       >
+        <!-- FE-S18 RF-4.3: la intro ÚNICA de tab lleva «Montos en COP» y la
+             fórmula «Σ meses + fuera de año = total anual» (los pies por
+             bloque del Flujo ya no existe). RF-5: sticky por tabla (misma
+             decisión que el tab Ejecutiva, ver comentario allí). -->
+        <p class="ge-tab-note">{{ FLOW_TAB_NOTE }}</p>
         <CashFlowPivotTable
           :scenario="scenarioView"
           :financing-principal-lines="financingPrincipalLines"
@@ -1158,6 +1216,14 @@ function backToPlanning() {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* FE-S18 RF-3.1: intro ÚNICA por pestaña Ejecutiva/Flujo (los componentes
+ * pivote ya no la renderizan). Mismos valores que la `pv-note`/`cf-note`. */
+.ge-tab-note {
+  margin: -6px 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #555555);
 }
 
 @media (max-width: 768px) {

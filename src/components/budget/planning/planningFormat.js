@@ -59,6 +59,68 @@ export function formatCount(value) {
   return Number.isFinite(num) ? intFormatter.format(num) : '—'
 }
 
+/* ─────────── FE-S18 (spec frontend.03_18) RF-7/RF-2.2: cifras SIN símbolo ni decimales ─────────── */
+/**
+ * Formateador de las celdas de dinero: SIN decimales visibles
+ * (`maximumFractionDigits: 0`). Fuentes con decimales (nómina 2 dec.,
+ * intereses financiados, promedios) se muestran redondeadas al peso — el
+ * redondeo es SOLO de display; el valor crudo en el dato nunca cambia y la
+ * EDICIÓN siempre ocurre en número crudo.
+ */
+const moneyPlainFormatter = new Intl.NumberFormat('es-CO', {
+  maximumFractionDigits: 0
+})
+
+/**
+ * RF-7.1: monto SIN símbolo de moneda y SIN decimales para las tablas pivote de
+ * Planificación (moneda declarada UNA vez por pestaña en la intro — RF-7.4;
+ * sin decimales por decisión del usuario). Miles con punto es-CO:
+ * `1234567 → "1.234.567"`; `2750440.5 → "2.750.441"` (redondeo solo display).
+ * NO reemplaza a `formatMoney` (con `$`), que otros módulos del CRM siguen
+ * usando — RF-7.6.
+ * @param {number|string|null|undefined} value
+ * @returns {string} `1.234.567` o '—' si no es número finito.
+ */
+export function formatMoneyPlain(value) {
+  const num = Number(value)
+  return Number.isFinite(num) ? moneyPlainFormatter.format(num) : '—'
+}
+
+/**
+ * RF-2.2: versión COMPACTA sin símbolo y SIN decimales para celdas de `106px`
+ * donde el plain no cabe (RF-1.6): `|v| ≥ 10 000 000 → "12 MM"` (millones
+ * ENTEROS, sin decimales: `12.340.000 → "12 MM"` · `1.234.567.890 → "1.235 MM"`)
+ * · resto delega en `formatMoneyPlain` (redondeo al peso; mismo '—' para no
+ * finito). SIEMPRE deberá acompañarse de un `title` con el valor completo en
+ * el render (AC-4: ninguna información se pierde). Nunca para cabeceras ni
+ * rótulos (RF-2.2).
+ * @param {number|string|null|undefined} value
+ * @returns {string} `12 MM` / `1.235 MM` / `1.234.567` o '—'.
+ */
+export function formatMoneyCompact(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '—'
+  const abs = Math.abs(num)
+  if (abs >= 10_000_000) return `${moneyPlainFormatter.format(num / 1_000_000)} MM`
+  return formatMoneyPlain(num)
+}
+/* ─────────── FE-S18 RF-4.2: ÚNICA definición de la nota del bloque estimado ─────────── */
+
+/**
+ * FE-S18 RF-4.2 — NOTA ÚNICA del bloque "Gastos variables (calculados)",
+ * compartida por las Vistas Ejecutiva y Flujo (antes definida DOS veces con
+ * variantes: Ejecutiva «tasa × ingresos presupuestados del mes»; Flujo
+ * «tasa × ingresos fijos presupuestados del mes de causación»). El texto
+ * fusionado conserva la aclaración específica del Flujo (base por causación,
+ * ingresos fijos) sin perder la del Ejecutivo. Ambas vistas la consumen como
+ * tooltip ⓘ junto al subtítulo del bloque (RF-3.2). No son cifras ni
+ * comportamiento: texto de presentación compartido.
+ */
+export const VARIABLE_PIVOT_NOTE =
+  'Monto estimado = tasa × ingresos presupuestados del mes (en la Vista Flujo: ' +
+  'ingresos fijos por su mes de causación). No se almacena en las líneas del ' +
+  'escenario; se recalcula al ajustar el presupuesto.'
+
 /**
  * Fecha `dd/mm/aaaa`. Los `date` puros ISO ('YYYY-MM-DD') se parsean por
  * regex para evitar el corrimiento UTC→local de `new Date('2027-01-31')`
