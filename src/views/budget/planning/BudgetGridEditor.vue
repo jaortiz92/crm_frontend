@@ -373,6 +373,10 @@ function goDashboard() {
   router.push({ name: 'BudgetPlanning' })
 }
 
+function goToTaxes() {
+  router.push({ name: 'BudgetTaxesSummary', params: { idBudget: idBudget.value } })
+}
+
 async function load(force = false) {
   detailError.value = false
   const result = await budgetPlanningStore.fetchScenarioDetail(idBudget.value, force)
@@ -385,6 +389,9 @@ async function load(force = false) {
     // degrada panel/Flujo con "sin dato de liquidación" + reintento, nunca
     // toast ni pantalla rota — NFR-FE14-3).
     void budgetPlanningStore.fetchIvaSettlement(idBudget.value)
+    // Resultados tributarios: resumen (P&G) + flujo de pagos (Vista Flujo).
+    // Ambos bloques leen esta caché única; no se replican fórmulas tributarias.
+    void budgetPlanningStore.fetchTaxData(idBudget.value)
     void checkPayrollStatus()
     void loadPayrollSimulation()
     void loadFinancingSimulation()
@@ -575,6 +582,14 @@ function backToPlanning() {
               {{ carryHintText }}
             </p>
           </div>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm ge-taxes-action"
+            title="Abrir la planeación tributaria de este escenario"
+            @click="goToTaxes"
+          >
+            Planeación tributaria
+          </button>
           <button
             v-if="scenario.status !== 'active' && canTarget"
             type="button"
@@ -1148,6 +1163,16 @@ function backToPlanning() {
 @media (max-width: 768px) {
   .ge-page {
     padding: 20px 16px;
+  }
+
+  .ge-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .ge-mode-group,
+  .ge-carry-group {
+    align-items: flex-start;
   }
 }
 .ge-payroll-notice {

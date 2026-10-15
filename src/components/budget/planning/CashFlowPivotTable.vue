@@ -135,6 +135,7 @@
  */
 import { computed, ref } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import ScenarioTaxPaymentsBlock from '@/components/budget/taxes/ScenarioTaxPaymentsBlock.vue'
 import {
   MONTH_LABELS,
   formatMoney,
@@ -991,6 +992,104 @@ const settlementPaymentsPivot = computed(() => {
 })
 
 /**
+ * Planeación tributaria: pagos netos de tributos por mes (FE-S17, integración
+ * hermana de D-FE14-4). Fuente ÚNICA: `budgetPlanningStore.tax.cashFlow` — la
+ * agregación server-side del motor (anticipo de renta en diciembre del año,
+ * pagos bimestrales SIMPLE y vencimientos ICA/reteIVA/retención/reteICA) ya
+ * excluye como caja los créditos, así que cada bucket cae directamente en el
+ * mes/etiqueta que el BE le asignó; NUNCA se deriva ni re-coloca aquí.
+ *
+ * Buckets de `payment_year` distinto de N viven SOLO en Antes/Después
+ * (misma regla FE-S8/AC-OY-9). Buckets SIN fecha (el BE los advierte en sus
+ * warnings) se excluyen de la agregación para conservar exacta la
+ * reconciliación Σ meses + Antes/Después = total anual; su monto queda
+ * informativo en `undatedTotal` (nota del bloque).
+ *
+ * Sin cálculo ejecutado (`calculation_executed !== true`) ⇒ pivote null:
+ * bloque ausente y resumen byte-idéntico (sumando 0 — AC-S17-FE-*).
+ */
+const taxPaymentsPivot = computed(() => {
+  const data = budgetPlanningStore.tax?.cashFlow
+  if (!data || data.calculation_executed !== true) return null
+  const yearN = scenarioYear.value
+  if (yearN === null) return null
+  const buckets = Array.isArray(data.monthly) ? data.monthly : []
+  if (!buckets.length) return null
+  const rows = []
+  const columnTotals = Array.from({ length: 12 }, () => 0)
+  let grandTotal = 0
+  let beforeTotal = 0
+  let afterTotal = 0
+  let beforeAfterRowCount = 0
+  let undatedTotal = 0
+  for (const bucket of buckets) {
+    const amount = Number(bucket?.net_outflow ?? bucket?.cash_outflow)
+    if (!Number.isFinite(amount) || amount === 0) continue
+    const payYearRaw = Number(bucket.payment_year)
+    const payMonthRaw = Number(bucket.payment_month)
+    const payYear = Number.isInteger(payYearRaw) ? payYearRaw : null
+    const payMonth = Number.isInteger(payMonthRaw) ? payMonthRaw : null
+    if (payYear === null) {
+      undatedTotal += amount
+      continue
+    }
+    const months = Array.from({ length: 12 }, () => 0)
+    let before = 0
+    let after = 0
+    if (payYear === yearN && payMonth !== null && payMonth >= 1 && payMonth <= 12) {
+      months[payMonth - 1] += amount
+      columnTotals[payMonth - 1] += amount
+    } else if (payYear < yearN) {
+      before = amount
+    } else if (payYear > yearN) {
+      after = amount
+    }
+    if (before + after !== 0) beforeAfterRowCount += 1
+    beforeTotal += before
+    afterTotal += after
+    grandTotal += amount
+    rows.push({
+      id: `tax-pass-${payYear}-${payMonth ?? 'x'}-${rows.length + 1}`,
+      label:
+        payMonth !== null
+          ? `Impuestos · vence ${payYear}-${String(payMonth).padStart(2, '0')}`
+          : `Impuestos · año ${payYear}`,
+      months,
+      total: amount,
+      before,
+      after
+    })
+  }
+  if (!rows.length) {
+    // Solo buckets sin fecha: nada entra al resumen; el aviso vive en el BE.
+    return null
+  }
+  return {
+    rows,
+    columnTotals,
+    grandTotal,
+    beforeTotal,
+    afterTotal,
+    beforeAfterRowCount,
+    undatedTotal
+  }
+})
+
+/** Nota del bloque de tributos (fuente server-side, cero hardcodes). */
+const TAX_PAYMENTS_NOTE = computed(() => {
+  const pivot = taxPaymentsPivot.value
+  const undated = pivot && pivot.undatedTotal > 0
+    ? ` Excluye ${pivot.undatedTotal.toLocaleString('es-CO')} sin fecha de pago (ver Planeación tributaria).`
+    : ''
+  return (
+    'Pagos netos de la planeación tributaria del escenario: anticipo de renta de diciembre del año, ' +
+    'pagos bimestrales SIMPLE y vencimientos de ICA/reteIVA/retención/reteICA ' +
+    'según el Calendario tributario configurado. El monto ya netea los créditos aplicados. ' +
+    'Fuente: motor server-side (dato del cálculo, no derivado).' + undated
+  )
+})
+
+/**
  * Degradación NFR-FE14-3: error de red/5xx en el settlement CON el modo
  * activo ⇒ nota "sin dato de liquidación" + reintento (bloque del Flujo
  * ausente, panel propio con su banner; jamás pantalla rota). Sin modo activo
@@ -1283,6 +1382,21 @@ const blocks = computed(() => {
       ooy: true
     })
   }
+  // FE-S17: bloque de planeación tributaria — pagos netos de SIMPLE/renta/ICA/
+  // reteIVA/retención/reteICA en el mes que el BE asignó (anticipo de renta en
+  // diciembre del año; pagos por periodo). Sin cálculo ejecutado ⇒ sin bloque
+  // (`taxPaymentsPivot` null). `ooy: true`: la renta ordinaria paga el saldo en
+  // N+1 y los buckets de otros años viven en Antes/Después (FE-S8/AC-OY-9).
+  if (taxPaymentsPivot.value) {
+    list.push({
+      title: 'Salidas — Impuestos (planeación tributaria)',
+      emptyName: 'pagos de impuestos',
+      pivot: taxPaymentsPivot.value,
+      aria: 'Salidas de impuestos del planning tributario por mes de pago',
+      note: TAX_PAYMENTS_NOTE.value,
+      ooy: true
+    })
+  }
   return list
 })
 
@@ -1496,7 +1610,10 @@ const anyOutOfYear = computed(
       // en N+1 ("Después de N"). Sin bloque ⇒ sumando 0 (DOM idéntico).
       (settlementPaymentsPivot.value
         ? settlementPaymentsPivot.value.beforeAfterRowCount
-        : 0) >
+        : 0) +
+      // FE-S17: el saldo de renta ordinaria se paga en N+1 ⇒ el toggle
+      // también existe por él (sin pivote ⇒ 0, DOM idéntico).
+      (taxPaymentsPivot.value ? taxPaymentsPivot.value.beforeAfterRowCount : 0) >
     0
 )
 
@@ -1522,17 +1639,22 @@ const ooyColumns = computed(() => {
   const principal = financingPrincipalPivot.value
   // FE-S14-IVA: los vencimientos de liquidación fuera de N también bucketean.
   const liquidation = settlementPaymentsPivot.value
+  // FE-S17: los tributos también bucketean fuera de año (renta ordinaria: el
+  // saldo se paga en N+1 — §6 del spec tributario).
+  const taxFlow = taxPaymentsPivot.value
   const salidas = [
     fijosPivot.value.beforeTotal +
       (costes ? costes.beforeTotal : 0) +
       (internment ? internment.beforeTotal : 0) +
       (principal ? principal.beforeTotal : 0) +
-      (liquidation ? liquidation.beforeTotal : 0),
+      (liquidation ? liquidation.beforeTotal : 0) +
+      (taxFlow ? taxFlow.beforeTotal : 0),
     fijosPivot.value.afterTotal +
       (costes ? costes.afterTotal : 0) +
       (internment ? internment.afterTotal : 0) +
       (principal ? principal.afterTotal : 0) +
-      (liquidation ? liquidation.afterTotal : 0)
+      (liquidation ? liquidation.afterTotal : 0) +
+      (taxFlow ? taxFlow.afterTotal : 0)
   ]
   return {
     visible: anyOutOfYear.value && showOutOfYear.value,
@@ -1583,6 +1705,9 @@ const resumen = computed(() => {
   const variables = variablesPivot.value ? variablesPivot.value.columnTotals : null
 
   const entradas = entradasPropias.map((value, m) => value + (cobros ? cobros.columnTotals[m] : 0) + (disbursement ? disbursement.columnTotals[m] : 0))
+  // FE-S17: los pagos tributarios entran a salidas por la misma vía del
+  // bloque IVA (D-FE14-4): el BE ya decidió mes/amount neto de créditos.
+  const taxFlow = taxPaymentsPivot.value
   const salidas = entradas.map(
     (_, m) =>
       fijos[m] +
@@ -1592,7 +1717,8 @@ const resumen = computed(() => {
       (internment ? internment.columnTotals[m] : 0) +
       (principal ? principal.columnTotals[m] : 0) +
       // FE-S14-IVA: pago de liquidación al mes de su vencimiento (D-FE14-4).
-      (liquidation ? liquidation.columnTotals[m] : 0)
+      (liquidation ? liquidation.columnTotals[m] : 0) +
+      (taxFlow ? taxFlow.columnTotals[m] : 0)
   )
   const neto = entradas.map((value, m) => value - salidas[m])
 
@@ -1610,7 +1736,10 @@ const resumen = computed(() => {
     (costes ? costes.grandTotal : 0) +
     (internment ? internment.grandTotal : 0) +
     (principal ? principal.grandTotal : 0) +
-    (liquidation ? liquidation.grandTotal : 0)
+    (liquidation ? liquidation.grandTotal : 0) +
+    // FE-S17: los tributos del año y sus buckets fuera de año al total anual
+    // (AC-OY-9: el total anual lo incluye).
+    (taxFlow ? taxFlow.grandTotal : 0)
   // FE-S8 C-3 (FR-4): neto ANUAL = entradas − salidas (ya no Σ de los 12
   // netos: con fuera-de-año esos importes no viven en ningún mes pero sí en
   // los totales; sin fuera-de-año el valor es idéntico — R-OY-2).
@@ -2128,6 +2257,7 @@ function negativeCell(row, value) {
         </div>
       </section>
     </template>
+    <ScenarioTaxPaymentsBlock :scenario="scenario" />
   </div>
 </template>
 

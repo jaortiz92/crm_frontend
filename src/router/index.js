@@ -390,6 +390,76 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         {
+          path: 'taxes',
+          name: 'BudgetTaxes',
+          component: () => import('@/views/budget/taxes/BudgetTaxesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => next(canAccessBudgetUpload() ? undefined : '/')
+        },
+        {
+          path: 'taxes/configuration',
+          name: 'BudgetTaxesConfiguration',
+          component: () => import('@/views/budget/taxes/BudgetTaxesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => next(canAccessBudgetUpload() ? undefined : '/')
+        },
+        {
+          path: 'taxes/rates',
+          name: 'BudgetTaxesRates',
+          component: () => import('@/views/budget/taxes/BudgetTaxesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => next(canAccessBudgetUpload() ? undefined : '/')
+        },
+        {
+          path: 'taxes/calendar',
+          name: 'BudgetTaxesCalendar',
+          component: () => import('@/views/budget/taxes/BudgetTaxesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => next(canAccessBudgetUpload() ? undefined : '/')
+        },
+        {
+          path: 'taxes/comparison',
+          name: 'BudgetTaxesComparison',
+          component: () => import('@/views/budget/taxes/BudgetTaxesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => next(canAccessBudgetUpload() ? undefined : '/')
+        },
+        {
+          path: 'planning/:idBudget/taxes',
+          name: 'BudgetTaxesSummary',
+          component: () => import('@/views/budget/taxes/BudgetTaxesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => next(canAccessBudgetUpload() ? undefined : '/')
+        },
+        {
+          path: 'planning/:idBudget/taxes/configuration',
+          name: 'BudgetTaxesBudgetConfiguration',
+          component: () => import('@/views/budget/taxes/BudgetTaxesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => next(canAccessBudgetUpload() ? undefined : '/')
+        },
+        {
+          path: 'planning/:idBudget/taxes/rates',
+          name: 'BudgetTaxesBudgetRates',
+          component: () => import('@/views/budget/taxes/BudgetTaxesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => next(canAccessBudgetUpload() ? undefined : '/')
+        },
+        {
+          path: 'planning/:idBudget/taxes/calendar',
+          name: 'BudgetTaxesBudgetCalendar',
+          component: () => import('@/views/budget/taxes/BudgetTaxesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => next(canAccessBudgetUpload() ? undefined : '/')
+        },
+        {
+          path: 'planning/:idBudget/taxes/comparison',
+          name: 'BudgetTaxesBudgetComparison',
+          component: () => import('@/views/budget/taxes/BudgetTaxesView.vue'),
+          meta: { requiresAuth: true },
+          beforeEnter: (to, from, next) => next(canAccessBudgetUpload() ? undefined : '/')
+        },
+        {
           path: '',
           redirect: { name: 'BudgetUpload' }
         },

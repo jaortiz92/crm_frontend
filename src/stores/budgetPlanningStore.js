@@ -396,6 +396,21 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
     },
 
     /**
+     * Resultados tributarios del escenario. `summary` y `cashFlow` son
+     * respuestas crudas de los endpoints de tax planning: las vistas solo
+     * presentan sus filas, nunca reproducen reglas ni calendarios.
+     */
+    tax: {
+      summary: null,
+      cashFlow: null,
+      budgetId: null,
+      loaded: false,
+      loading: false,
+      error: false,
+      stale: false
+    },
+
+    /**
      * BE-S11 what-if: caché del `PayrollSimulationOut` de escenarios NO
      * activos (la pide el editor al abrir; degrada en silencio con banner +
      * reintento, patrón NFR-FE14-3). Se RESETA al cambiar de escenario y un
@@ -783,6 +798,7 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         // fetch del detalle al de la liquidación).
         this.applyIvaModeForBudget(idBudget)
         this.resetSettlementCache()
+        this.resetTaxCache()
         // BE-S11 what-if: la simulación de OTRO escenario tampoco se asoma.
         this.resetPayrollSimCache()
         this.resetFinancingSimCache()
@@ -995,6 +1011,7 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
           )
         }
         this.scenariosStale = true
+        this.markTaxStale()
         // FE-S14-IVA AC-FE14-2: la base de la liquidación cambió ⇒ debounce
         // de refetch (§4.2). NO bloquea ni ensucia el resultado de la celda.
         this.scheduleSettlementRefresh()
@@ -1093,6 +1110,7 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         const line = response?.data ?? null
         if (line) this.applyLineToCache(line)
         this.softRefreshScenarioList()
+        this.markTaxStale()
         // FE-S14-IVA AC-FE14-2: línea nueva (con o sin `has_iva` en el
         // payload) ⇒ settlement debounce.
         this.scheduleSettlementRefresh()
@@ -1130,6 +1148,7 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         const line = response?.data ?? null
         if (line) this.applyLineToCache(line)
         this.softRefreshScenarioList()
+        this.markTaxStale()
         // FE-S14-IVA AC-FE14-2: este PUT cubre TAMBIÉN el toggle parcial
         // `{ has_iva }` de la cuadrícula (frontend.03_14 §5): la liquidación
         // (descuentos E2/E3/E4) cambia ⇒ debounce de refetch.
@@ -1172,6 +1191,7 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
           if (index !== -1) this.currentScenario.budget_lines.splice(index, 1)
         }
         this.softRefreshScenarioList()
+        this.markTaxStale()
         // FE-S14-IVA: borrado de línea ⇒ debounce del settlement (AC-FE14-2).
         this.scheduleSettlementRefresh()
         return { ok: true }
@@ -1313,6 +1333,64 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         return { ok: false, ...classified }
       } finally {
         this.carryover.saving = false
+      }
+    },
+
+    /* ─────────────── Resultados tributarios del escenario ─────────────── */
+
+    /** Limpia la caché tributaria al cambiar de escenario. */
+    resetTaxCache() {
+      this.tax.summary = null
+      this.tax.cashFlow = null
+      this.tax.budgetId = null
+      this.tax.loaded = false
+      this.tax.loading = false
+      this.tax.error = false
+      this.tax.stale = false
+    },
+
+    /** Marca los resultados como potencialmente desactualizados tras editar líneas. */
+    markTaxStale() {
+      if (this.tax.budgetId === this.currentScenario?.id_budget) this.tax.stale = true
+    },
+
+    /**
+     * Carga en paralelo el resumen y el flujo tributario persistidos. Un solo
+     * estado compartido alimenta P&G y Flujo; no se calculan impuestos en FE.
+     */
+    async fetchTaxData(idBudget, { force = false } = {}) {
+      const target = Number(idBudget)
+      if (!Number.isFinite(target) || target <= 0) return { ok: false, kind: 'notfound' }
+      if (this.tax.loading) return { ok: true }
+      if (!force && this.tax.loaded && this.tax.budgetId === target && !this.tax.stale) {
+        return { ok: true }
+      }
+
+      this.tax.loading = true
+      try {
+        const [summaryResponse, cashFlowResponse] = await Promise.all([
+          budgetPlanningService.fetchTaxSummary(target),
+          budgetPlanningService.fetchTaxCashFlow(target)
+        ])
+        if (this.currentScenario?.id_budget !== target) return { ok: true }
+        this.tax.summary = summaryResponse?.data ?? null
+        this.tax.cashFlow = cashFlowResponse?.data ?? null
+        this.tax.budgetId = target
+        this.tax.loaded = true
+        this.tax.error = false
+        this.tax.stale = false
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyPlanningError(err)
+        this.handleAuth(classified)
+        if (classified.kind !== 'auth') {
+          this.tax.error = true
+          this.tax.loaded = false
+          this.tax.budgetId = target
+        }
+        return { ok: false, ...classified }
+      } finally {
+        this.tax.loading = false
       }
     },
 

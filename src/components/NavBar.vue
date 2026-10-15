@@ -85,6 +85,12 @@ const navGroups = [
     accentColor: '#1e8e5a',
     items: [
       {
+        label: 'Planeación tributaria',
+        to: '/budget/taxes',
+        permission: 'high',
+        roles: BUDGET_UPLOAD_ROLES
+      },
+      {
         label: 'Centro de Ingesta',
         to: '/budget/upload',
         // Gateo por escala de acceso + nombres de rol reales (PQ-1):

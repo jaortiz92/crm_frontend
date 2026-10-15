@@ -36,9 +36,11 @@
  *    (`ensureCatalogs`), fallo silencioso → `lineCostRatesError`.
  *  - D-5 (§4): orden Ingresos → Costo de ventas → Gastos fijos → Gastos
  *    variables → Resultado (P&G) → Acumulado → Tasas variables.
- *  - D-6/D-7 (§4.2): 8 filas P&G con prefijos (+)/(−)/=, signos positivos,
- *    % sobre ingresos del MES; D-9/D-10/D-11 (§4.3, enmienda E-01): acumulado
- *    Ene→Mes con UNA fila `%` por concepto (`Costo %`, `Gastos %`, `Margen %`)
+ *  - D-6/D-7 (§4.2): filas P&G con prefijos (+)/(−)/=, signos positivos,
+ *    % sobre ingresos del MES.
+ *  - D-9/D-10/D-11 (§4.3, enmienda E-01): acumulado
+ *    Ene→Mes con UNA fila `%` por concepto (`Costo %`, `Gastos %`, `Margen %`,
+ *    `Impuestos %`, `Después de impuestos %`)
  *    inmediatamente debajo del monto que describe, sobre ingresos acumulados
  *    (patrón idéntico a los % del P&G; cero fila consolidada, cero ARIA
  *    especial por celda — §6.4).
@@ -60,6 +62,8 @@
  */
 import { computed } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import ScenarioTaxPnlSection from '@/components/budget/taxes/ScenarioTaxPnlSection.vue'
+import { pnlTaxMonthly, taxCalculationAvailable } from '@/components/budget/taxes/taxPresentation.js'
 import {
   BEHAVIOR_LABELS,
   LINE_TYPE_LABELS,
@@ -77,6 +81,23 @@ const props = defineProps({
 })
 
 const budgetPlanningStore = useBudgetPlanningStore()
+
+/**
+ * Tax expense is read from the same cached calculation used by the tax
+ * scenario block. The P&L only places the server-provided result; it never
+ * recalculates rates, advances or payment schedules.
+ */
+const taxPnl = computed(() => {
+  const tax = budgetPlanningStore.tax
+  if (
+    !taxCalculationAvailable(tax.summary) ||
+    tax.stale ||
+    tax.budgetId !== props.scenario?.id_budget
+  ) {
+    return null
+  }
+  return pnlTaxMonthly(tax.summary, props.scenario?.budget_year)
+})
 
 const lines = computed(() =>
   props.scenario && Array.isArray(props.scenario.budget_lines) ? props.scenario.budget_lines : []
@@ -406,25 +427,43 @@ const pnl = computed(() => {
   const costo = costPivot.value ? costPivot.value.columnTotals : null
   const fijos = expensePivot.value.columnTotals
   const variables = variablePivot.value ? variablePivot.value.columnTotals : null
+  const impuestos = taxPnl.value?.months ?? null
   const gastos = ingresos.map((_, m) => fijos[m] + (variables ? variables[m] : 0))
   const margen = costo ? ingresos.map((value, m) => value - costo[m]) : null
   const resultado = margen ? margen.map((value, m) => value - gastos[m]) : null
-  return { ingresos, costo, fijos, variables, gastos, margen, resultado }
+  const resultadoDespuesImpuestos =
+    resultado && impuestos ? resultado.map((value, m) => value - impuestos[m]) : null
+  return {
+    ingresos,
+    costo,
+    fijos,
+    variables,
+    gastos,
+    impuestos,
+    margen,
+    resultado,
+    resultadoDespuesImpuestos
+  }
 })
 
 /**
- * 8 filas exactas de §4.2 en orden; `Margen bruto` y `Resultado operativo`
- * fuertes (`pv-row-strong`); los % corren sobre ingresos del MES (Total:
+ * Filas de §4.2 en orden; `Margen bruto`, `Resultado
+ * operativo` y `Resultado
+ * después de impuestos` fuertes (`pv-row-strong`); los % corren sobre ingresos del MES (Total:
  * sobre Σ 12) y valen `—` con ingresos 0 o costo degradado (fila fuente `—`).
+ * FE-S12/S14: % del resultado después de impuestos al final de la cola.
  */
 const pnlRows = computed(() => {
-  const { ingresos, costo, fijos, variables, margen, resultado } = pnl.value
+  const { ingresos, costo, fijos, variables, impuestos, margen, resultado, resultadoDespuesImpuestos } =
+    pnl.value
   const nulls = Array.from({ length: 12 }, () => null)
   const zeros = Array.from({ length: 12 }, () => 0)
   const costoV = costo || nulls
   const margenV = margen || nulls
   const resultadoV = resultado || nulls
+  const impuestosV = impuestos || nulls
   const variablesV = variables || zeros
+  const resultadoDespuesImpuestosV = resultadoDespuesImpuestos || nulls
   const incomeTotal = ingresos.reduce((acc, value) => acc + value, 0)
 
   const amountRow = (label, values, strong = false) => ({
@@ -454,29 +493,43 @@ const pnlRows = computed(() => {
     amountRow('(−) Gastos fijos', fijos),
     amountRow('(−) Gastos variables', variablesV),
     amountRow('= Resultado operativo', resultadoV, true),
-    pctRow('Resultado %', resultadoV)
+    pctRow('Resultado %', resultadoV),
+    amountRow('(-) Impuestos', impuestosV),
+    amountRow('= Resultado después de impuestos', resultadoDespuesImpuestosV, true),
+    pctRow('Resultado después de impuestos %', resultadoDespuesImpuestosV)
   ]
 })
 
 /**
- * Acumulado Ene→Mes (§4.3, D-9/D-10/D-11 + enmienda stakeholder E-01):
- * 7 filas — 4 de montos (gastos fijos + variables UNIDOS en una fila, D-9)
- * y UNA fila `%` por concepto inmediatamente debajo del monto que describe
- * (`Costo %`, `Gastos %`, `Margen %`), patrón idéntico a `pnlRows`. Cada
+ * Acumulado Ene→Mes (§4.3, D-9/D-10/D-11 + enmienda stakeholder E-01; cola
+ * tributaria añadida FE-S12/S14): filas de montos (gastos fijos + variables
+ * UNIDOS en una fila, D-9) y UNA fila `%` por concepto inmediatamente debajo
+ * del monto que describe (`Costo %`, `Gastos %`, `Margen %`, `Impuestos %`,
+ * `Después de impuestos %`), patrón idéntico a `pnlRows`. Cada
  * celda `%` = concepto ÷ ingresos ACUMULADOS del mismo mes; Total = ratio
  * sobre los acumulados a diciembre (misma columna Total). Columna Total de
  * montos = valor de diciembre (redundancia intencional, `title`
- * aclaratorio). Degradación (§5.1/§5.2): costo/neto y sus filas `%` a `—`;
- * `Gastos %` sigue operativo (su denominador, ingresos acumulados, siempre
- * existe) e ingresos/gastos acumulan igual.
+ * aclaratorio). Degradación (§5.1/§5.2): costo/neto y sus filas `%` y la
+ * cola tributaria (impuestos + neto después) a `—` (sin tasa, sin cálculo
+ * tributario o costo no estimable); `Gastos %` sigue operativo (su
+ * denominador, ingresos acumulados, siempre existe) e ingresos/gastos
+ * acumulan igual.
  */
 const acumulado = computed(() => {
-  const { ingresos, costo, gastos, margen } = pnl.value
+  const { ingresos, costo, gastos, margen, impuestos } = pnl.value
   const nulls = Array.from({ length: 12 }, () => null)
   const ingresosAcc = runningSums(ingresos)
   const costoAcc = costo ? runningSums(costo) : nulls
   const gastosAcc = runningSums(gastos)
   const netoAcc = margen ? ingresosAcc.map((value, m) => value - costoAcc[m] - gastosAcc[m]) : nulls
+  // Impuestos por causación (FE-S12/S14): meses diarios de `pnlTaxMonthly`
+  // (SIMPLE/Ordinario cierran en diciembre; ICA en su mes de liquidación).
+  // Sin cálculo tributario ejecutado (`impuestos` null) toda la cola
+  // tributaria degrada a `—` (patrón D-8 del costo).
+  const impuestosAcc = impuestos ? runningSums(impuestos) : nulls
+  const netoDespuesImpuestosAcc = impuestos
+    ? impuestosAcc.map((value, m) => (netoAcc[m] === null ? null : netoAcc[m] - value))
+    : nulls
 
   const amountRow = (label, values, strong = false) => ({
     label,
@@ -510,7 +563,11 @@ const acumulado = computed(() => {
     amountRow('(−) Gastos acumulados', gastosAcc),
     pctRow('Gastos %', gastosAcc),
     amountRow('= Neto acumulado', netoAcc, true),
-    pctRow('Margen %', netoAcc)
+    pctRow('Margen %', netoAcc),
+    amountRow('(−) Impuestos acumulados', impuestosAcc),
+    pctRow('Impuestos %', impuestosAcc),
+    amountRow('= Neto después de impuestos acumulado', netoDespuesImpuestosAcc, true),
+    pctRow('Después de impuestos %', netoDespuesImpuestosAcc)
   ]
 })
 
@@ -537,14 +594,15 @@ const COST_EMPTY_ERROR =
 
 /** Nota al pie del P&G (§4.2) + cierre aritmético del Total (§3.3, R-2). */
 const PNL_NOTE =
-  'Cifras netas, sin IVA, por causación (budget_date). Ver “Vista Flujo” para liquidez.'
+  'Cifras netas, sin IVA, por causación (budget_date). Impuestos causados vienen del cálculo tributario; ver “Vista Flujo” para liquidez.'
 const PNL_TOTAL_NOTE = 'No incluye montos sin fecha de causación asignable.'
 const PNL_TOTAL_TITLE = 'Total = Σ de las 12 columnas mensuales del P&G.'
 
 /** Nota del Acumulado (§4.3) y aclaración de la redundancia del Total. */
 const ACUMULADO_NOTE =
   'Cada celda acumula de enero a ese mes; los porcentajes corren sobre los ' +
-  'ingresos acumulados del mes.'
+  'ingresos acumulados del mes. Impuestos por causación del cálculo tributario; ' +
+  'sin cálculo ejecutado se muestran en «—».'
 const ACUMULADO_TOTAL_TITLE = 'Total = acumulado a diciembre (Ene→Dic): repite la última columna.'
 
 /** Nota de exclusión §4.1 (ámbar `pv-warn`, nunca roja: es dato, no error). */
@@ -688,6 +746,8 @@ const blocks = computed(() => {
         </table>
       </div>
     </section>
+
+    <ScenarioTaxPnlSection :scenario="scenario" />
 
     <section v-if="hasIncomeRows" class="pv-block">
       <h4 class="pv-block-title">Acumulado (Ene→Mes)</h4>
