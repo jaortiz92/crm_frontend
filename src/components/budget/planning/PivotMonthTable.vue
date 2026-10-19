@@ -7,6 +7,8 @@
  * `pv-*`) y `CashFlowPivotTable` (clases `cf-*`):
  *  - RF-1.1: `table-layout: fixed` SIEMPRE con `<colgroup>` explícito.
  *  - RF-1.2: col 1 rótulo = 230px, sticky left.
+ *  - Total (2026-10): col Total sticky right - el scroll horizontal
+ *    recorre SOLO los meses; Concepto (left) y Total (right) quedan fijos.
  *  - RF-1.3: 12 meses de 106px, TODOS iguales entre sí y entre vistas (misma
  *    cuadrícula AC-1/AC-2: 230 + 12×106 + 116).
  *  - RF-1.4: col Total = 116px.
@@ -38,7 +40,7 @@ import { computed } from 'vue'
 /** RF-1.2: ancho de la col rótulo (CECO/Concepto). */
 const COL_LABEL_WIDTH = 230
 /** RF-1.3: ancho de cada mes (y de las columnas extra, RF-1.5). */
-const COL_MONTH_WIDTH = 106
+const COL_MONTH_WIDTH = 120
 /** RF-1.4: ancho de la col Total. */
 const COL_TOTAL_WIDTH = 116
 
@@ -132,6 +134,14 @@ const resolvedMinWidth = computed(() => {
   border-radius: 0;
   box-shadow: none;
   font-size: 0.78rem;
+  /* FIJA-VERTICAL/HORIZONTAL: el main.css global pinta table con
+   * overflow: hidden (para recortar las esquinas redondeadas). Ese
+   * overflow convierte a la propia tabla en scroll-container nunca
+   * desplazable, y las celdas sticky (rotulo left / Total right /
+   * thead top / tfoot bottom) se anclan a la caja de la tabla en vez
+   * de a .pt-scroll: TODO se mueve con el scroll. overflow: visible
+   * devuelve el anclaje al wrapper .pt-scroll (overflow: auto). */
+  overflow: visible;
 }
 
 /* ─── RF-6.4: overrides del `th` global (una sola vez, no por tabla) ───
@@ -156,11 +166,55 @@ const resolvedMinWidth = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   background-color: var(--color-surface-card, #ffffff);
+  box-shadow: inset -1px 0 0 0 var(--color-border-strong, rgba(97, 97, 97, 0.3));
 }
 
 /* Esquina superior izquierda: la cabecera gana el z-index (patrón vigente). */
 .pt-table thead th.pt-col-label {
   z-index: 5;
+}
+
+/* Col Total sticky right: el scroll horizontal recorre SOLO los meses.
+ * Concepto queda fijo a la izquierda (RF-1.2) y Total fijo a la derecha.
+ * El Total gana z-index sobre los meses (z 3) y queda bajo la esquina
+ * superior izquierda (z 5); el fondo opaco impide traslucir los meses
+ * que deslizan por debajo. En el Flujo, las columnas extra
+ * (Antes/Despues de {anio}) siguen al final del scroll, SIN fijarse:
+ * por DOM van despues del Total y con z menor, asi el Total pinned las
+ * cubre mientras hay desplazamiento pendiente. */
+.pt-table thead th.pt-col-total {
+  position: sticky;
+  right: 0;
+  z-index: 4;
+  box-shadow: inset 1px 0 0 0 var(--color-border-strong, rgba(97, 97, 97, 0.3));
+}
+
+/* Celdas del Total en el cuerpo: fondo OPACO imprescindible - si quedara
+ * transparente, los meses se verian a traves al deslizar debajo. */
+.pt-table :deep(tbody td.pt-cell-total) {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background-color: var(--color-surface-card, #ffffff);
+  box-shadow: inset 1px 0 0 0 var(--color-border-strong, rgba(97, 97, 97, 0.3));
+}
+
+/* Esquina Sigma Total x Total (tfoot): hereda sticky bottom de la regla
+ * general del tfoot (sin redeclarar position) y suma el anclaje right con
+ * un z superior al resto de las celdas del pie. */
+.pt-table :deep(tfoot td.pt-cell-total) {
+  right: 0;
+  z-index: 3;
+  box-shadow: inset 1px 0 0 0 var(--color-border-strong, rgba(97, 97, 97, 0.3));
+}
+
+/* Tema oscuro: el tfoot pinta las celdas con un fondo TRANSLUCIDO
+ * (rgba blanco 0.05). La esquina Sigma Total fijada a la derecha
+ * necesitan fondo OPACO de lo contrario trasluciria los meses que
+ * deslizan por debajo (defecto preexistente del tfoot dark, visible
+ * mucho mas con la columna fijada). */
+:root[data-theme='dark'] .pt-table :deep(tfoot td.pt-cell-total) {
+  background-color: var(--color-surface, #0f1d2e);
 }
 
 /* `th` pintados sobre fondo claro (esquina rótulo y etiquetas de fila):
@@ -203,9 +257,13 @@ const resolvedMinWidth = computed(() => {
   background-color: var(--color-surface, #f7f7f7);
 }
 
+/* S12-PIVOT-FIX: fila de totales con fondo SÓLIDO en tema oscuro — el rgba
+ * translúcido dejaba ver las celdas que deslizan por debajo (tfoot es
+ * sticky-bottom en el scroll del pivote), el mismo defecto ya corregido en
+ * la esquina Sigma Total x Total. --color-surface es sólido: #0f1d2e. */
 :root[data-theme='dark'] .pt-table :deep(tfoot th),
 :root[data-theme='dark'] .pt-table :deep(tfoot td) {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--color-surface, #0f1d2e);
 }
 
 .pt-table :deep(tfoot .pt-row-label) {
