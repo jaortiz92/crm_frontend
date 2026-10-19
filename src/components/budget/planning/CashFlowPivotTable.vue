@@ -373,6 +373,8 @@ function buildPivot(match, monthOf, amountOf = null) {
   const byCeco = new Map()
   const columnTotals = Array.from({ length: 12 }, () => 0)
   let grandTotal = 0
+  /** Hallazgo 5 (auditoría FE): Σ de montos con fecha efectiva ILEGIBLE. */
+  let undatedTotal = 0
 
   for (const line of lines.value) {
     if (!match(line)) continue
@@ -402,6 +404,11 @@ function buildPivot(match, monthOf, amountOf = null) {
     }
     if (bucket === -1) row.before += amount
     else if (bucket === 1) row.after += amount
+    // Hallazgo 5 (auditoría FE): fecha efectiva no parseable (month −1 con
+    // bucket 0) no puebla celda ni bucket Antes/Después pero SÍ suma al
+    // total anual ⇒ se contabiliza aparte para que el aviso del bloque
+    // explique la brecha "Σ meses + Antes/Después < Total anual".
+    if (month < 0 && bucket === 0) undatedTotal += amount
     row.total += amount
     grandTotal += amount
   }
@@ -415,7 +422,15 @@ function buildPivot(match, monthOf, amountOf = null) {
     afterTotal += row.after
     if (Math.abs(row.before) + Math.abs(row.after) > 0) beforeAfterRowCount += 1
   }
-  return { rows, columnTotals, grandTotal, beforeTotal, afterTotal, beforeAfterRowCount }
+  return {
+    rows,
+    columnTotals,
+    grandTotal,
+    beforeTotal,
+    afterTotal,
+    beforeAfterRowCount,
+    undatedTotal
+  }
 }
 
 /**
@@ -536,7 +551,16 @@ const variablesPivot = computed(() => {
   }
 
   const rows = [...byCeco.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'))
-  return { rows, columnTotals, grandTotal, beforeTotal: 0, afterTotal: 0, beforeAfterRowCount: 0 }
+  // Shape homogéneo con `buildPivot` (hallazgo 5): variables siempre ∈ N ⇒ 0.
+  return {
+    rows,
+    columnTotals,
+    grandTotal,
+    beforeTotal: 0,
+    afterTotal: 0,
+    beforeAfterRowCount: 0,
+    undatedTotal: 0
+  }
 })
 
 /** Nota del bloque estimado (§4.4) — FE-S18 RF-4.2: se importa de
@@ -1019,6 +1043,8 @@ const settlementPaymentsPivot = computed(() => {
   let beforeTotal = 0
   let afterTotal = 0
   let beforeAfterRowCount = 0
+  /** Hallazgo 5 (auditoría FE): Σ de pagos con vencimiento ilegible. */
+  let undatedTotal = 0
   for (const period of periods) {
     const payment = Number(period?.payment)
     if (!Number.isFinite(payment) || payment <= 0) continue
@@ -1034,6 +1060,7 @@ const settlementPaymentsPivot = computed(() => {
     }
     if (bucket === -1) before = payment
     else if (bucket === 1) after = payment
+    if (month < 0 && bucket === 0) undatedTotal += payment
     if (before + after !== 0) beforeAfterRowCount += 1
     beforeTotal += before
     afterTotal += after
@@ -1049,7 +1076,15 @@ const settlementPaymentsPivot = computed(() => {
     })
   }
   if (!rows.length || grandTotal <= 0) return null
-  return { rows, columnTotals, grandTotal, beforeTotal, afterTotal, beforeAfterRowCount }
+  return {
+    rows,
+    columnTotals,
+    grandTotal,
+    beforeTotal,
+    afterTotal,
+    beforeAfterRowCount,
+    undatedTotal
+  }
 })
 
 /**
@@ -1234,6 +1269,8 @@ function buildPivotFrom(rows) {
   const byCeco = new Map()
   const columnTotals = Array.from({ length: 12 }, () => 0)
   let grandTotal = 0
+  /** Hallazgo 5 (auditoría FE): Σ de cuotas con fecha efectiva ILEGIBLE. */
+  let undatedTotal = 0
 
   for (const item of rows) {
     const amount = Number(item.amount)
@@ -1264,6 +1301,8 @@ function buildPivotFrom(rows) {
     }
     if (bucket === -1) row.before += amount
     else if (bucket === 1) row.after += amount
+    // Hallazgo 5 (auditoría FE): misma contabilidad del caso ilegible.
+    if (month < 0 && bucket === 0) undatedTotal += amount
     row.total += amount
     grandTotal += amount
   }
@@ -1277,7 +1316,15 @@ function buildPivotFrom(rows) {
     afterTotal += row.after
     if (Math.abs(row.before) + Math.abs(row.after) > 0) beforeAfterRowCount += 1
   }
-  return { rows: out, columnTotals, grandTotal, beforeTotal, afterTotal, beforeAfterRowCount }
+  return {
+    rows: out,
+    columnTotals,
+    grandTotal,
+    beforeTotal,
+    afterTotal,
+    beforeAfterRowCount,
+    undatedTotal
+  }
 }
 
 /** Pivote del bloque derivado (CECO de ingreso × mes de PAGO). `null` ⇒ sin bloque. */
@@ -2317,6 +2364,14 @@ const carryBlockNote = computed(() => {
           </template>
         </PivotMonthTable>
         <p v-else class="cf-empty">Sin líneas de {{ block.emptyName }} en este escenario.</p>
+        <!-- Hallazgo 5 (auditoría FE): montos con fecha efectiva ILEGIBLE —
+             honestidad de reconciliación (mismo patrón `undatedTotal` del
+             bloque de impuestos): no viven en ningún mes ni en las columnas
+             Antes/Después; solo suman al Total anual del bloque. -->
+        <p v-if="block.pivot && block.pivot.undatedTotal > 0" class="cf-warn" role="status">
+          El bloque incluye {{ formatMoneyPlain(block.pivot.undatedTotal) }} con fecha ilegible: no
+          aparece en ningún mes ni en las columnas Antes/Después; solo suma al Total anual.
+        </p>
         <!-- FE-S18 RF-4.3: los pies por bloque — «Σ meses + fuera de año = total
              anual» (ON) y «El total anual incluye N filas fuera de año» (OFF) —
              SE QUITAN del render visible: la fórmula vive en la intro de tab

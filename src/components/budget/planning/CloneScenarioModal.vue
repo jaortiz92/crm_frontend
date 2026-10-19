@@ -252,8 +252,12 @@ onBeforeUnmount(() => {
           <p class="cl-preview-main">
             Σ Ingresos clonado ≈
             <strong>{{ previewTotal === null ? '—' : formatMoney(previewTotal) }}</strong>
-            <span class="cl-preview-formula">
-              ({{ formatMoney(scenario.total_income) }} × {{ 1 + (pctNumber || 0) / 100 }})
+            <!-- Hallazgo 8 (auditoría FE): la fórmula SOLO se muestra con un %
+                 válido — antes, un texto inválido (NaN) caía en `|| 0` y
+                 pintaba un engañoso "× 1" junto al valor '—'. Vacío ⇒ 0 es
+                 finito ⇒ "× 1" correcto (sin ajuste). -->
+            <span v-if="Number.isFinite(pctNumber)" class="cl-preview-formula">
+              ({{ formatMoney(scenario.total_income) }} × {{ 1 + pctNumber / 100 }})
             </span>
           </p>
           <p class="cl-preview-note">Las tasas variables se copian sin escalar.</p>

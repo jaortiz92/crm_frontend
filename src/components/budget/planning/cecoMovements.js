@@ -239,7 +239,7 @@ export const MOVEMENT_GROUP_FILTERS = [
   { value: GROUP_KEYS.basePurchase, label: 'Compras' },
   { value: GROUP_KEYS.payroll, label: 'Nómina' },
   { value: GROUP_KEYS.financing, label: 'Financiación' },
-  { value: GROUP_KEYS.capital, label: 'Capital de financiación' },
+  { value: GROUP_KEYS.principal, label: 'Capital de financiación' },
   { value: GROUP_KEYS.disbursement, label: 'Desembolsos' }
 ]
 

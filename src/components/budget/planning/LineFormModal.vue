@@ -289,6 +289,17 @@ const rateDecimal = computed(() =>
     : Number((ratePctNumber.value / 100).toFixed(6))
 )
 
+/**
+ * Tolerancia anti-drift del prefill de tasa (hallazgo 4 de auditoría FE):
+ * `prefillFromLine` muestra el % con 2 decimales, así que re-guardar la línea
+ * SIN tocar el campo recalcularía una fracción truncada (p. ej. 0.0833333 →
+ * 0.0833) y el PUT reescribiría la tasa sin intención del usuario. El drift
+ * máximo del prefill es medio paso de 0.01 % (⇒ 0.00005 de tasa); un cambio
+ * REAL desde el formulario es ≥ 0.0001 (un paso del %) y siempre supera el
+ * umbral, así que solo los re-guardados inocuos se suprimen.
+ */
+const RATE_PREFILL_DRIFT_TOLERANCE = 0.00005
+
 const yearValid = computed(() => {
   if (!form.budgetDate) return false
   // `input type=date` entrega ISO puro 'YYYY-MM-DD': se lee el año del string
@@ -448,11 +459,17 @@ const updatePayload = computed(() => {
     if (parsed.valid && parsed.value !== Number(original.projected_amount)) {
       payload.projected_amount = parsed.value
     }
-  } else if (
-    rateDecimal.value !== null &&
-    rateDecimal.value !== Number(original.variable_rate ?? NaN)
-  ) {
-    payload.variable_rate = rateDecimal.value
+  } else if (rateDecimal.value !== null) {
+    const originalRate = Number(original.variable_rate)
+    // Hallazgo 4 (auditoría FE, anti-drift): solo viaja la tasa si el cambio
+    // supera el paso del prefill (o la línea original no tenía tasa — NaN ⇒
+    // siempre viaja). Re-guardar sin tocar el campo conserva la tasa exacta.
+    if (
+      !Number.isFinite(originalRate) ||
+      Math.abs(rateDecimal.value - originalRate) > RATE_PREFILL_DRIFT_TOLERANCE
+    ) {
+      payload.variable_rate = rateDecimal.value
+    }
   }
   // FE-S14-IVA: `has_iva` viaja SOLO si el checkbox cambió respecto al valor
   // EFECTIVO original (NULL≡True, D-FE14-2 — backend.02_20 §5.2: PUT parcial

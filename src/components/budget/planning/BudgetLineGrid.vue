@@ -288,6 +288,25 @@ function purchaseIvaHint(line) {
   }
 }
 
+/**
+ * Hallazgo 7 (auditoría FE): `purchaseIvaHint` busca en el catálogo de CECOS
+ * y recorre términos por llamada, y el template la invocaba hasta 3 veces
+ * por celda (v-if + `label` + `title`). Este mapa la evalúa UNA sola vez por
+ * línea de compra con TODAS sus dependencias reactivas (modo IVA + catálogos
+ * de internación); las celdas solo leen el resultado O(1) por `rowKey`.
+ * @type {import('vue').ComputedRef<Map<string|number, { label: string, title: string }>>}
+ */
+const purchaseHintsByRowKey = computed(() => {
+  const map = new Map()
+  if (!props.ivaMode) return map
+  for (const line of lines.value) {
+    if (line.line_type !== 'purchase') continue
+    const hint = purchaseIvaHint(line)
+    if (hint) map.set(rowKey(line), hint)
+  }
+  return map
+})
+
 /** Comparador original del FE-S4, ahora parametrizado por sección (FD-7). */
 function sortRows(rows, sortKey, sortAsc) {
   const accessor = SORT_ACCESSORS[sortKey]
@@ -800,13 +819,18 @@ onBeforeUnmount(clearTimers)
                 <!-- FE-S14-IVA §4.1 (fila Cuadrícula Compras, solo modo ON): IVA
                      esperado = prov×0.19 + Σ cuotas_int×0.19 con tooltip
                      desglosado; la compra ya muestra su TOTAL, sin columnas
-                     nuevas. Con modo OFF o catálogo caído `purchaseIvaHint` es
-                     `null` ⇒ DOM idéntico al FE-S9 (AC-FE14-1). -->
+                     nuevas. Con modo OFF o catálogo caído el mapa no trae
+                     entrada ⇒ DOM idéntico al FE-S9 (AC-FE14-1). Hallazgo 7
+                     (auditoría FE): el hint se lee del mapa memoizado
+                     `purchaseHintsByRowKey` (evaluación única por línea). -->
                 <span
-                  v-if="(editingId === null || editingId !== rowKey(line)) && purchaseIvaHint(line)"
+                  v-if="
+                    (editingId === null || editingId !== rowKey(line)) &&
+                    purchaseHintsByRowKey.get(rowKey(line))
+                  "
                   class="gl-iva-hint"
-                  :title="purchaseIvaHint(line).title"
-                  >{{ purchaseIvaHint(line).label }}</span
+                  :title="purchaseHintsByRowKey.get(rowKey(line)).title"
+                  >{{ purchaseHintsByRowKey.get(rowKey(line)).label }}</span
                 >
                 <span
                   v-if="cellStatus[line.id_budget_line] === 'saving'"

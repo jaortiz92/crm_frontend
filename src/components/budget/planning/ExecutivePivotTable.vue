@@ -9,7 +9,7 @@
  * Ingresos, Costo de ventas estimado (FE-S4C), Gastos fijos (filas = CECO
  * agrupando todas sus líneas, columnas = Ene–Dic del `budget_year`, celda =
  * Σ del mes, totales por fila/columna), un tercer bloque estimado "Gastos
- * variables (calculados)": cada línea `variable_sales`/`variable_receivables`
+ * variables (calculados)": cada línea de GASTO `variable_sales`/`variable_receivables`
  * aporta `tasa × Σ ingresos presupuestados del mes de su `budget_date`
  * (réplica client-side de la regla de `budgetEngine.project_cash_flow`,
  * Opción A), y — tras él — "Resultado (P&G)" y "Acumulado (Ene→Mes)"
@@ -177,9 +177,21 @@ const lines = computed(() =>
 /** Líneas de costo fijo (base del pivote): `behavior_type === 'fixed'`. */
 const fixedLines = computed(() => lines.value.filter((line) => line.behavior_type === 'fixed'))
 
-/** Líneas variables crudas: alimentan el pivote estimado Y la tabla de tasas (§8.2). */
+/** Líneas variables crudas: alimentan la tabla de tasas (§8.2, todos los tipos). */
 const variableSourceLines = computed(() =>
   lines.value.filter((line) => line.behavior_type !== 'fixed')
+)
+
+/**
+ * Fuente del pivote estimado: SOLO líneas de GASTO variable. El motor backend
+ * (`budgetEngine.project_cash_flow`) filtra `line_type == "expense"` en ambas
+ * consultas variables (variable_sales/variable_receivables) y una línea de
+ * INGRESO variable no es gasto (su `projected_amount` además se fuerza a 0
+ * por BR-LINE-03). Espejo del filtro de `CashFlowPivotTable
+ * .variableSourceLines` — cero divergencia Ejecutiva/Flujo/motor.
+ */
+const variableExpenseLines = computed(() =>
+  variableSourceLines.value.filter((line) => line.line_type === 'expense')
 )
 
 /** Detalle por línea de las variables: tabla de tasas de solo lectura. */
@@ -242,8 +254,9 @@ const expensePivot = computed(() => buildPivot('expense'))
 
 /**
  * Pivote ESTIMADO de gastos variables (Opción A, réplica client-side de la
- * regla de `budgetEngine.project_cash_flow`): cada línea variable `v` aporta
- * `tasa_v × ingresos del mes de v` a la celda `monthIndexOf(v.budget_date)`,
+ * regla de `budgetEngine.project_cash_flow`): cada línea variable de GASTO
+ * `v` aporta `tasa_v × ingresos del mes de v` a la celda
+ * `monthIndexOf(v.budget_date)`,
  * donde `ingresos del mes` se reutiliza de `incomePivot.columnTotals` —
  * misma fuente agregada que el bloque Ingresos → coherencia garantizada y
  * recálculo reactivo gratis al editar montos en el Editor de Celdas.
@@ -255,7 +268,7 @@ const expensePivot = computed(() => buildPivot('expense'))
  * neto del mes y no recibe gross-up (la Ejecutiva nunca muestra IVA).
  */
 function buildVariablePivot() {
-  const source = variableSourceLines.value
+  const source = variableExpenseLines.value
   const incomeTotals = incomePivot.value.columnTotals
   if (!source.length || !incomeTotals.some((value) => value !== 0)) return null
 
@@ -834,7 +847,7 @@ const blocks = computed(() => {
           </td>
           <td
             :class="[
-              row.isPct ? 'pt-cell-pct' : 'pt-cell-money pt-cell-total',
+              row.isPct ? 'pt-cell-pct pt-cell-total' : 'pt-cell-money pt-cell-total',
               { 'pt-negative': row.total.negative }
             ]"
             :title="row.isPct ? ACUMULADO_TOTAL_TITLE : (row.total.title ?? ACUMULADO_TOTAL_TITLE)"

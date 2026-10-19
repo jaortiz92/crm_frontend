@@ -987,8 +987,8 @@ function backToPlanning() {
 .ge-header-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  align-items: flex-start;
+  gap: 12px 18px;
+  align-items: center;
   justify-content: flex-end;
 }
 
@@ -996,7 +996,7 @@ function backToPlanning() {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  align-items: flex-end;
+  align-items: center;
 }
 
 .ge-carry-pill {
@@ -1062,7 +1062,7 @@ function backToPlanning() {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  align-items: flex-end;
+  align-items: center;
 }
 
 .ge-mode-caption {

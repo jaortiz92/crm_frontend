@@ -232,8 +232,37 @@ export function monthIndexOf(value) {
 }
 
 /**
+ * Normalización de la puntuación `es-CO` de un monto tecleado/pegado a texto
+ * `Number`-parseable (hallazgo 3 de auditoría FE): el propio módulo PINTA los
+ * montos con puntos de miles (`formatMoneyPlain` → `1.234.567`), así que
+ * teclear o pegar el valor mostrado debe ser idempotente:
+ *  - Con coma: el ÚLTIMO separador es el decimal y el otro es de miles
+ *    ("1.234,5" → "1234.5" es-CO · "1,234.5" → "1234.5" en-US).
+ *  - Solo coma: coma decimal ("12,5" → "12.5", comportamiento ASM-12 original).
+ *  - Solo puntos: agrupación ESTRICTA de miles es-CO (`\d{1,3}(\.\d{3})+`,
+ *    p. ej. "1.234" → "1234", "1.234.567" → "1234567") se colapsa; cualquier
+ *    otra forma ("1234.56", "1234.5") conserva el punto decimal estándar.
+ * @param {string} text texto ya recortado
+ * @returns {string}
+ */
+function normalizeEsCOAmount(text) {
+  const hasComma = text.includes(',')
+  const hasDot = text.includes('.')
+  if (hasComma && hasDot) {
+    return text.lastIndexOf(',') > text.lastIndexOf('.')
+      ? text.replace(/\./g, '').replace(/,/g, '.')
+      : text.replace(/,/g, '')
+  }
+  if (hasComma) return text.replace(/,/g, '.')
+  if (hasDot && /^\d{1,3}(\.\d{3})+$/.test(text)) return text.replace(/\./g, '')
+  return text
+}
+
+/**
  * Validación pre-red de la celda del grid (§8.2, ASM-12): numérico, finito y
- * `>= 0`. Acepta el separador decimal de la coma `es-CO` ("12,5" → 12.5).
+ * `>= 0`. Acepta la puntuación `es-CO` que el propio módulo pinta: coma
+ * decimal ("12,5" → 12.5) y puntos de miles ("1.234" → 1234,
+ * "1.234.567" → 1234567, "1.234,5" → 1234.5 — `normalizeEsCOAmount`).
  * @param {string|number} raw
  * @returns {{ valid: boolean, value: number }}
  */
@@ -245,7 +274,7 @@ export function parseCellAmount(raw) {
   }
   const text = String(raw ?? '').trim()
   if (!text) return { valid: false, value: 0 }
-  const num = Number(text.includes(',') && !text.includes('.') ? text.replace(',', '.') : text)
+  const num = Number(normalizeEsCOAmount(text))
   return Number.isFinite(num) && num >= 0 ? { valid: true, value: num } : { valid: false, value: 0 }
 }
 
