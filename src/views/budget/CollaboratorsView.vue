@@ -355,6 +355,71 @@ async function confirmTerminate() {
   }
 }
 
+/* ───────────────── eliminar colaborador (S12-COLLAB-DELETE) ───────────────── */
+
+const deleteTarget = ref(null)
+const deleteConfirmText = ref('')
+const deleteBusy = ref(false)
+const deleteError = ref('')
+
+function openDelete(item) {
+  deleteTarget.value = item
+  deleteConfirmText.value = ''
+  deleteError.value = ''
+}
+
+function cancelDelete() {
+  if (deleteBusy.value) return
+  deleteTarget.value = null
+  deleteConfirmText.value = ''
+  deleteError.value = ''
+}
+
+/** Confirmación tipada: nombre completo O documento (case-insensitive, trimmed). */
+const canConfirmDelete = computed(() => {
+  const item = deleteTarget.value
+  if (!item) return false
+  const typed = deleteConfirmText.value.trim().toLowerCase()
+  if (!typed) return false
+  const fullName = String(item.full_name ?? '').trim().toLowerCase()
+  const docValue = String(item.doc_value ?? '').trim().toLowerCase()
+  return typed === fullName || (docValue !== '' && typed === docValue)
+})
+
+async function confirmDelete() {
+  const item = deleteTarget.value
+  if (!item || deleteBusy.value) return
+  deleteBusy.value = true
+  deleteError.value = ''
+  try {
+    const response = await budgetCollaboratorService.deleteCollaborator(item.id_collaborator)
+    const removedName = response?.data?.full_name ?? item.full_name
+    const removedLines = Number(response?.data?.deleted_budget_lines ?? 0)
+    alertService.generalSucces(
+      `Colaborador eliminado: ${removedName} (${removedLines} líneas de presupuesto removidas)`
+    )
+    deleteTarget.value = null
+    deleteConfirmText.value = ''
+    breakdownToken.value += 1
+    await fetchList()
+  } catch (err) {
+    const result = classifyCollaboratorError(err)
+    if (result.kind === 'forbidden') {
+      deleteError.value = result.message || 'No tiene permiso para eliminar colaboradores.'
+    } else if (result.kind === 'notfound') {
+      // La fila del listado quedó obsoleta (ya no existe en el BE): refresca.
+      deleteError.value = result.message || 'El colaborador ya no existe.'
+      await fetchList()
+    } else if (result.kind === 'network') {
+      deleteError.value = 'Sin conexión con el servidor. Reintente.'
+    } else {
+      deleteError.value = result.message || 'No se pudo eliminar el colaborador.'
+    }
+  } finally {
+    deleteBusy.value = false
+  }
+}
+
 /* ─────────────────────── recalcular mes (D-FE15-9) ─────────────────────── */
 
 const recalcOpen = ref(false)
@@ -629,6 +694,15 @@ const maskedTooltip = 'Información salarial restringida para su rol (Ley 1581/2
                   >
                     Terminar
                   </button>
+                  <button
+                    v-if="canEdit"
+                    type="button"
+                    class="btn btn-danger btn-sm"
+                    title="Eliminar permanentemente el colaborador y sus líneas de presupuesto"
+                    @click="openDelete(item)"
+                  >
+                    Eliminar
+                  </button>
                 </div>
               </td>
             </tr>
@@ -800,6 +874,86 @@ const maskedTooltip = 'Información salarial restringida para su rol (Ley 1581/2
           >
             <span v-if="terminateBusy" class="collab-spinner" aria-hidden="true"></span>
             {{ terminateBusy ? 'Terminando…' : 'Terminar y liquidar' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Eliminar colaborador (S12-COLLAB-DELETE): confirmación tipada, irreversible -->
+    <div
+      v-if="deleteTarget"
+      class="collab-overlay"
+      @mousedown="
+        (event) => {
+          if (event.target === event.currentTarget) cancelDelete()
+        }
+      "
+    >
+      <div
+        class="collab-dialog collab-dialog-narrow"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-title"
+      >
+        <header class="collab-modal-header">
+          <div>
+            <h3 id="delete-title" class="collab-modal-title">Eliminar colaborador</h3>
+            <p class="collab-modal-sub">
+              {{ deleteTarget.full_name }} ({{ deleteTarget.doc_value }})
+            </p>
+          </div>
+          <button
+            type="button"
+            class="collab-x"
+            :disabled="deleteBusy"
+            aria-label="Cerrar ventana"
+            @click="cancelDelete"
+          >
+            ✕
+          </button>
+        </header>
+
+        <div class="collab-modal-body">
+          <p class="collab-banner">
+            Esta acción es PERMANENTE y no se puede deshacer. Se eliminarán el maestro, todo su
+            historial de planes salariales, sus causaciones de provisiones y TODAS las líneas de
+            presupuesto de nómina generadas por el motor en todos los escenarios.
+          </p>
+
+          <label class="filter-field">
+            <span class="filter-label">
+              Para confirmar, escriba el nombre completo o el documento del colaborador:
+            </span>
+            <input
+              v-model="deleteConfirmText"
+              class="filter-input"
+              type="text"
+              :disabled="deleteBusy"
+              :placeholder="deleteTarget.full_name"
+              autocomplete="off"
+            />
+          </label>
+
+          <p v-if="deleteError" class="collab-banner" role="alert">{{ deleteError }}</p>
+        </div>
+
+        <footer class="collab-modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="deleteBusy"
+            @click="cancelDelete"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="btn btn-danger"
+            :disabled="deleteBusy || !canConfirmDelete"
+            @click="confirmDelete"
+          >
+            <span v-if="deleteBusy" class="collab-spinner" aria-hidden="true"></span>
+            {{ deleteBusy ? 'Eliminando…' : 'Eliminar definitivamente' }}
           </button>
         </footer>
       </div>

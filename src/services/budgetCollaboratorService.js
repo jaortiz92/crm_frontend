@@ -79,6 +79,17 @@ export const budgetCollaboratorService = {
     })
   },
 
+  /**
+   * Eliminación PERMANENTE del colaborador (S12-COLLAB-DELETE): borra maestro +
+   * planes salariales + causaciones + líneas de presupuesto del motor (BR-D2).
+   * 200 ⇒ {id_collaborator, full_name, deleted_salary_plans,
+   * deleted_provision_accruals, deleted_budget_lines}.
+   * @param {number|string} id
+   */
+  deleteCollaborator(id) {
+    return axiosInstance.delete(`/budget/collaborator/${id}`)
+  },
+
   /* ───────────────────────────── motor / lecturas ───────────────────────────── */
 
   /**
