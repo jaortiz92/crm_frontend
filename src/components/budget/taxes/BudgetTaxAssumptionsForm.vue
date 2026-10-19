@@ -29,6 +29,10 @@ const useBudgetIncome = ref(true)
 const feedback = ref('')
 const feedbackKind = ref('')
 const loadingBudget = ref(false)
+// S12-TAX-FE-3: intención del usuario — al cambiar régimen/perfil a mano, el
+// formulario DEJA de re-sincronizarse desde los supuestos persistidos hasta
+// que el guardado tenga éxito (elimina toda reversión del select).
+let userOverride = false
 
 const form = reactive({
   taxable_income_adjustments: 0,
@@ -129,8 +133,14 @@ function loadAssumptionIntoForm(assumption) {
 function selectDefaultProfile() {
   const assumptionProfile = profilesForRegime.value.find((profile) => String(profileId(profile)) === String(store.assumptions?.id_tax_profile))
   const profile = assumptionProfile || profilesForRegime.value.find((item) => profileStatus(item) === 'active') || profilesForRegime.value[0]
+  // S12-TAX-FE-3: solo ajusta el PERFIL seleccionado — jamás re-ancla el
+  // formulario a los supuestos persistidos (esa era la reversión del select:
+  // loadAssumptionIntoForm reponía el perfil/régimen guardados a mitad de edición).
   selectedProfileId.value = profile ? String(profileId(profile)) : ''
-  if (profile && store.assumptions?.id_tax_profile !== profileId(profile)) loadAssumptionIntoForm(store.assumptions)
+}
+
+function onManualProfileChange() {
+  userOverride = true
 }
 
 async function ensureBudgetLoaded() {
@@ -209,6 +219,7 @@ async function save() {
     return
   }
 
+  userOverride = false // guardado exitoso: volver a sincronizar desde lo persistido
   await Promise.all([
     store.loadBudget(props.idBudget),
     planningStore.fetchScenarioDetail(Number(props.idBudget), true)
@@ -218,13 +229,25 @@ async function save() {
 }
 
 async function changeRegime() {
+  userOverride = true
   store.selectedRegime = selectedRegime.value
   const profile = profilesForRegime.value.find((item) => profileStatus(item) === 'active') || profilesForRegime.value[0]
   selectedProfileId.value = profile ? String(profileId(profile)) : ''
-  await store.loadConfiguration(taxYear.value, selectedRegime.value)
+  // S12-TAX-FE-1: NO llamar store.loadConfiguration() aqui. Ese metodo alterna
+  // `store.loading`, y BudgetTaxesView desmonta este formulario mientras
+  // carga; al remontarse, onMounted re-deduce el estado desde los supuestos
+  // persistidos y el select vuelve a 'ordinary' (perfil guardado del
+  // presupuesto). El catalogo de perfiles ya esta completo en el store
+  // (Opcion 1): basta refrescar tarifas/calendario con los loaders
+  // dedicados, que usan flags propios y no desmontan nada.
+  await Promise.allSettled([
+    store.loadRates(taxYear.value),
+    store.loadCalendar(taxYear.value, selectedRegime.value)
+  ])
 }
 
 watch(() => store.assumptions, (assumption) => {
+  if (userOverride) return // el usuario está editando: no re-sincronizar
   loadAssumptionIntoForm(assumption)
 }, { deep: true, immediate: true })
 
@@ -279,7 +302,7 @@ onMounted(async () => {
       </label>
       <label>
         Perfil tributario {{ taxYear }}
-        <select v-model="selectedProfileId" :disabled="!canEdit || !profilesForRegime.length">
+        <select v-model="selectedProfileId" :disabled="!canEdit || !profilesForRegime.length" @change="onManualProfileChange">
           <option value="">Selecciona un perfil</option>
           <option v-for="profile in profilesForRegime" :key="profileId(profile)" :value="String(profileId(profile))">
             {{ profile.profile_name }} · {{ profileStatus(profile) }}

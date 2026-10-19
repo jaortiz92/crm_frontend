@@ -17,7 +17,14 @@ const annualCashOutflow = computed(() =>
     0
   )
 )
-const isSimple = computed(() => summary.value.regime === 'simple' || store.activeProfile?.regime === 'simple' || store.selectedRegime === 'simple')
+// S12-TAX-FE-2: el régimen mostrado es el PERSISTIDO (resumen del backend o
+// filas calculadas), nunca el último dropdown tocado — si no, el panel podía
+// etiquetar métricas ordinarias como SIMPLE tras solo tocar el selector.
+const isSimple = computed(() => {
+  if (summary.value.regime != null) return summary.value.regime === 'simple'
+  if (results.value.length) return results.value.some((row) => row.tax_type === 'simple')
+  return store.activeProfile?.regime === 'simple'
+})
 const currency = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 2 })
 
 function aggregate(key, predicate = () => true) {

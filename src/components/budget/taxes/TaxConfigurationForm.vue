@@ -73,10 +73,20 @@ function profileValues(profile) {
   }
 }
 
+// S12-TAX-FE-3: recordar el último perfil editado (SOLO su id — un metadato,
+// no montos salariales — NFR-FE-2) en sessionStorage: muere con la pestaña y
+// la recarga reabre el perfil que el usuario estaba editando, no el Activo.
+const LAST_PROFILE_KEY = 'taxProfile:lastEditedId'
+
 function setFormFromProfile(profile) {
   Object.assign(form, profileValues(profile))
   selectedProfileId.value = String(profileId(profile))
   store.selectedRegime = form.regime
+  try {
+    sessionStorage.setItem(LAST_PROFILE_KEY, String(profileId(profile)))
+  } catch {
+    /* almacenamiento no disponible: la selección simplemente no se recuerda */
+  }
 }
 
 function clearForm({ keepContext = true } = {}) {
@@ -91,6 +101,34 @@ function selectActiveOrFirstProfile() {
 
   if (profile) setFormFromProfile(profile)
   else clearForm()
+}
+
+// S12-TAX-FE-2: la carga inicial muestra el perfil VIGENTE del año (activo,
+// cualquier régimen) para que recargar la página no "regrese" al contexto
+// ordinario cuando el perfil activo es de otro régimen.
+function selectInitialProfile() {
+  const yearActive = allProfiles.value.find((profile) => (
+    Number(profile.tax_year) === Number(form.tax_year) && profileStatus(profile) === 'active'
+  ))
+  if (yearActive) setFormFromProfile(yearActive)
+  else selectActiveOrFirstProfile()
+}
+
+function selectLastOrDefault() {
+  let lastId = ''
+  try {
+    lastId = sessionStorage.getItem(LAST_PROFILE_KEY) || ''
+  } catch {
+    lastId = ''
+  }
+  const last = lastId
+    ? allProfiles.value.find((profile) => (
+        String(profileId(profile)) === String(lastId)
+        && Number(profile.tax_year) === Number(form.tax_year)
+      ))
+    : null
+  if (last) setFormFromProfile(last)
+  else selectInitialProfile()
 }
 
 function selectProfile() {
@@ -115,6 +153,16 @@ async function changeRegime() {
   store.selectedRegime = form.regime
   clearForm()
   await changeContext()
+}
+
+// S12-TAX-FE-2: al EDITAR un perfil existente el régimen es un campo más del
+// formulario y lo persiste "Actualizar perfil" (el backend valida el cupo de
+// un activo por año/régimen). El comportamiento de cambio de contexto
+// (limpiar y auto-seleccionar el activo del nuevo régimen) queda solo para
+// el alta, que aún no está atado a ningún perfil.
+function onRegimeChange() {
+  if (isEditing.value) return
+  void changeRegime()
 }
 
 function loadExample() {
@@ -195,7 +243,7 @@ watch(() => store.profiles, () => {
 
 // The initial catalog is already loaded by BudgetTaxesView before this form
 // is rendered, but this also covers mounting the component in isolation.
-selectActiveOrFirstProfile()
+selectLastOrDefault()
 </script>
 
 <template>
@@ -240,7 +288,7 @@ selectActiveOrFirstProfile()
       </label>
       <label>
         Régimen
-        <select v-model="form.regime" @change="changeRegime">
+        <select v-model="form.regime" @change="onRegimeChange">
           <option value="ordinary">Ordinario</option>
           <option value="simple">SIMPLE</option>
         </select>

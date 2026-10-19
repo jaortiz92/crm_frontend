@@ -37,6 +37,9 @@ async function loadPage() {
   }
   ready.value = true
 }
+// S12-TAX-FE-3: marcador verificable en consola — si NO aparece tras un F5,
+// el navegador está ejecutando un bundle obsoleto (caché).
+console.log('[taxes] build S12-TAX-FE-3 activo: régimen/perfil persisten sin recargas')
 onMounted(loadPage)
 watch(idBudget, async (next, previous) => { if (next && next !== previous) { store.$reset(); await loadPage() } })
 function print() { window.print() }
@@ -44,7 +47,7 @@ function print() { window.print() }
 <template>
   <main class="tax-page"><header class="tax-hero"><div><span class="eyebrow">Planeación tributaria · {{ store.taxYear }}</span><h1>{{ idBudget ? 'Impacto tributario del presupuesto' : 'Configuración tributaria' }}</h1><p>Separa lo que se causa de lo que realmente sale de caja.</p></div><button v-if="idBudget" class="btn btn-secondary" @click="print">Imprimir / exportar</button></header>
     <nav class="tax-tabs" aria-label="Secciones tributarias"><button v-for="tab in tabs" :key="tab.key" :class="{ active: section === tab.key }" @click="go(tab.key)">{{ tab.label }}</button></nav>
-    <div v-if="!ready || store.loading" class="tax-loading">Cargando información tributaria…</div><div v-else-if="store.error" class="tax-error"><strong>No fue posible cargar los datos.</strong> {{ store.error }} <button class="btn btn-secondary" @click="loadPage">Reintentar</button></div>
+    <div v-if="!ready" class="tax-loading">Cargando información tributaria…</div><div v-else-if="store.error" class="tax-error"><strong>No fue posible cargar los datos.</strong> {{ store.error }} <button class="btn btn-secondary" @click="loadPage">Reintentar</button></div>
     <template v-else-if="section === 'configuration'"><TaxConfigurationForm :id-budget="idBudget" /><BudgetTaxAssumptionsForm v-if="idBudget" :id-budget="idBudget" /><TaxSummaryPanel v-if="idBudget" :id-budget="idBudget" /></template>
      <BudgetTaxRatesPanel v-else-if="section === 'rates'" />
      <TaxCalendarTable v-else-if="section === 'calendar'" />
