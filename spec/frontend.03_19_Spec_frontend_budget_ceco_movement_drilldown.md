@@ -174,3 +174,18 @@ Separados a lo largo de dos pestañas: **"Causado"** (P&G, mes de `budget_date`)
 | RF-8.10 | La celda CECO de la **Vista Flujo** (`CashFlowPivotTable`) navega con query `?tab=flow`; `CecoDetailView` inicializa el tab activo en **"Flujo"** cuando llega con esa query y en **"Causado"** en cualquier otro caso (incluida la Vista Ejecutiva). Al cambiar de tab dentro del detalle, la query se actualiza con `router.replace` (deep-link sin recargos de datos ni entradas al historial). |
 
 **AC-14:** click en la celda de un CECO en "Salidas — Capital de financiación" (o cualquier bloque de Flujo) → el detalle abre directamente en tab "Flujo" con la URL `.../ceco/{code}?tab=flow`; click desde la Vista Ejecutiva → abre en "Causado" sin query.
+
+## 11. REVISION 4 (2026-10-20) - Drill-down de "Gastos variables (calculados)" (Opcion B)
+
+| Regla | Detalle |
+|---|---|
+| RF-11.1 | El bloque "Gastos variables (calculados)" de la Vista Ejecutiva gana el drill-down del RF-1: sus celdas de CECO pasan a `linkable: true` (`ExecutivePivotTable.vue`). "Costo de ventas (estimado)" continua SIN enlace (no hay `budget_lines` que lo reproduzcan). |
+| RF-11.2 | Justificacion: el pivote variable SI nace de `budget_lines` reales (gasto, `behavior_type != 'fixed'`), pero su valor de matriz es `tasa × Σ ingresos fijos del mes de causacion` (`buildVariableExpensePivot`, replica de `budgetEngine.project_cash_flow`). El drill-down debe mostrar esa MISMA cifra para cuadrar 1:1 con la matriz. |
+| RF-11.3 | CECO detalle, tab "Causado" (y pivot `CecoMovementTable`/`CecoMovementPivot`): los movimientos base de gasto VARIABLE muestran el monto RECONCILIADO `Number(variable_rate) × ingresosFijos[m(budget_date)]` (los ingresos fijos por mes de causacion provienen del MISMO modelo compartido de la Ejecutiva). La tasa sigue visible en su columna; el crudo queda en tooltip. Linea con mes invalido (o mes sin ingresos) ⇒ aporta 0, igual que la matriz. |
+| RF-11.4 | CECO detalle, tab "Flujo": misma cifra reconciliada, replicando el bloque estimado de `cashFlowPivot.js` (`variablesPivot`, D-5: base = Σ ingresos fijos por mes de CAUSACION, columna = posicionamiento de flujo del RF-8.5, "Sin fecha de pago" incluida). |
+| RF-11.5 | Exportacion FE-S20 (spec `frontend.03_20`): `buildCecoSheets` exporta los montos reconciliados (1:1 con pantalla, CA-2). Las hojas de matriz Ejecutiva/Flujo no cambian. |
+| RF-11.6 | Cero HTTP y cero cambios de backend: los ingresos fijos por mes derivan de la MISMA cachem `budget_lines` del store (ASM-10). |
+
+AC-15: en `/budget/planning/573` la celda CECO del bloque "Gastos variables (calculados)" es un enlace con affordance (cursor + hover) que navega al detalle resolviendo el codigo contra el catalogo.
+AC-16: en el detalle, la suma CECO x mes del tab Causado del grupo gastos variable cuadra EXACTO con la fila de ese CECO en el bloque "Gastos variables (calculados)" de la Ejecutiva; la del tab Flujo con el bloque "Salidas - Gastos variables (calculados)" del Flujo (por mes de posicion).
+AC-17: el CSV/XLSX del detalle de CECO exporta los mismos montos reconciliados que se muestran en pantalla.

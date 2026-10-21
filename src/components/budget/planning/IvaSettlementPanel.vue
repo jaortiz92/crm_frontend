@@ -37,6 +37,18 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import { formatMoney, formatDateEs, IVA_RATE } from './planningFormat.js'
+/**
+ * FE-S20 (spec `frontend.03_20` §7.2): las derivaciones de la tabla
+ * (`periodRows`, `totals`, `unassigned`, `warnings`) viven en el modelo
+ * compartido `ivaSettlementModel.js` — LAS MISMAS filas que consume la
+ * exportación del tab "Liquidación"; aquí queda solo la presentación
+ * (tooltips desglosados con el formatador del panel, chips y acciones).
+ */
+import {
+  DEDUCTIBLE_KEYS,
+  breakdownTitle,
+  buildIvaSettlementViewModel
+} from './ivaSettlementModel.js'
 
 const props = defineProps({
   /** Escenario dueño de la liquidación (padre: `BudgetGridEditor`). */
@@ -49,6 +61,13 @@ const budgetPlanningStore = useBudgetPlanningStore()
 /** Caché viva del store (patrón `carryover`: SOLO lee; mutar = acciones). */
 const settlement = computed(() => budgetPlanningStore.settlement)
 const data = computed(() => settlement.value.data)
+
+/** Modelo compartido FE-S20: filas/totales/unassigned/warnings del payload. */
+const viewModel = computed(() => buildIvaSettlementViewModel(data.value))
+const periodRows = computed(() => viewModel.value.periodRows)
+const totals = computed(() => viewModel.value.totals)
+const unassigned = computed(() => viewModel.value.unassigned)
+const warnings = computed(() => viewModel.value.warnings)
 
 const year = computed(() => data.value?.year ?? settlement.value.year ?? null)
 
@@ -65,98 +84,35 @@ const taxRateLabel = computed(() => `${Number((taxRate.value * 100).toFixed(2))}
 /** Chip de base — el contrato §4.6 fija `basis: "cash"` (proyectado). */
 const basisLabel = computed(() => (data.value?.basis === 'cash' ? 'Proyectado (base caja)' : ''))
 
-/* ─────────────── Filas de la tabla (derivación pura de `periods[]`) ─────────────── */
+/* ─── Tooltips desglosados por fila (presentación del panel; FE-S20) ─── */
 
-const DEDUCTIBLE_KEYS = [
-  { key: 'fixed_expenses', label: 'Gastos fijos (E2)' },
-  { key: 'variable_expenses', label: 'Gastos variables (E3/E4)' },
-  { key: 'import_vat', label: 'IVA de importación (E5)' },
-  { key: 'nationalization_vat', label: 'IVA de internación (E6)' }
-]
-
-/** Σ de un dict concepto→monto (`generated` solo trae `ventas` hoy). */
-function sumBreakdown(bucket) {
-  if (!bucket || typeof bucket !== 'object') return 0
-  let total = 0
-  for (const value of Object.values(bucket)) {
-    const num = Number(value)
-    if (Number.isFinite(num)) total += num
-  }
-  return total
+/**
+ * Tooltip desglosado `concepto: monto` por línea (evita comas de miles):
+ * se arma en el panel con el formatador propio sobre los BUCKETS CRUDOS que
+ * el modelo compartido conserva por fila (`generatedBucket`/`deductibleBucket`).
+ * @param {object|null|undefined} bucket
+ * @param {Array<{key: string, label: string}>} entries
+ * @returns {string}
+ */
+function bucketTitle(bucket, entries) {
+  return breakdownTitle(bucket, entries, (value) => formatMoney(value))
 }
 
-/** Tooltip desglosado `concepto: monto` por línea (evita comas de miles). */
-function breakdownTitle(bucket, entries) {
-  if (!bucket || typeof bucket !== 'object') return ''
-  return entries
-    .map((entry) => `${entry.label}: ${formatMoney(Number(bucket[entry.key]) || 0)}`)
-    .join(' · ')
-}
-
-const periodRows = computed(() => {
-  const periods = Array.isArray(data.value?.periods) ? data.value.periods : []
-  return periods.map((period) => {
-    const generated = sumBreakdown(period?.generated)
-    const deductible = sumBreakdown(period?.deductible)
-    const payment = Number(period?.payment)
-    const carry = Number(period?.carry_balance)
-    return {
-      id: `${period?.period_no ?? 'p'}-${period?.date_from ?? ''}`,
-      periodNo: period?.period_no ?? null,
-      dateFrom: period?.date_from ?? null,
-      dateTo: period?.date_to ?? null,
-      dueDate: period?.payment_due_date ?? null,
-      description: period?.description ?? '',
-      generated,
-      generatedTitle: breakdownTitle(period?.generated, [
-        { key: 'ventas', label: 'Ventas (E1)' }
-      ]),
-      deductible,
-      deductibleParts: DEDUCTIBLE_KEYS.map((entry) => ({
-        ...entry,
-        value: Number(period?.deductible?.[entry.key]) || 0
-      })),
-      deductibleTitle: breakdownTitle(period?.deductible, DEDUCTIBLE_KEYS),
-      priorBalance: Number(period?.prior_balance) || 0,
-      taxBase: Number(period?.tax_base) || 0,
-      payment: Number.isFinite(payment) ? payment : 0,
-      carryBalance: Number.isFinite(carry) ? carry : 0,
-      eventsCount: Number(period?.events_count) || 0
-    }
-  })
-})
-
-/** Fila Totales: los objetos `totals`/`unassigned` del BE mandan (§4.6). */
-const totals = computed(() => {
-  const raw = data.value?.totals
-  if (!raw || typeof raw !== 'object') return null
-  return {
-    generated: Number(raw.generated) || 0,
-    // CLAVE LITERAL DEL CONTRATO: `deductable` (sic backend.02_20 §4.6).
-    deductable: Number(raw.deductable) || 0,
-    payments: Number(raw.payments) || 0,
-    finalBalance: Number(raw.final_balance) || 0
+/** Tooltip del desglose descontable por concepto (E2–E6) de cada fila. */
+const rowTitles = computed(() => {
+  const map = new Map()
+  for (const row of periodRows.value) {
+    map.set(row.id, {
+      generatedTitle: bucketTitle(row.generatedBucket, [{ key: 'ventas', label: 'Ventas (E1)' }]),
+      deductibleTitle: bucketTitle(row.deductibleBucket, DEDUCTIBLE_KEYS)
+    })
   }
+  return map
 })
 
-/** Bucket `unassigned` con datos (aviso aparte; NO entra a la recurrencia). */
-const unassigned = computed(() => {
-  const raw = data.value?.unassigned
-  if (!raw || typeof raw !== 'object') return null
-  const generated = Number(raw.generated) || 0
-  const deductible = Number(raw.deductible) || 0
-  const eventsCount = Number(raw.events_count) || 0
-  if (!eventsCount && !generated && !deductible) return null
-  return { generated, deductible, eventsCount }
-})
-
-/* ───────────────────────── Warnings y CTA ───────────────────────── */
-
-/** `meta.warnings` (array de strings literales del BE, §4.6). */
-const warnings = computed(() => {
-  const raw = data.value?.meta?.warnings
-  return Array.isArray(raw) ? raw.filter((item) => typeof item === 'string' && item) : []
-})
+function titlesOf(rowId) {
+  return rowTitles.value.get(rowId) ?? { generatedTitle: '', deductibleTitle: '' }
+}
 
 /** Warning "sin calendario" (backend.02_20 §4.4) ⇒ dispara el CTA. */
 const noCalendarWarning = computed(() =>
@@ -217,10 +173,12 @@ const hasPayments = computed(() => periodRows.value.some((row) => row.payment > 
     <!-- Error de red/5xx (NFR-FE14-3): nota + reintento, nunca pantalla rota. -->
     <div v-if="settlement.error && !settlement.loading" class="isp-error" role="alert">
       <span>
-        Sin dato de liquidación: no fue posible consultar el motor de IVA. Verifique su conexión
-        e inténtelo de nuevo.
+        Sin dato de liquidación: no fue posible consultar el motor de IVA. Verifique su conexión e
+        inténtelo de nuevo.
       </span>
-      <button type="button" class="btn btn-secondary btn-sm" @click="recalculate">Reintentar</button>
+      <button type="button" class="btn btn-secondary btn-sm" @click="recalculate">
+        Reintentar
+      </button>
     </div>
 
     <!-- Primer fetch -->
@@ -283,10 +241,10 @@ const hasPayments = computed(() => periodRows.value.some((row) => row.payment > 
                   </span>
                 </td>
                 <td class="isp-cell-date">{{ formatDateEs(row.dueDate) }}</td>
-                <td class="isp-cell-money" :title="row.generatedTitle || undefined">
+                <td class="isp-cell-money" :title="titlesOf(row.id).generatedTitle || undefined">
                   {{ formatMoney(row.generated) }}
                 </td>
-                <td class="isp-cell-money" :title="row.deductibleTitle || undefined">
+                <td class="isp-cell-money" :title="titlesOf(row.id).deductibleTitle || undefined">
                   {{ formatMoney(row.deductible) }}
                 </td>
                 <td

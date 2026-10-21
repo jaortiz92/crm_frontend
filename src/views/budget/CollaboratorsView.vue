@@ -381,8 +381,12 @@ const canConfirmDelete = computed(() => {
   if (!item) return false
   const typed = deleteConfirmText.value.trim().toLowerCase()
   if (!typed) return false
-  const fullName = String(item.full_name ?? '').trim().toLowerCase()
-  const docValue = String(item.doc_value ?? '').trim().toLowerCase()
+  const fullName = String(item.full_name ?? '')
+    .trim()
+    .toLowerCase()
+  const docValue = String(item.doc_value ?? '')
+    .trim()
+    .toLowerCase()
   return typed === fullName || (docValue !== '' && typed === docValue)
 })
 

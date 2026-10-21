@@ -93,7 +93,9 @@ onMounted(() => {
 
 /** Carga inicial / fetch en vuelo (patrón placeholder de los paneles hermanos). */
 const catalogLoading = computed(
-  () => !showingYear.value && (budgetRulesStore.loading.ivaPeriods || !budgetRulesStore.ivaPeriodsLoaded)
+  () =>
+    !showingYear.value &&
+    (budgetRulesStore.loading.ivaPeriods || !budgetRulesStore.ivaPeriodsLoaded)
 )
 
 /* ───────────────────────────── helpers de fecha ───────────────────────────── */
@@ -195,7 +197,8 @@ const rangeMessage = computed(() => {
 const dueMessage = computed(() => (dueError.value && !attempted.value ? '' : dueError.value))
 
 const canSave = computed(
-  () => editorOpen.value && !busy.value && !periodError.value && !rangeError.value && !dueError.value
+  () =>
+    editorOpen.value && !busy.value && !periodError.value && !rangeError.value && !dueError.value
 )
 
 function buildPayload() {
@@ -255,7 +258,9 @@ async function handleSave() {
     : await budgetRulesStore.createIvaPeriod(buildPayload())
 
   if (result.ok) {
-    alertService.generalSucces('Período guardado. La Liquidación de los escenarios abiertos se recalcula.')
+    alertService.generalSucces(
+      'Período guardado. La Liquidación de los escenarios abiertos se recalcula.'
+    )
     closeEditor()
     return
   }
@@ -292,7 +297,9 @@ function applySaveError(result) {
 
 const deleteTarget = ref(null)
 const deleting = computed(() =>
-  deleteTarget.value ? Boolean(budgetRulesStore.ivaPeriodSaving[deleteTarget.value.id_iva_period]) : false
+  deleteTarget.value
+    ? Boolean(budgetRulesStore.ivaPeriodSaving[deleteTarget.value.id_iva_period])
+    : false
 )
 
 function openDeleteConfirm(period) {
@@ -500,7 +507,10 @@ onBeforeUnmount(() => {
       <!-- Badge de sincronización (AC-FE14-6): el catálogo se propaga vivo a
            la Liquidación de los escenarios abiertos vía el debounce del
            `budgetPlanningStore` (gestionado por las acciones del store). -->
-      <span class="icp-sync-chip" title="Los cambios se reflejan en la pestaña “Liquidación” de los escenarios abiertos">
+      <span
+        class="icp-sync-chip"
+        title="Los cambios se reflejan en la pestaña “Liquidación” de los escenarios abiertos"
+      >
         ⟳ Sincronizado con Liquidación
       </span>
     </header>
@@ -545,8 +555,8 @@ onBeforeUnmount(() => {
     <!-- Error de carga (banner rojo + Reintentar, patrón PayableTermsPanel) -->
     <div v-if="budgetRulesStore.loadError.ivaPeriods" class="icp-load-error" role="alert">
       <span>
-        No se pudo cargar el calendario de {{ selectedYear }}. Verifique su conexión e inténtelo
-        de nuevo.
+        No se pudo cargar el calendario de {{ selectedYear }}. Verifique su conexión e inténtelo de
+        nuevo.
       </span>
       <button
         type="button"
@@ -563,7 +573,10 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else class="icp-table-zone">
-      <table class="icp-table" :aria-label="`Períodos de liquidación de IVA del año ${selectedYear}`">
+      <table
+        class="icp-table"
+        :aria-label="`Períodos de liquidación de IVA del año ${selectedYear}`"
+      >
         <thead>
           <tr>
             <th class="icp-col-num">N.º</th>
@@ -610,8 +623,9 @@ onBeforeUnmount(() => {
       </table>
       <p v-if="yearPeriods.length === 0" class="icp-empty" aria-live="polite">
         Sin períodos para {{ selectedYear }}: la “Liquidación” de los escenarios de este año
-        mostrará el aviso “sin calendario” con su CTA. Use '+ Añadir período' o
-        “{{ GENERATE_LABEL }}” para crear el calendario.
+        mostrará el aviso “sin calendario” con su CTA. Use '+ Añadir período' o “{{
+          GENERATE_LABEL
+        }}” para crear el calendario.
       </p>
     </div>
 
@@ -685,7 +699,10 @@ onBeforeUnmount(() => {
                 id="icp-date-to"
                 v-model="form.dateTo"
                 class="icp-modal-input"
-                :class="{ 'is-invalid': rangeMessage === RANGE_MSG || (Boolean(rangeMessage) && !form.dateTo) }"
+                :class="{
+                  'is-invalid':
+                    rangeMessage === RANGE_MSG || (Boolean(rangeMessage) && !form.dateTo)
+                }"
                 type="date"
                 :disabled="busy"
               />
@@ -709,8 +726,8 @@ onBeforeUnmount(() => {
               :aria-invalid="dueMessage ? 'true' : 'false'"
             />
             <p class="icp-help">
-              Fecha en la que el pago de la liquidación sale de caja (bloque “Pago de liquidación
-              de IVA” de la Vista Flujo).
+              Fecha en la que el pago de la liquidación sale de caja (bloque “Pago de liquidación de
+              IVA” de la Vista Flujo).
             </p>
             <p v-if="dueMessage" class="icp-field-error" role="alert" aria-live="polite">
               {{ dueMessage }}
@@ -796,9 +813,27 @@ onBeforeUnmount(() => {
               aria-label="Número de período"
               :disabled="generating"
             />
-            <input v-model="row.dateFrom" class="icp-modal-input" type="date" :disabled="generating" aria-label="Fecha desde" />
-            <input v-model="row.dateTo" class="icp-modal-input" type="date" :disabled="generating" aria-label="Fecha hasta" />
-            <input v-model="row.dueDate" class="icp-modal-input" type="date" :disabled="generating" aria-label="Vencimiento" />
+            <input
+              v-model="row.dateFrom"
+              class="icp-modal-input"
+              type="date"
+              :disabled="generating"
+              aria-label="Fecha desde"
+            />
+            <input
+              v-model="row.dateTo"
+              class="icp-modal-input"
+              type="date"
+              :disabled="generating"
+              aria-label="Fecha hasta"
+            />
+            <input
+              v-model="row.dueDate"
+              class="icp-modal-input"
+              type="date"
+              :disabled="generating"
+              aria-label="Vencimiento"
+            />
             <input
               v-model="row.description"
               class="icp-modal-input"
@@ -817,7 +852,12 @@ onBeforeUnmount(() => {
         </div>
 
         <footer class="icp-footer">
-          <button type="button" class="btn btn-secondary" :disabled="generating" @click="closeGenerate">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="generating"
+            @click="closeGenerate"
+          >
             Cancelar
           </button>
           <button
@@ -864,7 +904,12 @@ onBeforeUnmount(() => {
           <p class="icp-delete-warning" role="alert">{{ DELETE_CONFIRM_TEXT }}</p>
         </div>
         <footer class="icp-footer">
-          <button type="button" class="btn btn-secondary" :disabled="deleting" @click="cancelDelete">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="deleting"
+            @click="cancelDelete"
+          >
             Cancelar
           </button>
           <button

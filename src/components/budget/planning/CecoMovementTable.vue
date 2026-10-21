@@ -15,7 +15,10 @@
  *    payload — `movementMetaText`), mes de causación, mes de pago (o '—') y
  *    monto según `ivaMode` (RF-4.4: `movementAmount` — el MISMO helper del
  *    pivote; neto en Causado D-FE14-7, según flag en Flujo; capital/
- *    desembolsos crudo SIEMPRE — RF-8.6).
+ *    desembolsos crudo SIEMPRE — RF-8.6). REVISIÓN 4 (`frontend.03_19` §11,
+ *    RF-11.3): la línea variable de gasto muestra el monto RECONCILIADO de
+ *    la matriz (`movementAmountReconciled` con la serie `fixedIncomeMonths`)
+ *    y el tooltip desglose tasa × base + el crudo (AC-16/AC-17).
  *  - RF-5.2: sincronizada 1:1 con los filtros de la vista (la vista pasa el
  *    dataset ya filtrado como prop) y footer con el total de la selección.
  *  - RF-5.3: ordenamiento asc/desc por click en encabezado, 100 % cliente,
@@ -32,12 +35,14 @@ import {
   LINE_TYPE_LABELS,
   MONTH_LABELS,
   formatMoneyPlain,
+  formatVariableRate,
   monthIndexOf
 } from './planningFormat.js'
 import {
   SOURCE_KIND_LABELS,
   SOURCE_KINDS,
-  movementAmount,
+  isReconciledVariableMovement,
+  movementAmountReconciled,
   movementMetaText
 } from './cecoMovements.js'
 
@@ -48,7 +53,14 @@ const props = defineProps({
    */
   lines: { type: Array, required: true },
   /** Tab activo (`TAB_CAUSED` | `TAB_FLOW`): define la base del monto. */
-  tab: { type: String, required: true }
+  tab: { type: String, required: true },
+  /**
+   * REVISIÓN 4 (RF-11.3/RF-11.4): serie de Σ ingresos fijos por mes de
+   * causación del escenario (`fixedIncomeCausationSeries`) — base del monto
+   * RECONCILIADO de la línea variable de gasto (cuadre 1:1 con la matriz,
+   * AC-16). Sin serie ⇒ esas líneas aportan 0 (igual que la matriz).
+   */
+  fixedIncomeMonths: { type: Array, required: true }
 })
 
 const budgetPlanningStore = useBudgetPlanningStore()
@@ -111,7 +123,8 @@ const SORT_ACCESSORS = {
   description: (line) => line.description || '',
   budget_date: (line) => line.budget_date || '',
   payment_date: (line) => line.payment_date || '',
-  monto: (line) => movementAmount(line, props.tab, ivaActive.value)
+  monto: (line) =>
+    movementAmountReconciled(line, props.tab, ivaActive.value, props.fixedIncomeMonths)
 }
 
 const sort = reactive({ key: '', asc: true })
@@ -151,7 +164,12 @@ const sortedLines = computed(() => {
 const selectionTotal = computed(() => {
   let total = 0
   for (const line of props.lines) {
-    const amount = movementAmount(line, props.tab, ivaActive.value)
+    const amount = movementAmountReconciled(
+      line,
+      props.tab,
+      ivaActive.value,
+      props.fixedIncomeMonths
+    )
     if (Number.isFinite(amount)) total += amount
   }
   return total
@@ -159,8 +177,38 @@ const selectionTotal = computed(() => {
 
 /** Monto formateado de la fila (plain COP sin símbolo; '—' si no finito). */
 function moneyText(line) {
-  const amount = movementAmount(line, props.tab, ivaActive.value)
+  const amount = movementAmountReconciled(line, props.tab, ivaActive.value, props.fixedIncomeMonths)
   return Number.isFinite(amount) ? formatMoneyPlain(amount) : '—'
+}
+
+/**
+ * REVISIÓN 4 (RF-11.3): tooltip del MONTO de la línea variable de gasto —
+ * desglose completo de la reconciliación ("tasa × ingresos fijos del mes de
+ * causación", AC-16) más el crudo proyectado de la línea (que ya NO es el
+ * monto presentado: la matriz no lo reproduce). Las líneas sin base ese mes
+ * explican el 0 ("igual que la matriz") en el mismo idioma de degradación
+ * del módulo (celda 0, sin spinner ni avisos nuevos). `null` para el resto
+ * de movimientos (sin tooltip extra).
+ * @param {object} line
+ * @returns {string|null}
+ */
+function moneyTitle(line) {
+  if (!isReconciledVariableMovement(line)) return null
+  const month = monthIndexOf(line?.budget_date)
+  const base =
+    Array.isArray(props.fixedIncomeMonths) && month >= 0
+      ? Number(props.fixedIncomeMonths[month]) || 0
+      : 0
+  const raw = Number(line?.projected_amount)
+  const rate = formatVariableRate(line?.variable_rate)
+  const baseText = formatMoneyPlain(base)
+  const baseNote =
+    base === 0 ? ' sin ingresos fijos base en ese mes ⇒ monto 0 (igual que la matriz)' : ''
+  return (
+    `Monto reconciliado = tasa ${rate} × Σ ingresos fijos del mes de causación ` +
+    `(${baseText})${baseNote}. Crudo proyectado de la línea: ` +
+    `${Number.isFinite(raw) ? formatMoneyPlain(raw) : '—'} (no es el monto de la matriz).`
+  )
 }
 
 /** Mes legible de una fecha ISO: `Ene 2026`; '—' si no parsea. */
@@ -240,7 +288,7 @@ function monthLabelOf(value) {
           <td class="cmt-cell-date">
             {{ line.payment_date ? monthLabelOf(line.payment_date) : '—' }}
           </td>
-          <td class="cmt-cell-money">{{ moneyText(line) }}</td>
+          <td class="cmt-cell-money" :title="moneyTitle(line)">{{ moneyText(line) }}</td>
         </tr>
       </tbody>
       <tfoot>

@@ -49,8 +49,8 @@ async function confirmTarget() {
       financingLinesValue !== null &&
       financingLinesValue !== undefined &&
       Number.isFinite(financingLines)
-      ? ` Financiación materializada: ${financingLines} líneas de interés/seguro.`
-      : ''
+        ? ` Financiación materializada: ${financingLines} líneas de interés/seguro.`
+        : ''
     const financingWarnings = result.data?.financing_warnings
     const warningList = Array.isArray(financingWarnings)
       ? financingWarnings

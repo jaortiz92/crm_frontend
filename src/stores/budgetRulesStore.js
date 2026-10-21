@@ -181,7 +181,13 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
       ivaPeriods: false
     },
     /** true ⇒ banner rojo con botón "Reintentar" (A11); null = sin error. */
-    loadError: { cost: null, commission: null, payableTerms: null, internment: null, ivaPeriods: null },
+    loadError: {
+      cost: null,
+      commission: null,
+      payableTerms: null,
+      internment: null,
+      ivaPeriods: null
+    },
     /** Flag global de POST/PUT en vuelo (anti doble-submit, §10.5). */
     saving: false
   }),

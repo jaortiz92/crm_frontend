@@ -7,20 +7,24 @@ const store = useBudgetTaxStore()
 const moneyFormatter = new Intl.NumberFormat('es-CO', {
   style: 'currency',
   currency: 'COP',
-  maximumFractionDigits: 2,
+  maximumFractionDigits: 2
 })
 
 const percentFormatter = new Intl.NumberFormat('es-CO', {
   style: 'percent',
   minimumFractionDigits: 2,
-  maximumFractionDigits: 4,
+  maximumFractionDigits: 4
 })
 
 const dateFormatter = new Intl.DateTimeFormat('es-CO', {
-  dateStyle: 'medium',
+  dateStyle: 'medium'
 })
 
-const results = computed(() => [...store.simpleResults].sort((a, b) => String(a.period_start || '').localeCompare(String(b.period_start || ''))))
+const results = computed(() =>
+  [...store.simpleResults].sort((a, b) =>
+    String(a.period_start || '').localeCompare(String(b.period_start || ''))
+  )
+)
 
 const simpleRates = computed(() => store.rates.filter((rate) => rate.tax_type === 'simple'))
 
@@ -29,11 +33,15 @@ function display(value, formatter) {
 }
 
 function money(value) {
-  return display(value, (amount) => Number.isFinite(Number(amount)) ? moneyFormatter.format(Number(amount)) : amount)
+  return display(value, (amount) =>
+    Number.isFinite(Number(amount)) ? moneyFormatter.format(Number(amount)) : amount
+  )
 }
 
 function rate(value) {
-  return display(value, (amount) => Number.isFinite(Number(amount)) ? percentFormatter.format(Number(amount)) : amount)
+  return display(value, (amount) =>
+    Number.isFinite(Number(amount)) ? percentFormatter.format(Number(amount)) : amount
+  )
 }
 
 function date(value) {
@@ -52,7 +60,13 @@ function trace(row) {
 }
 
 function periodIncome(row) {
-  return row.bimonthly_income ?? row.period_income ?? row.income ?? row.taxable_base ?? trace(row).bimonthly_income
+  return (
+    row.bimonthly_income ??
+    row.period_income ??
+    row.income ??
+    row.taxable_base ??
+    trace(row).bimonthly_income
+  )
 }
 
 function findRate(row) {
@@ -61,19 +75,27 @@ function findRate(row) {
 
   return (
     simpleRates.value.find((item) => {
-      const minimum = item.income_min === null || item.income_min === undefined ? -Infinity : Number(item.income_min)
-      const maximum = item.income_max === null || item.income_max === undefined ? Infinity : Number(item.income_max)
+      const minimum =
+        item.income_min === null || item.income_min === undefined
+          ? -Infinity
+          : Number(item.income_min)
+      const maximum =
+        item.income_max === null || item.income_max === undefined
+          ? Infinity
+          : Number(item.income_max)
       return base >= minimum && base <= maximum
     }) || null
   )
 }
 
 function rangeLabel(row) {
-  const source = row.income_range || row.applied_range || trace(row).income_range || trace(row).rate_range
+  const source =
+    row.income_range || row.applied_range || trace(row).income_range || trace(row).rate_range
   if (source) return source
 
   const selectedRate = findRate(row)
-  if (!selectedRate || (selectedRate.income_min == null && selectedRate.income_max == null)) return 'Sin configurar'
+  if (!selectedRate || (selectedRate.income_min == null && selectedRate.income_max == null))
+    return 'Sin configurar'
 
   const minimum = selectedRate.income_min == null ? 'Sin límite' : money(selectedRate.income_min)
   const maximum = selectedRate.income_max == null ? 'Sin límite' : money(selectedRate.income_max)
@@ -106,12 +128,17 @@ function declarationDate(row) {
 
     <div v-if="!results.length" class="tax-empty">
       <strong>Sin resultados bimestrales</strong>
-      <span>Ejecuta el cálculo con una tarifa y un calendario SIMPLE configurados para ver cada periodo.</span>
+      <span
+        >Ejecuta el cálculo con una tarifa y un calendario SIMPLE configurados para ver cada
+        periodo.</span
+      >
     </div>
 
     <div v-else class="table-wrap">
       <table class="crm-table simple-bimonthly-table">
-        <caption class="sr-only">Resultados del impuesto SIMPLE por bimestre</caption>
+        <caption class="sr-only">
+          Resultados del impuesto SIMPLE por bimestre
+        </caption>
         <thead>
           <tr>
             <th>Bimestre</th>
@@ -124,12 +151,17 @@ function declarationDate(row) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, index) in results" :key="row.id_budget_tax_result || `${row.period_start}-${index}`">
+          <tr
+            v-for="(row, index) in results"
+            :key="row.id_budget_tax_result || `${row.period_start}-${index}`"
+          >
             <th scope="row">{{ periodLabel(row, index) }}</th>
             <td>{{ money(periodIncome(row)) }}</td>
             <td>{{ rangeLabel(row) }}</td>
             <td>{{ appliedRate(row) }}</td>
-            <td><strong>{{ money(row.tax_caused) }}</strong></td>
+            <td>
+              <strong>{{ money(row.tax_caused) }}</strong>
+            </td>
             <td>{{ declarationDate(row) }}</td>
             <td>
               {{ paymentDate(row) }}
@@ -141,8 +173,9 @@ function declarationDate(row) {
     </div>
 
     <p class="tax-note">
-      La tarifa y el rango se muestran para cada bimestre según el resultado del backend. No se asume una tarifa única anual;
-      el total del año es únicamente una referencia agregada de los periodos calculados.
+      La tarifa y el rango se muestran para cada bimestre según el resultado del backend. No se
+      asume una tarifa única anual; el total del año es únicamente una referencia agregada de los
+      periodos calculados.
     </p>
   </section>
 </template>

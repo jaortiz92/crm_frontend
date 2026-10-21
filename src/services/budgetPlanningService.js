@@ -48,12 +48,12 @@ import axiosInstance from '@/plugins/axios'
  * `budgetRulesService` en Reglas Financieras; aquí SOLO se cachea para la
  * derivación de la Vista Flujo (D-S7-2).
  *
-   * Rutas FE-S14-IVA (autoridad: `backend.02_20` §5.9 — contrato §4.6):
-   *  - `GET /budget/iva/settlement/{idBudget}?year=`  liquidación bimestral
-   *    proyectada del escenario (único dato IVA server-side del FE, D-FE14-4).
-   *  - `GET /budget/tax/budgets/{idBudget}/summary` y `/cash-flow` resultados
-   *    tributarios calculados; son la única fuente de la integración tributaria
-   *    de P&G y Flujo (sin fórmulas tributarias en frontend).
+ * Rutas FE-S14-IVA (autoridad: `backend.02_20` §5.9 — contrato §4.6):
+ *  - `GET /budget/iva/settlement/{idBudget}?year=`  liquidación bimestral
+ *    proyectada del escenario (único dato IVA server-side del FE, D-FE14-4).
+ *  - `GET /budget/tax/budgets/{idBudget}/summary` y `/cash-flow` resultados
+ *    tributarios calculados; son la única fuente de la integración tributaria
+ *    de P&G y Flujo (sin fórmulas tributarias en frontend).
  * Ruta unitaria ⇒ SIN slash final.
  *
  * Slash final obligatorio en la ruta de colección `/budget/planning/` (sin
@@ -381,8 +381,7 @@ export const budgetPlanningService = {
    * @returns {Promise<import('axios').AxiosResponse<object>>}
    */
   getIvaSettlement(idBudget, year = null) {
-    const hasYear =
-      year !== null && year !== undefined && String(year).trim() !== ''
+    const hasYear = year !== null && year !== undefined && String(year).trim() !== ''
     const query = hasYear ? `?year=${encodeURIComponent(year)}` : ''
     return axiosInstance.get(`/budget/iva/settlement/${idBudget}${query}`)
   },

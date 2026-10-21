@@ -193,7 +193,10 @@ onMounted(() => {
                 <span class="category-tag">{{ element.category }}</span>
               </div>
               <div class="card-actions">
-                <button class="btn btn-sm btn-secondary" @click="startEdit(element.id_activity_type)">
+                <button
+                  class="btn btn-sm btn-secondary"
+                  @click="startEdit(element.id_activity_type)"
+                >
                   Editar
                 </button>
                 <button
@@ -223,12 +226,13 @@ onMounted(() => {
                 </label>
               </div>
               <div class="card-actions edit-actions">
-                <button class="btn btn-sm btn-primary" @click="saveChanges(element.id_activity_type)">
+                <button
+                  class="btn btn-sm btn-primary"
+                  @click="saveChanges(element.id_activity_type)"
+                >
                   Guardar
                 </button>
-                <button class="btn btn-sm btn-secondary" @click="cancelEdit">
-                  Cancelar
-                </button>
+                <button class="btn btn-sm btn-secondary" @click="cancelEdit">Cancelar</button>
               </div>
             </template>
           </div>
@@ -265,7 +269,10 @@ onMounted(() => {
               <span class="category-tag">{{ activity.category }}</span>
             </div>
             <div class="card-actions">
-              <button class="btn btn-sm btn-secondary" @click="startEdit(activity.id_activity_type)">
+              <button
+                class="btn btn-sm btn-secondary"
+                @click="startEdit(activity.id_activity_type)"
+              >
                 Editar
               </button>
               <button
@@ -295,12 +302,13 @@ onMounted(() => {
               </label>
             </div>
             <div class="card-actions edit-actions">
-              <button class="btn btn-sm btn-primary" @click="saveChanges(activity.id_activity_type)">
+              <button
+                class="btn btn-sm btn-primary"
+                @click="saveChanges(activity.id_activity_type)"
+              >
                 Guardar
               </button>
-              <button class="btn btn-sm btn-secondary" @click="cancelEdit">
-                Cancelar
-              </button>
+              <button class="btn btn-sm btn-secondary" @click="cancelEdit">Cancelar</button>
             </div>
           </template>
         </div>
@@ -456,7 +464,10 @@ onMounted(() => {
   background: var(--color-surface-card, #ffffff);
   border: 1px solid var(--color-border, rgba(97, 97, 97, 0.12));
   border-radius: 8px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 
 .activity-card:hover {
@@ -493,7 +504,9 @@ onMounted(() => {
   color: var(--color-text-tertiary, rgba(97, 97, 97, 0.5));
   cursor: grab;
   border-radius: 4px;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 .drag-handle:hover {
@@ -580,7 +593,9 @@ onMounted(() => {
   border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
   border-radius: 6px;
   background: var(--color-surface-card, #ffffff);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .edit-input {
@@ -670,7 +685,9 @@ onMounted(() => {
   border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.25));
   border-radius: 6px;
   background: var(--color-surface-card, #ffffff);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .field-input:focus {
@@ -714,7 +731,10 @@ onMounted(() => {
   border-radius: 6px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.1s ease;
   white-space: nowrap;
 }
 

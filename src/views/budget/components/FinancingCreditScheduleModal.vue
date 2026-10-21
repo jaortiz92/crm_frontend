@@ -1,6 +1,9 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { budgetFinancingCreditService, classifyFinancingCreditError } from '@/services/budgetFinancingCreditService.js'
+import {
+  budgetFinancingCreditService,
+  classifyFinancingCreditError
+} from '@/services/budgetFinancingCreditService.js'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -52,7 +55,9 @@ function creditId() {
 function safeDate(value) {
   if (!value) return '—'
   const date = new Date(`${String(value).slice(0, 10)}T00:00:00`)
-  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('es-CO').format(date)
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : new Intl.DateTimeFormat('es-CO').format(date)
 }
 
 function money(value) {
@@ -97,11 +102,12 @@ async function loadData() {
     const data = scheduleResponse?.data
     schedule.value = Array.isArray(data) ? data : []
     const detailTotal = Number(detail.value?.term_installments)
-    total.value = Number.isFinite(detailTotal) && detailTotal >= 0
-      ? detailTotal
-      : Array.isArray(detail.value?.installments)
-        ? detail.value.installments.length
-        : 0
+    total.value =
+      Number.isFinite(detailTotal) && detailTotal >= 0
+        ? detailTotal
+        : Array.isArray(detail.value?.installments)
+          ? detail.value.installments.length
+          : 0
   } catch (error) {
     errorMessage.value = humanError(error)
     if (error?.response?.status === 404) {
@@ -134,7 +140,11 @@ function onDialogKeydown(event) {
     return
   }
   if (event.key !== 'Tab' || !dialogElement.value) return
-  const focusable = [...dialogElement.value.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')]
+  const focusable = [
+    ...dialogElement.value.querySelectorAll(
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])'
+    )
+  ]
   if (!focusable.length) return
   const first = focusable[0]
   const last = focusable[focusable.length - 1]
@@ -181,7 +191,7 @@ async function recalculate() {
     const result = response?.data ?? {}
     actionMessage.value = `Regeneración completada: ${result.replaced_installments ?? '—'} cuotas reemplazadas, ${result.created_installments ?? '—'} creadas; ${result.replaced_budget_lines ?? '—'} líneas de presupuesto reemplazadas y ${result.created_budget_lines ?? '—'} creadas.`
     if (Array.isArray(result.warnings) && result.warnings.length) {
-      actionMessage.value += ` Advertencias: ${result.warnings.map((item) => typeof item === 'string' ? item : item.message ?? JSON.stringify(item)).join(' · ')}`
+      actionMessage.value += ` Advertencias: ${result.warnings.map((item) => (typeof item === 'string' ? item : (item.message ?? JSON.stringify(item)))).join(' · ')}`
     }
     emit('changed')
     await loadData()
@@ -193,7 +203,14 @@ async function recalculate() {
 }
 
 async function closeCredit() {
-  if (!props.canEdit || closing.value || recalculating.value || deleting.value || !confirmedZeroBalance.value) return
+  if (
+    !props.canEdit ||
+    closing.value ||
+    recalculating.value ||
+    deleting.value ||
+    !confirmedZeroBalance.value
+  )
+    return
   closing.value = true
   actionError.value = ''
   actionMessage.value = ''
@@ -202,7 +219,8 @@ async function closeCredit() {
       cutoff_date: localToday(),
       remaining_balance: '0.00'
     })
-    actionMessage.value = 'Crédito cerrado administrativamente con saldo real cero informado. No se registró un pago ni se realizó conciliación.'
+    actionMessage.value =
+      'Crédito cerrado administrativamente con saldo real cero informado. No se registró un pago ni se realizó conciliación.'
     confirmedZeroBalance.value = false
     emit('changed')
     await loadData()
@@ -214,7 +232,8 @@ async function closeCredit() {
 }
 
 function confirmDelete() {
-  if (!props.canEdit || deleting.value || recalculating.value || closing.value || loading.value) return
+  if (!props.canEdit || deleting.value || recalculating.value || closing.value || loading.value)
+    return
   const name = detail.value?.name ?? props.credit?.name ?? `#${creditId()}`
   const confirmed = window.confirm(
     `¿Eliminar DEFINITIVAMENTE el crédito de financiación “${name}”? Esta acción es irreversible.\n\n` +
@@ -256,105 +275,351 @@ function close() {
 
 <template>
   <div v-if="open" class="fin-overlay" @mousedown.self="close">
-    <section ref="dialogElement" class="fin-dialog" role="dialog" aria-modal="true" aria-labelledby="schedule-title">
+    <section
+      ref="dialogElement"
+      class="fin-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="schedule-title"
+    >
       <header class="fin-header">
         <div>
-          <h2 id="schedule-title">Financiación empresarial · {{ detail?.name ?? credit?.name ?? 'Detalle' }}</h2>
+          <h2 id="schedule-title">
+            Financiación empresarial · {{ detail?.name ?? credit?.name ?? 'Detalle' }}
+          </h2>
           <p>Calendario proyectado; no es constancia de pago real.</p>
         </div>
-        <button type="button" class="fin-close" aria-label="Cerrar" :disabled="recalculating || closing || deleting" @click="close">×</button>
+        <button
+          type="button"
+          class="fin-close"
+          aria-label="Cerrar"
+          :disabled="recalculating || closing || deleting"
+          @click="close"
+        >
+          ×
+        </button>
       </header>
       <div class="fin-body" aria-live="polite">
-        <div v-if="loading" class="fin-loading"><span class="fin-spinner" aria-hidden="true"></span>Cargando detalle y calendario desde el backend…</div>
-        <div v-else-if="errorMessage" class="fin-error" role="alert"><span>{{ errorMessage }}</span><button type="button" class="btn btn-secondary btn-sm" @click="loadData">Reintentar</button></div>
+        <div v-if="loading" class="fin-loading">
+          <span class="fin-spinner" aria-hidden="true"></span>Cargando detalle y calendario desde el
+          backend…
+        </div>
+        <div v-else-if="errorMessage" class="fin-error" role="alert">
+          <span>{{ errorMessage }}</span
+          ><button type="button" class="btn btn-secondary btn-sm" @click="loadData">
+            Reintentar
+          </button>
+        </div>
         <template v-else>
           <section class="fin-section">
             <h3>Condiciones</h3>
             <dl class="fin-details">
-              <div><dt>Acreedor</dt><dd>{{ detail?.lender_name ?? credit?.lender_name ?? '—' }}</dd></div>
-              <div><dt>Origen</dt><dd><span class="fin-chip">{{ (detail?.origin_type ?? credit?.origin_type) === 'legacy' ? 'Antiguo — desde corte' : 'Nuevo' }}</span></dd></div>
-              <div><dt>Estado</dt><dd>{{ detail?.status === 'closed' ? 'Cerrado administrativamente' : 'Activo · Proyectado' }}</dd></div>
-              <div><dt>Método</dt><dd>{{ (detail?.method ?? credit?.method) === 'french_fixed_payment' ? 'Cuota fija (francés)' : (detail?.method ?? credit?.method) === 'german_fixed_principal' ? 'Capital fijo (alemán)' : '—' }}</dd></div>
-              <div class="fin-detail-wide"><dt>Centro de costo</dt><dd>{{ costCenterLabel }}</dd></div>
-              <div><dt>Moneda</dt><dd>{{ detail?.currency ?? credit?.currency ?? 'COP' }}</dd></div>
-               <div><dt>Saldo registrado (apertura)</dt><dd>{{ money(detail?.opening_balance ?? credit?.opening_balance) }}</dd></div>
-              <div><dt>Fecha de desembolso</dt><dd>{{ safeDate(detail?.disbursement_date ?? credit?.disbursement_date) }}</dd></div>
-               <div v-if="(detail?.origin_type ?? credit?.origin_type) === 'legacy'"><dt>Fecha de corte</dt><dd>{{ safeDate(detail?.cutoff_date ?? credit?.cutoff_date) }}</dd></div>
-              <div><dt>Tasa anual</dt><dd>{{ detail?.annual_rate ?? credit?.annual_rate ?? '—' }} · {{ detail?.rate_convention ?? credit?.rate_convention ?? 'convención pendiente' }}</dd></div>
-              <div><dt>Day-count</dt><dd>{{ detail?.day_count_convention ?? credit?.day_count_convention ?? '—' }}</dd></div>
-              <div><dt>Primera cuota</dt><dd>{{ safeDate(detail?.first_due_date ?? credit?.first_due_date) }}</dd></div>
-              <div><dt>Revisión del calendario</dt><dd>{{ detail?.schedule_revision ?? credit?.schedule_revision ?? '—' }}</dd></div>
+              <div>
+                <dt>Acreedor</dt>
+                <dd>{{ detail?.lender_name ?? credit?.lender_name ?? '—' }}</dd>
+              </div>
+              <div>
+                <dt>Origen</dt>
+                <dd>
+                  <span class="fin-chip">{{
+                    (detail?.origin_type ?? credit?.origin_type) === 'legacy'
+                      ? 'Antiguo — desde corte'
+                      : 'Nuevo'
+                  }}</span>
+                </dd>
+              </div>
+              <div>
+                <dt>Estado</dt>
+                <dd>
+                  {{
+                    detail?.status === 'closed'
+                      ? 'Cerrado administrativamente'
+                      : 'Activo · Proyectado'
+                  }}
+                </dd>
+              </div>
+              <div>
+                <dt>Método</dt>
+                <dd>
+                  {{
+                    (detail?.method ?? credit?.method) === 'french_fixed_payment'
+                      ? 'Cuota fija (francés)'
+                      : (detail?.method ?? credit?.method) === 'german_fixed_principal'
+                        ? 'Capital fijo (alemán)'
+                        : '—'
+                  }}
+                </dd>
+              </div>
+              <div class="fin-detail-wide">
+                <dt>Centro de costo</dt>
+                <dd>{{ costCenterLabel }}</dd>
+              </div>
+              <div>
+                <dt>Moneda</dt>
+                <dd>{{ detail?.currency ?? credit?.currency ?? 'COP' }}</dd>
+              </div>
+              <div>
+                <dt>Saldo registrado (apertura)</dt>
+                <dd>{{ money(detail?.opening_balance ?? credit?.opening_balance) }}</dd>
+              </div>
+              <div>
+                <dt>Fecha de desembolso</dt>
+                <dd>{{ safeDate(detail?.disbursement_date ?? credit?.disbursement_date) }}</dd>
+              </div>
+              <div v-if="(detail?.origin_type ?? credit?.origin_type) === 'legacy'">
+                <dt>Fecha de corte</dt>
+                <dd>{{ safeDate(detail?.cutoff_date ?? credit?.cutoff_date) }}</dd>
+              </div>
+              <div>
+                <dt>Tasa anual</dt>
+                <dd>
+                  {{ detail?.annual_rate ?? credit?.annual_rate ?? '—' }} ·
+                  {{ detail?.rate_convention ?? credit?.rate_convention ?? 'convención pendiente' }}
+                </dd>
+              </div>
+              <div>
+                <dt>Day-count</dt>
+                <dd>{{ detail?.day_count_convention ?? credit?.day_count_convention ?? '—' }}</dd>
+              </div>
+              <div>
+                <dt>Primera cuota</dt>
+                <dd>{{ safeDate(detail?.first_due_date ?? credit?.first_due_date) }}</dd>
+              </div>
+              <div>
+                <dt>Revisión del calendario</dt>
+                <dd>{{ detail?.schedule_revision ?? credit?.schedule_revision ?? '—' }}</dd>
+              </div>
             </dl>
-            <p v-if="(detail?.origin_type ?? credit?.origin_type) === 'legacy'" class="fin-cutoff-note" role="note">No se muestran cuotas previas al corte.</p>
+            <p
+              v-if="(detail?.origin_type ?? credit?.origin_type) === 'legacy'"
+              class="fin-cutoff-note"
+              role="note"
+            >
+              No se muestran cuotas previas al corte.
+            </p>
           </section>
 
           <section class="fin-section">
             <h3>Calendario futuro · componentes separados</h3>
-            <p class="fin-explainer"><span class="fin-chip">Capital · financiación</span> Salida de financiación; excluida del gasto P&amp;L. <span class="fin-chip fin-chip-expense">Interés / seguro · gasto</span> Gastos presupuestarios; el endpoint de flujo de caja toma los tres componentes del calendario activo una sola vez.</p>
+            <p class="fin-explainer">
+              <span class="fin-chip">Capital · financiación</span> Salida de financiación; excluida
+              del gasto P&amp;L.
+              <span class="fin-chip fin-chip-expense">Interés / seguro · gasto</span> Gastos
+              presupuestarios; el endpoint de flujo de caja toma los tres componentes del calendario
+              activo una sola vez.
+            </p>
             <div class="fin-table-scroll">
               <table aria-label="Calendario futuro de cuotas de financiación">
-                <thead><tr><th scope="col">Cuota</th><th scope="col">Vencimiento capital</th><th scope="col">Capital (financiación)</th><th scope="col">Vencimiento interés</th><th scope="col">Interés (gasto)</th><th scope="col">Vencimiento seguro</th><th scope="col">Seguro (gasto)</th><th scope="col">Saldo después</th><th scope="col">Estado</th></tr></thead>
-                <tbody><tr v-for="(row, index) in schedule" :key="pick(row, 'id_financing_credit_installment', 'installment_number') ?? index">
-                  <td>{{ pick(row, 'installment_number', 'number') ?? '—' }}</td>
-                  <td>{{ safeDate(pick(row, 'principal_due_date')) }}</td><td class="fin-amount">{{ money(pick(row, 'principal_amount')) }}</td>
-                  <td>{{ safeDate(pick(row, 'interest_due_date')) }}</td><td class="fin-amount">{{ money(pick(row, 'interest_amount')) }}</td>
-                  <td>{{ safeDate(pick(row, 'insurance_due_date')) }}</td><td class="fin-amount">{{ money(pick(row, 'insurance_amount')) }}</td>
-                  <td class="fin-amount">{{ money(pick(row, 'closing_balance')) }}</td><td><span class="fin-chip">{{ pick(row, 'projection_status', 'status') ?? 'Proyectado' }}</span></td>
-                </tr></tbody>
+                <thead>
+                  <tr>
+                    <th scope="col">Cuota</th>
+                    <th scope="col">Vencimiento capital</th>
+                    <th scope="col">Capital (financiación)</th>
+                    <th scope="col">Vencimiento interés</th>
+                    <th scope="col">Interés (gasto)</th>
+                    <th scope="col">Vencimiento seguro</th>
+                    <th scope="col">Seguro (gasto)</th>
+                    <th scope="col">Saldo después</th>
+                    <th scope="col">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(row, index) in schedule"
+                    :key="
+                      pick(row, 'id_financing_credit_installment', 'installment_number') ?? index
+                    "
+                  >
+                    <td>{{ pick(row, 'installment_number', 'number') ?? '—' }}</td>
+                    <td>{{ safeDate(pick(row, 'principal_due_date')) }}</td>
+                    <td class="fin-amount">{{ money(pick(row, 'principal_amount')) }}</td>
+                    <td>{{ safeDate(pick(row, 'interest_due_date')) }}</td>
+                    <td class="fin-amount">{{ money(pick(row, 'interest_amount')) }}</td>
+                    <td>{{ safeDate(pick(row, 'insurance_due_date')) }}</td>
+                    <td class="fin-amount">{{ money(pick(row, 'insurance_amount')) }}</td>
+                    <td class="fin-amount">{{ money(pick(row, 'closing_balance')) }}</td>
+                    <td>
+                      <span class="fin-chip">{{
+                        pick(row, 'projection_status', 'status') ?? 'Proyectado'
+                      }}</span>
+                    </td>
+                  </tr>
+                </tbody>
               </table>
             </div>
             <div v-if="schedule.length" class="fin-pagination">
-              <button type="button" class="btn btn-secondary btn-sm" :disabled="page <= 1 || loading" @click="goPage(-1)">← Anterior</button>
-              <span aria-live="polite">Página {{ page }} de {{ lastPage }} · {{ total }} cuotas</span>
-              <button type="button" class="btn btn-secondary btn-sm" :disabled="page >= lastPage || loading" @click="goPage(1)">Siguiente →</button>
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="page <= 1 || loading"
+                @click="goPage(-1)"
+              >
+                ← Anterior
+              </button>
+              <span aria-live="polite"
+                >Página {{ page }} de {{ lastPage }} · {{ total }} cuotas</span
+              >
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="page >= lastPage || loading"
+                @click="goPage(1)"
+              >
+                Siguiente →
+              </button>
             </div>
-            <p v-else class="fin-empty">No hay cuotas futuras devueltas por el backend para este crédito.</p>
+            <p v-else class="fin-empty">
+              No hay cuotas futuras devueltas por el backend para este crédito.
+            </p>
           </section>
 
           <section class="fin-section">
             <h3>Tratamiento en presupuesto</h3>
-            <p>Interés y seguro se materializan como gastos presupuestarios separados asociados al CECO. Capital no es una línea de gasto ni forma parte del P&amp;L. El detalle no recompone ni suma schedule sobre ningún flujo de caja.</p>
+            <p>
+              Interés y seguro se materializan como gastos presupuestarios separados asociados al
+              CECO. Capital no es una línea de gasto ni forma parte del P&amp;L. El detalle no
+              recompone ni suma schedule sobre ningún flujo de caja.
+            </p>
             <dl class="fin-details fin-component-totals">
-               <div><dt>Capital futuro · financiación (no P&amp;L)</dt><dd>{{ money(detail?.totals?.principal) }}</dd></div>
-               <div><dt>Intereses futuros · gasto presupuestario</dt><dd>{{ money(detail?.totals?.interest) }}</dd></div>
-               <div><dt>Seguro futuro · gasto presupuestario</dt><dd>{{ money(detail?.totals?.insurance) }}</dd></div>
-               <div><dt>Salida total proyectada de caja</dt><dd>{{ money(detail?.totals?.total_cash_outflow) }}</dd></div>
+              <div>
+                <dt>Capital futuro · financiación (no P&amp;L)</dt>
+                <dd>{{ money(detail?.totals?.principal) }}</dd>
+              </div>
+              <div>
+                <dt>Intereses futuros · gasto presupuestario</dt>
+                <dd>{{ money(detail?.totals?.interest) }}</dd>
+              </div>
+              <div>
+                <dt>Seguro futuro · gasto presupuestario</dt>
+                <dd>{{ money(detail?.totals?.insurance) }}</dd>
+              </div>
+              <div>
+                <dt>Salida total proyectada de caja</dt>
+                <dd>{{ money(detail?.totals?.total_cash_outflow) }}</dd>
+              </div>
             </dl>
-            <div v-if="warnings.length" class="fin-warning" role="status"><strong>Advertencias de materialización presupuestaria</strong><ul><li v-for="(warning, index) in warnings" :key="index">{{ warningLabel(warning) }} <RouterLink v-if="warning?.id_budget" :to="{ name: 'BudgetPlanningGrid', params: { idBudget: warning.id_budget } }">Abrir presupuesto</RouterLink></li></ul><p>El calendario pudo guardarse aunque algunos gastos no tengan presupuesto destino; no se afirma que el presupuesto esté actualizado.</p></div>
-            <div v-else><strong>{{ detail?.materialized_budget_lines ?? detail?.created_budget_lines ?? '—' }}</strong> líneas de gasto de interés/seguro informadas por el backend.</div>
+            <div v-if="warnings.length" class="fin-warning" role="status">
+              <strong>Advertencias de materialización presupuestaria</strong>
+              <ul>
+                <li v-for="(warning, index) in warnings" :key="index">
+                  {{ warningLabel(warning) }}
+                  <RouterLink
+                    v-if="warning?.id_budget"
+                    :to="{ name: 'BudgetPlanningGrid', params: { idBudget: warning.id_budget } }"
+                    >Abrir presupuesto</RouterLink
+                  >
+                </li>
+              </ul>
+              <p>
+                El calendario pudo guardarse aunque algunos gastos no tengan presupuesto destino; no
+                se afirma que el presupuesto esté actualizado.
+              </p>
+            </div>
+            <div v-else>
+              <strong>{{
+                detail?.materialized_budget_lines ?? detail?.created_budget_lines ?? '—'
+              }}</strong>
+              líneas de gasto de interés/seguro informadas por el backend.
+            </div>
           </section>
 
           <section class="fin-section">
             <h3>Trazabilidad</h3>
             <dl class="fin-details">
-              <div><dt>Revisión del schedule</dt><dd>{{ detail?.schedule_revision ?? '—' }}</dd></div>
-              <div><dt>Origen</dt><dd>{{ detail?.origin_type === 'legacy' ? 'Antiguo — desde corte' : 'Nuevo' }}</dd></div>
-              <div v-if="detail?.origin_type === 'legacy'"><dt>Corte observado</dt><dd>{{ safeDate(detail?.cutoff_date) }}</dd></div>
-              <div><dt>Creado</dt><dd>{{ detail?.created_at ?? '—' }}</dd></div>
-              <div><dt>Actualizado</dt><dd>{{ detail?.updated_at ?? '—' }}</dd></div>
+              <div>
+                <dt>Revisión del schedule</dt>
+                <dd>{{ detail?.schedule_revision ?? '—' }}</dd>
+              </div>
+              <div>
+                <dt>Origen</dt>
+                <dd>{{ detail?.origin_type === 'legacy' ? 'Antiguo — desde corte' : 'Nuevo' }}</dd>
+              </div>
+              <div v-if="detail?.origin_type === 'legacy'">
+                <dt>Corte observado</dt>
+                <dd>{{ safeDate(detail?.cutoff_date) }}</dd>
+              </div>
+              <div>
+                <dt>Creado</dt>
+                <dd>{{ detail?.created_at ?? '—' }}</dd>
+              </div>
+              <div>
+                <dt>Actualizado</dt>
+                <dd>{{ detail?.updated_at ?? '—' }}</dd>
+              </div>
             </dl>
           </section>
 
           <section class="fin-section fin-open-questions">
             <h3>Decisiones abiertas (no aprobadas)</h3>
-            <p>Frecuencia mensual y convención monthly-periodic: defaults del sistema para v1. La convención de tasa nominal/efectiva debe elegirse al editar; regla del seguro pendiente; calendario/días inhábiles pendientes; pagos reales frente a proyección pendiente. Importación masiva, abonos anticipados, gracia, tasa variable y reestructuración fuera de v1.</p>
+            <p>
+              Frecuencia mensual y convención monthly-periodic: defaults del sistema para v1. La
+              convención de tasa nominal/efectiva debe elegirse al editar; regla del seguro
+              pendiente; calendario/días inhábiles pendientes; pagos reales frente a proyección
+              pendiente. Importación masiva, abonos anticipados, gracia, tasa variable y
+              reestructuración fuera de v1.
+            </p>
           </section>
           <div v-if="actionMessage" class="fin-success" role="status">{{ actionMessage }}</div>
           <div v-if="actionError" class="fin-error" role="alert">{{ actionError }}</div>
-          <div v-if="canEdit && detail && detail.status !== 'closed'" class="fin-close-confirmation">
-            <label><input v-model="confirmedZeroBalance" type="checkbox" /> Confirmo que verifiqué que el saldo real pendiente es cero.</label>
-            <p>El cierre solo informa saldo cero y fecha de corte. No registra pago ni concilia movimientos reales.</p>
+          <div
+            v-if="canEdit && detail && detail.status !== 'closed'"
+            class="fin-close-confirmation"
+          >
+            <label
+              ><input v-model="confirmedZeroBalance" type="checkbox" /> Confirmo que verifiqué que
+              el saldo real pendiente es cero.</label
+            >
+            <p>
+              El cierre solo informa saldo cero y fecha de corte. No registra pago ni concilia
+              movimientos reales.
+            </p>
           </div>
         </template>
       </div>
       <footer class="fin-footer">
-        <button type="button" class="btn btn-secondary" :disabled="recalculating || closing || deleting" @click="close">Volver al listado</button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="recalculating || closing || deleting"
+          @click="close"
+        >
+          Volver al listado
+        </button>
         <template v-if="canEdit && detail && detail.status !== 'closed'">
-          <button type="button" class="btn btn-secondary" :disabled="recalculating || closing || deleting || loading" @click="emit('edit', detail)">Editar condiciones</button>
-          <button type="button" class="btn btn-secondary" :disabled="recalculating || closing || deleting || loading" @click="recalculate">{{ recalculating ? 'Regenerando…' : 'Regenerar calendario' }}</button>
-           <button type="button" class="btn btn-danger" :disabled="recalculating || closing || deleting || loading || !confirmedZeroBalance" @click="closeCredit">{{ closing ? 'Cerrando…' : 'Cerrar crédito con saldo real cero' }}</button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="recalculating || closing || deleting || loading"
+            @click="emit('edit', detail)"
+          >
+            Editar condiciones
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="recalculating || closing || deleting || loading"
+            @click="recalculate"
+          >
+            {{ recalculating ? 'Regenerando…' : 'Regenerar calendario' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-danger"
+            :disabled="recalculating || closing || deleting || loading || !confirmedZeroBalance"
+            @click="closeCredit"
+          >
+            {{ closing ? 'Cerrando…' : 'Cerrar crédito con saldo real cero' }}
+          </button>
         </template>
-        <button v-if="canEdit && detail" type="button" class="btn btn-danger" :disabled="recalculating || closing || deleting || loading" @click="confirmDelete">{{ deleting ? 'Eliminando…' : 'Eliminar definitivamente' }}</button>
+        <button
+          v-if="canEdit && detail"
+          type="button"
+          class="btn btn-danger"
+          :disabled="recalculating || closing || deleting || loading"
+          @click="confirmDelete"
+        >
+          {{ deleting ? 'Eliminando…' : 'Eliminar definitivamente' }}
+        </button>
       </footer>
     </section>
   </div>
@@ -682,7 +947,9 @@ function close() {
 }
 
 @keyframes fin-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .fin-error {

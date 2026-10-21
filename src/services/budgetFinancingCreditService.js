@@ -107,11 +107,15 @@ export function classifyFinancingCreditError(error) {
       kind: 'conflict',
       status,
       message:
-        message || 'Las condiciones o la revisión cambiaron. Recargue y solicite una nueva previsualización.'
+        message ||
+        'Las condiciones o la revisión cambiaron. Recargue y solicite una nueva previsualización.'
     }
   if (status === 400 || status === 422) {
     const validation = Array.isArray(detail)
-      ? detail.map((item) => item?.msg).filter(Boolean).join(' · ')
+      ? detail
+          .map((item) => item?.msg)
+          .filter(Boolean)
+          .join(' · ')
       : ''
     return {
       kind: 'validation',

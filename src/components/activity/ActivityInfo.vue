@@ -11,7 +11,7 @@ const { activity } = toRefs(props)
 <template>
   <div class="detail-card">
     <h1 class="activity-name">Actividad #{{ activity.id_activity }}</h1>
-    
+
     <div class="activity-description">
       {{ activity.activity_type.activity }}
     </div>

@@ -168,15 +168,20 @@ import {
   VARIABLE_PIVOT_NOTE,
   formatMoneyCompact,
   formatMoneyPlain,
-  formatDateEs,
-  monthIndexOf,
-  resolveCogsPctByLine,
   IVA_RATE,
-  lineChargesIva,
-  withIva,
-  ivaOf
+  resolveCogsPctByLine
 } from './planningFormat.js'
-import { costCenterCodeOf } from './cecoMovements.js'
+import { costCenterCodeOf, lineIdForCostCenter } from './cecoMovements.js'
+/**
+ * FE-S20 (spec `frontend.03_20` §7.2): TODO el cómputo de la matriz de
+ * liquidez (pivotes por bloque, cuotas derivadas FE-S7/S9/S10, liquidación
+ * FE-S14, impuestos FE-S17, arrastre FE-S6, resumen y bodega) vive en el
+ * helper compartido `cashFlowPivot.js` — LAS MISMAS funciones de agregación
+ * que consume el botón "Exportar" — extraídas verbatim de este componente
+ * (cero cambio de comportamiento); aquí queda solo la presentación
+ * (celdas `·`/`—`/compactas, notas, toggle fuera-de-año y tooltips).
+ */
+import { buildOoyBucketSeries, createCashFlowPivotModel, monthEndOf } from './cashFlowPivot.js'
 
 const props = defineProps({
   /** `BudgetFull` + `parent_budget_name` de la caché del store. */
@@ -221,9 +226,46 @@ function cecoLink(rowId) {
   }
 }
 
-const lines = computed(() =>
-  props.scenario && Array.isArray(props.scenario.budget_lines) ? props.scenario.budget_lines : []
-)
+/* ═══════ FE-S20 (spec `frontend.03_20` §7.2): modelo compartido de cómputo ═══════
+ * Lines, ivaMode, pivotes de todos los bloques, derivaciones de pago al
+ * proveedor/internación, liquidación IVA, impuestos tributarios, arrastre
+ * N−1, resumen de liquidez y bodega viven en `createCashFlowPivotModel`
+ * (`cashFlowPivot.js`) — los getters preservan la reactividad con las props.
+ * Este componente conserva ÚNICAMENTE la presentación (formato de celdas,
+ * notas tooltips, toggle fuera-de-año). Cero cambio de outputs (AC-7). */
+
+const model = createCashFlowPivotModel({
+  scenario: () => props.scenario,
+  financingPrincipalLines: () => props.financingPrincipalLines,
+  financingDisbursementLines: () => props.financingDisbursementLines,
+  store: budgetPlanningStore
+})
+const {
+  lines,
+  scenarioYear,
+  ivaActive,
+  entradasPivot,
+  fijosPivot,
+  comprasPivot,
+  variablesPivot,
+  purchaseLines,
+  purchasingKeys,
+  cogsIncomeLines,
+  costPaymentsActive,
+  settlement,
+  costPaymentsPivot,
+  internmentPaymentsPivot,
+  financingPrincipalPivot,
+  financingDisbursementPivot,
+  settlementPaymentsPivot,
+  taxPaymentsPivot,
+  carryover,
+  carryActive,
+  cobrosArrastre,
+  pagosArrastre,
+  resumen,
+  bodegaMes
+} = model
 
 /** Vacío extremo: capital independiente también habilita el resumen de caja. */
 const hasLines = computed(
@@ -233,21 +275,6 @@ const hasLines = computed(
     financingDisbursementPivot.value?.rows.length > 0
 )
 
-/** Mes de cobro/pago (D-3): `payment_date` con fallback a `budget_date` (R-1). */
-const cfMonth = (line) => monthIndexOf(line.payment_date || line.budget_date)
-
-/**
- * Fecha EFECTIVA de una línea (fuente idéntica a `cfMonth`, §6.2): con ella
- * se decide el bucket fuera-de-año y la columna del arrastre.
- */
-const effectiveDateOf = (line) => line.payment_date || line.budget_date
-
-/** Año N del escenario (base de los buckets; `null` si no es entero). */
-const scenarioYear = computed(() => {
-  const year = Number(props.scenario?.budget_year)
-  return Number.isInteger(year) ? year : null
-})
-
 /** N−1: año de la fuente del arrastre (etiquetas §5/§6.1). */
 const carrySourceYear = computed(() =>
   scenarioYear.value === null ? null : scenarioYear.value - 1
@@ -256,49 +283,11 @@ const carrySourceYear = computed(() =>
 /* ─────────── FE-S14-IVA §4.1: modo "Con IVA" — derivación bruto memoizada O(#líneas) ─────────── */
 
 /**
- * Bandera viva del interruptor "Neto / Con IVA" del escenario
- * (frontend.03_14 D-FE14-1; dueño: `budgetPlanningStore.ivaMode`,
- * persistido por `idBudget`). Con OFF todas las derivaciones de abajo
- * devuelven el neto crudo: DOM y cifras byte-idénticas al FE-S10
- * (AC-FE14-1, cero regresión).
- */
-const ivaActive = computed(() => budgetPlanningStore.ivaMode === true)
-
-/**
- * Monto PRESENTADO de una línea material (fija) bajo el modo: neto × 1.19
- * cuando está gravada — INCOME siempre (D-S10-5), EXPENSE según el flag
- * EFECTIVO (`has_iva`, NULL≡True; D-FE14-2) y PURCHASE no aplica (sus
- * streams se derivan aparte). `planningFormat.withIva` es la ÚNICA fórmula
- * (D-FE14-6). Reacciona en vivo al PUT de celda/toggle de flag porque cuelga
- * de `lines` + `ivaActive` (AC-FE14-2, NFR-FE14-1: cero re-fetch).
- * @param {object} line
- * @returns {number}
- */
-function grossLineAmount(line) {
-  const net = Number(line.projected_amount)
-  if (!Number.isFinite(net)) return net
-  if (!ivaActive.value) return net
-  return withIva(net, lineChargesIva(line))
-}
-
-/**
- * Gross-up de un monto DERIVADO (cuotas de internación): con el modo OFF o
- * línea no gravada devuelve el neto crudo (identidad numérica, NFR-FE10-3
- * heredado). El IVA de importación NO pasa por aquí: es fila propia del
- * bloque "Pago a proveedores" (D-FE14-3).
- * @param {number} net
- * @param {boolean} [charged=true] gravado (internación siempre: es servicio)
- * @returns {number}
- */
-function grossDerived(net, charged = true) {
-  if (!ivaActive.value || !charged) return net
-  return withIva(net, true)
-}
-
-/**
- * Tasa efectiva del settlement para las etiquetas del panel/Flujo
- * (D-FE14-6: `tax_rate_used` del BE manda cuando hay respuesta; mientras no
- * la hay, la constante espejo `IVA_RATE`).
+ * Gross-up de las derivaciones vive en `cashFlowPivot.js` (grossLineAmount /
+ * grossDerived de la factory); aquí queda solo la tasa EFECTIVA del
+ * settlement para las ETIQUETAS del panel/Flujo (D-FE14-6: `tax_rate_used`
+ * del BE manda cuando hay respuesta; mientras no la hay, la constante espejo
+ * `IVA_RATE`).
  * @returns {number}
  */
 const settlementTaxRate = computed(() => {
@@ -320,248 +309,11 @@ const settlementTaxRateLabel = computed(
  */
 const showOutOfYear = ref(false)
 
-/**
- * Bucket fuera-de-año de una fecha efectiva (§6.2): `-1` antes del 01/01/N,
- * `+1` después del 31/12/N, `0` dentro de N o indeterminable. El año se
- * extrae del string ISO con regex (patrón `monthIndexOf`: sin `new Date`
- * para fechas puras, fallback a `Date` solo en otro formato) — NUNCA por
- * comparación de `Date` (corrimiento UTC).
- */
-function outOfYearBucket(value) {
-  const yearN = scenarioYear.value
-  if (!value || yearN === null) return 0
-  let year
-  const plain = String(value).match(/^(\d{4})-/)
-  if (plain) {
-    year = Number(plain[1])
-  } else {
-    const date = new Date(value)
-    year = Number.isNaN(date.getTime()) ? null : date.getFullYear()
-  }
-  if (year === null) return 0
-  if (year < yearN) return -1
-  if (year > yearN) return 1
-  return 0
-}
-
-/**
- * Pivote genérico de un bloque: filas = CECO (agrupa todas sus líneas, orden
- * `localeCompare(..., 'es')`), columnas Ene–Dic según `monthOf(line)`, celda
- * = Σ `projected_amount` crudos (no finitos se ignoran), totales por
- * fila/columna/bloque. El total de fila es ANUAL: montos con mes no
- * ubicable (-1) suman a `row.total`/`grandTotal` aunque no pueblen celda
- * alguna (criterio idéntico a ExecutivePivotTable).
- *
- * FE-S6 §6.2 (aditivo): cada fila gana `before`/`after` (Σ de montos con
- * fecha efectiva `< 01/01/N` / `> 31/12/N`) y el bloque `beforeTotal`,
- * `afterTotal` y `beforeAfterRowCount` (filas con |before|+|after| > 0 → la
- * `k` del chip). `row.total`/`grandTotal` NO cambian jamás de semántica: el
- * bucket solo hace VISIBLE de dónde viene lo que ya sumaba. FE-S8-FLUJO-OY
- * (FR-1/C-1): el fuera-de-año NUNCA puebla la celda mensual ni `columnTotals`
- * (toggle ON u OFF); con ON vive en sus columnas Antes/Después y con OFF solo
- * lo revelan chip/pie (así Σ meses + fuera = total anual es EXACTO,
- * AC-S6-FE-4 → AC-OY-1..3). `bucket === 0` incluye fechas indeterminables
- * (D-OY-6): no se puede afirmar fuera ⇒ vive en el mes.
- * @param {(line: object) => boolean} match Filtro de líneas del bloque.
- * @param {(line: object) => number} monthOf Función de ubicación mensual.
- * @param {((line: object) => number)|null} [amountOf=null] extractor del
- *   monto a acumular (FE-S14-IVA: con el modo "Con IVA" cada bloque pasa su
- *   derivación bruto por bandera efectiva; `null` ⇒ `projected_amount` crudo
- *   — modo OFF byte-idéntico a FE-S4B, AC-FE14-1).
- */
-function buildPivot(match, monthOf, amountOf = null) {
-  const byCeco = new Map()
-  const columnTotals = Array.from({ length: 12 }, () => 0)
-  let grandTotal = 0
-  /** Hallazgo 5 (auditoría FE): Σ de montos con fecha efectiva ILEGIBLE. */
-  let undatedTotal = 0
-
-  for (const line of lines.value) {
-    if (!match(line)) continue
-    const amount = amountOf ? amountOf(line) : Number(line.projected_amount)
-    if (!Number.isFinite(amount)) continue
-
-    const key = line.id_cost_center
-    if (!byCeco.has(key)) {
-      byCeco.set(key, {
-        id: key,
-        label: budgetPlanningStore.costCenterLabel(key),
-        months: Array.from({ length: 12 }, () => 0),
-        total: 0,
-        before: 0,
-        after: 0
-      })
-    }
-    const row = byCeco.get(key)
-    const month = monthOf(line)
-    const bucket = outOfYearBucket(effectiveDateOf(line))
-    // FE-S8-FLUJO-OY C-1 (FR-1): el fuera-de-año NUNCA puebla la celda mensual
-    // ni `columnTotals` (toggle ON u OFF); `bucket === 0` además cubre fechas
-    // indeterminables (D-OY-6): no se puede afirmar fuera ⇒ vive en el mes.
-    if (month >= 0 && bucket === 0) {
-      row.months[month] += amount
-      columnTotals[month] += amount
-    }
-    if (bucket === -1) row.before += amount
-    else if (bucket === 1) row.after += amount
-    // Hallazgo 5 (auditoría FE): fecha efectiva no parseable (month −1 con
-    // bucket 0) no puebla celda ni bucket Antes/Después pero SÍ suma al
-    // total anual ⇒ se contabiliza aparte para que el aviso del bloque
-    // explique la brecha "Σ meses + Antes/Después < Total anual".
-    if (month < 0 && bucket === 0) undatedTotal += amount
-    row.total += amount
-    grandTotal += amount
-  }
-
-  const rows = [...byCeco.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'))
-  let beforeTotal = 0
-  let afterTotal = 0
-  let beforeAfterRowCount = 0
-  for (const row of rows) {
-    beforeTotal += row.before
-    afterTotal += row.after
-    if (Math.abs(row.before) + Math.abs(row.after) > 0) beforeAfterRowCount += 1
-  }
-  return {
-    rows,
-    columnTotals,
-    grandTotal,
-    beforeTotal,
-    afterTotal,
-    beforeAfterRowCount,
-    undatedTotal
-  }
-}
-
-/**
- * Bloque "Entradas" (§4.2): ingresos fijos por fecha de pago (D-3, R-1).
- * FE-S14-IVA §4.1: con el modo ON el recaudo se muestra BRUTO (× 1.19 — el
- * ingreso siempre genera IVA, D-S10-5); con OFF el neto crudo de siempre.
- */
-const entradasPivot = computed(() =>
-  buildPivot(
-    (line) => line.line_type === 'income' && line.behavior_type === 'fixed',
-    cfMonth,
-    grossLineAmount
-  )
-)
-
-/**
- * Bloque "Salidas — Gastos fijos" (§4.2): gastos fijos por fecha de pago.
- * FE-S14-IVA §4.1: × 1.19 según el flag efectivo de la línea (NULL≡True);
- * flag `false` ⇒ neto sin gross-up (AC-FE14-4).
- */
-const fijosPivot = computed(() =>
-  buildPivot(
-    (line) => line.line_type === 'expense' && line.behavior_type === 'fixed',
-    cfMonth,
-    grossLineAmount
-  )
-)
-
-/* ─────────── FE-S9-PURCHASES-BODEGA §2.4: bloque "Compras del mes" ─────────── */
-
-/**
- * Pivote de COMPRAS de importación (§2.4): filas por CECO × MES DE CAUSACIÓN
- * de la importación (`monthIndexOf(budget_date)` — NO la fecha de pago: una
- * compra nunca tiene `payment_date`, BR-PUR-01). `bucket` siempre 0 (el BE
- * valida `budget_date` ∈ N, BR-LINE-04) ⇒ bloque `ooy: false`: sin columnas
- * Antes/Después ni chip. Solo se renderiza si el escenario tiene compras
- * (NFR-FE9-3: sin compras, DOM idéntico a FE-S8).
- */
-const comprasPivot = computed(() =>
-  buildPivot(
-    (line) => line.line_type === 'purchase',
-    (line) => monthIndexOf(line.budget_date)
-  )
-)
-
-/**
- * Base del bloque variable (D-5): Σ ingresos fijos por MES DE CAUSACIÓN
- * (`monthIndexOf(budget_date)`) — agregación SEPARADA del bloque Entradas
- * (que usa payment date), para replicar numéricamente el `incomePivot.
- * columnTotals` que consume la Vista Ejecutiva (AC-VF-6).
- */
-const baseIngresosCausados = computed(() => {
-  const base = Array.from({ length: 12 }, () => 0)
-  for (const line of lines.value) {
-    if (line.line_type !== 'income' || line.behavior_type !== 'fixed') continue
-    const amount = Number(line.projected_amount)
-    if (!Number.isFinite(amount)) continue
-    const month = monthIndexOf(line.budget_date)
-    if (month >= 0) base[month] += amount
-  }
-  return base
-})
-
-/** Líneas de gasto variables (origen crudo del bloque estimado). */
-const variableSourceLines = computed(() =>
-  lines.value.filter((line) => line.line_type === 'expense' && line.behavior_type !== 'fixed')
-)
-
-/**
- * Pivote ESTIMADO de gastos variables (D-5, réplica de la "Opción A" de
- * `ExecutivePivotTable.variablePivot`): cada línea variable aporta
- * `(Number(variable_rate) || 0) × base[m]` en `m = monthIndexOf(budget_date)`
- * (causación). Montos DERIVADOS de presentación —no se almacenan (BR-CLN-03)—
- * y se recalculan solos al editar ingresos. `null` (el bloque no se
- * renderiza) si no hay líneas variables o la base es toda cero, mismo guard
- * que Ejecutiva.
- *
- * FE-S6 §6.2: los buckets `before`/`after` son CERO por construcción (cada
- * monto derivado vive en un mes de causación ∈ N, que `monthIndexOf < 0` ya
- * filtra) ⇒ el bloque no recibe columnas fuera-de-año ni chip; se devuelven
- * igualmente las claves para homogeneidad del shape del pivote.
- */
-const variablesPivot = computed(() => {
-  const source = variableSourceLines.value
-  const base = baseIngresosCausados.value
-  if (!source.length || !base.some((value) => value !== 0)) return null
-
-  const byCeco = new Map()
-  const columnTotals = Array.from({ length: 12 }, () => 0)
-  let grandTotal = 0
-
-  for (const line of source) {
-    const key = line.id_cost_center
-    if (!byCeco.has(key)) {
-      byCeco.set(key, {
-        id: key,
-        label: budgetPlanningStore.costCenterLabel(key),
-        months: Array.from({ length: 12 }, () => 0),
-        total: 0,
-        before: 0,
-        after: 0
-      })
-    }
-    const row = byCeco.get(key)
-
-    const month = monthIndexOf(line.budget_date)
-    if (month < 0) continue
-    const rate = Number(line.variable_rate) || 0
-    // FE-S14-IVA §4.1: la BASE de la estimación sigue siendo neta (igual que
-    // E3/E4 del motor BE, backend.02_20 §4.3); el gross-up × 1.19 se aplica
-    // al MONTO DERIVADO según el flag efectivo de la línea variable
-    // (NULL≡True). Con modo OFF `grossDerived` es identidad: cifra idéntica.
-    const amount = grossDerived(rate * base[month], lineChargesIva(line))
-    row.months[month] += amount
-    row.total += amount
-    columnTotals[month] += amount
-    grandTotal += amount
-  }
-
-  const rows = [...byCeco.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'))
-  // Shape homogéneo con `buildPivot` (hallazgo 5): variables siempre ∈ N ⇒ 0.
-  return {
-    rows,
-    columnTotals,
-    grandTotal,
-    beforeTotal: 0,
-    afterTotal: 0,
-    beforeAfterRowCount: 0,
-    undatedTotal: 0
-  }
-})
+/* El bucket fuera-de-año (`outOfYearBucket`), el pivote genérico
+ * (`buildPivot`) y los bloques Entradas/Salidas fijos/Compras/Gastos
+ * variables — con su gross-up FE-S14 — viven en `cashFlowPivot.js`
+ * (FE-S20 §7.2: `outOfYearBucketOf`, `buildFlowPivot`,
+ * `buildVariableFlowPivot` sobre la factory compartida). */
 
 /** Nota del bloque estimado (§4.4) — FE-S18 RF-4.2: se importa de
  * `planningFormat.js` (ÚNICA definición compartida con la Ejecutiva);
@@ -597,579 +349,42 @@ const COGS_PAYMENT_NOTE =
 const COGS_TERMS_UNAVAILABLE_NOTE =
   'No fue posible calcular el pago a proveedores (catálogo de términos no disponible).'
 
-/* ── FE-S14-IVA D-FE14-3: fila única "IVA de importación" dentro de "Pago a proveedores" ── */
-
-/** Clave sintética de la fila agregada (NUNCA colisiona con un `id_cost_center`). */
-const IMPORT_VAT_ROW_KEY = 'iva-importacion'
-/** Etiqueta literal de la fila (AC-FE14-3). */
-const IMPORT_VAT_ROW_LABEL = 'IVA de importación'
-
-/**
- * Último día calendario del mes de una fecha ISO `YYYY-MM-DD` — la fecha de
- * REFERENCIA con la que el resolvedor compartido evalúa la vigencia de la
- * tasa de costo (month-end ∈ [date_from, date_to], espejo exacto del ancla
- * mes-a-mes de `ExecutivePivotTable.monthEndISO` y del `_month_end` de
- * `get_carryover_cogs_lines` server). Parsing por regex sobre el string
- * (patrón `monthIndexOf`: sin `new Date` para ISO puras); el día `0` de
- * `Date.UTC(año, mes, 0)` es el último día del mes (bisiestos correctos,
- * zona inmutable) y se re-serializa con padding manual — prohibido
- * `toISOString()` (corrimiento UTC).
- * @param {string|null|undefined} value
- * @returns {string|null} `'YYYY-MM-DD'` o `null` si no es parseable.
- */
-function monthEndOf(value) {
-  if (!value) return null
-  let year
-  let month
-  const plain = String(value).match(/^(\d{4})-(\d{2})/)
-  if (plain) {
-    year = Number(plain[1])
-    month = Number(plain[2])
-  } else {
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return null
-    year = date.getFullYear()
-    month = date.getMonth() + 1
-  }
-  if (!Number.isFinite(year) || !Number.isInteger(year) || month < 1 || month > 12) return null
-  const last = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  const mm = String(month).padStart(2, '0')
-  const dd = String(last).padStart(2, '0')
-  return `${String(year).padStart(4, '0')}-${mm}-${dd}`
-}
-
-/**
- * Suma `days` (entero; NEGATIVO = antes de la ancla, semántica
- * `payment_days`) a una fecha ISO `YYYY-MM-DD` y re-serializa ISO. Cruza
- * mes/AÑO con rollover y bisiestos vía aritmética de milisegundos sobre
- * `Date.UTC` (epoch UTC + days×86 400 000 y re-extracción con `getUTC*` —
- * jamás `Date` local + `toISOString()`, que corrimentea la fecha; jamás
- * `new Date` sobre la ISO pura, patrón `monthIndexOf`). Cero redondeo: la
- * aritmética de enteros-milisegundos es exacta para el rango de fechas de
- * presupuesto.
- * @param {string|null|undefined} value
- * @param {number} days
- * @returns {string|null} `'YYYY-MM-DD'` o `null` si la base/días no son válidos.
- */
-function addDaysISO(value, days) {
-  const offset = Number(days)
-  if (!value || !Number.isInteger(offset)) return null
-  let year
-  let month
-  let day
-  const plain = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (plain) {
-    year = Number(plain[1])
-    month = Number(plain[2])
-    day = Number(plain[3])
-  } else {
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return null
-    year = date.getFullYear()
-    month = date.getMonth() + 1
-    day = date.getDate()
-  }
-  if (!Number.isFinite(year) || !Number.isInteger(year) || month < 1 || month > 12) return null
-  if (day < 1 || day > 31) return null
-  const shifted = new Date(Date.UTC(year, month - 1, day) + offset * 86400000)
-  if (Number.isNaN(shifted.getTime())) return null
-  const yyyy = String(shifted.getUTCFullYear()).padStart(4, '0')
-  const mm = String(shifted.getUTCMonth() + 1).padStart(2, '0')
-  const dd = String(shifted.getUTCDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
-}
-
-/** Ingresos fijos PROPIOS del escenario: la única base de la derivación §5. */
-const cogsIncomeLines = computed(() =>
-  lines.value.filter((line) => line.line_type === 'income' && line.behavior_type === 'fixed')
-)
-
-/* ── FE-S9-PURCHASES-BODEGA §2.5 + ENMIENDA A-02 §7.1: switch de fuente D-4' POR LÍNEA (VINCULANTE) ── */
-
-/**
- * Regla de fuente única D-4' (VINCULANTE, ENMIENDA A-02 §7.1 — reemplaza la
- * por-CECO de §2.5): una LÍNEA con ≥1 línea de compra en el escenario es
- * COMPRADORA ⇒ el pago a proveedores de TODOS sus CECOS (la comprador
- * "Facturación" y los zonales que solo venden) se deriva de sus COMPRAS y
- * NUNCA de ingreso × cogs_pct (cero doble cuenta; el defecto 266: compra en
- * 000001/000002 y venta en 000101/000201/000202/000302 de las MISMAS Líneas
- * ⇒ el switch por-CECO nunca casaba). Una sola pasada O(L) memoizada
- * alimenta AMBOS consumidores (§2.5/§7.1): `purchasingKeys` (skip en la
- * derivación FE-S7) y `purchaseLines` (fuente de las cuotas de compra,
- * INALTERADAS por la enmienda).
- */
-const purchaseIndex = computed(() => {
-  const purchaseLinesArr = []
-  const keySet = new Set()
-  for (const line of lines.value) {
-    if (line.line_type === 'purchase') {
-      purchaseLinesArr.push(line)
-      keySet.add(sourceKeyForCostCenter(line.id_cost_center))
-    }
-  }
-  return { lines: purchaseLinesArr, keys: keySet }
-})
-
-/** @see purchaseIndex — líneas `purchase` crudas (fuente de las cuotas §2.5). */
-const purchaseLines = computed(() => purchaseIndex.value.lines)
-
-/**
- * @see purchaseIndex — claves D-4' (A-02 §7.1) de las Líneas con plan de
- * compras: la derivación FE-S7 por ingreso se saltea la fila ingreso si su
- * `sourceKeyForCostCenter(id_cost_center)` pertenece a este Set.
- */
-const purchasingKeys = computed(() => purchaseIndex.value.keys)
-
-/**
- * CECO → `id_line` vía el catálogo `costCenters` cacheado — ESPEJO exacto
- * del helper local de `ExecutivePivotTable` (§3.1): desconocido o catálogo
- * A5 caído ⇒ `null` ⇒ el CECO cae a la tasa GLOBAL y NO tiene términos
- * propios (misma cadena que server-side en `get_carryover_cogs_lines`).
- * @param {number|null|undefined} idCostCenter
- * @returns {number|null}
- */
-function lineIdForCostCenter(idCostCenter) {
-  if (idCostCenter === null || idCostCenter === undefined) return null
-  const found = budgetPlanningStore.costCenters.find((item) => item.id_cost_center === idCostCenter)
-  return typeof found?.id_line === 'number' ? found.id_line : null
-}
+/* FE-S14-IVA D-FE14-3 (fila "IVA de importación"), las anclas de fecha
+ * (`monthEndOf`/`addDaysISO`), `cogsIncomeLines` y el switch de fuente D-4'
+ * (`purchaseIndex`/`purchaseLines`/`purchasingKeys`) con sus streams de
+ * cuotas derivadas viven en `cashFlowPivot.js` (FE-S20 §7.2 — factory
+ * compartida con la exportación). El resolvedor ÚNICO de `id_line` es
+ * `cecoMovements.lineIdForCostCenter`. */
 
 /**
  * Clave de fuente D-4' (ENMIENDA A-02 §7.1, espejo de las claves `line:`/`cc:`
  * que el backend aplica en el carryover): `line:<id_line>` cuando el catálogo
  * `costCenters` le conoce Línea al CECO —todas las facetas de una misma Línea
  * (la compradora "Facturación" y los zonales que solo venden) comparten clave
- * ⇒ el switch de fuente es POR LÍNEA—; `cc:<id_cost_center>` cuando
- * `lineIdForCostCenter` devuelve `null` (CECO desconocido o catálogo A5
- * caído). DEGRADACIÓN HONESTA §7.1: sin catálogo la clave vuelve a ser
- * por-CECO (comportamiento A-01, conservador: una compra solo apaga la
- * derivación de su MISMO CECO y jamás apaga de más por una Línea que no se
- * puede conocer). Los prefijos evitan cualquier colisión entre `id_line` e
- * `id_cost_center`.
+ * ⇒ el switch de fuente es POR LÍNEA—; `cc:<id_cost_center>` cuando el CECO
+ * es desconocido o el catálogo A5 cayó. DEGRADACIÓN HONESTA §7.1: sin
+ * catálogo la clave vuelve a ser por-CECO (A-01, conservador). Local solo
+ * para la condición `costTermsDegraded`; la derivación usa la MISMA regla
+ * dentro de la factory (`cashFlowPivot.js`).
  * @param {number|null|undefined} idCostCenter
  * @returns {string}
  */
 function sourceKeyForCostCenter(idCostCenter) {
-  const lineId = lineIdForCostCenter(idCostCenter)
+  const lineId = lineIdForCostCenter(budgetPlanningStore.costCenters, idCostCenter)
   return lineId === null ? `cc:${idCostCenter}` : `line:${lineId}`
 }
 
-/**
- * ¿Dúo de internación disponible (cargado y sin error)? FE-S10 §2.4-5
- * (D-FE10-3, fail-closed): SIN el % vigente no se puede partir la base de
- * las compras ⇒ AMBOS streams de compra (proveedor e internación) se
- * cortocircuitan mientras el catálogo esté en vuelo o caído; la ruta `cogs`
- * sobre ingresos NO usa rates y queda intacta (A-8). Como `ensureCatalogs`
- * se.await-a antes de pintar el detalle, el estado transitorio "en vuelo"
- * no produce parpadeo (patrón FE-S7: el bloque simplemente aún no existe).
- */
-const internmentCatalogReady = computed(
-  () => budgetPlanningStore.internmentCatalogLoaded && !budgetPlanningStore.internmentCatalogError
-)
-
-/**
- * Cuotas DERIVADAS de pago al proveedor por costo de ventas (§5; D-S7-2:
- * NUNCA se materializan — vivimos solo aquí). Por cada ingreso fijo propio:
- *  1. `pct = resolveCogsPctByLine(lineCostRates, id_line(CECO),
- *     monthEndOf(budget_date))` (resolvedor COMPARTIDO con la Ejecutiva →
- *     mismo % y mismo mes, R-S7-FE-1); `null` ⇒ cero filas por esa línea
- *     (degradación silenciosa, espejo AC-S7-BE-6).
- *  2. `costo = projected_amount × pct / 100` — floats CRUDOS, cero redondeo
- *     intermedio (el formato ocurre solo al render; espejo de la regla
- *     `cost = float(amount) * pct / 100.0` server).
- *  3. términos de la LÍNEA del CECO (`payableTermsByLine`, orden D-7):
- *     CON términos ⇒ una cuota `{ costo × payment_pct (0–1), ancla +
- *     payment_days }` por término; SIN términos (línea sin términos, o CECO
- *     sin id_line) ⇒ cuota ÚNICA al 100 % en la ancla `budget_date`
- *     (D-S7-4; AC-S7-FE-3). Ancla = `budget_date` del ingreso, NO la cuota
- *     de cobro (D-S7-5).
- * Cortocircuito: catálogo de términos no cargado o caído ⇒ `[]` (el bloque
- * no se renderiza; el aviso vive bajo el resumen). Si un `payment_days`
- * basura impidiera el desplazamiento, la cuota queda en la ancla (el monto
- * NUNCA se pierde — reconciliación con el total de la fila).
- * FE-S10 §2.4: en las COMPRAS la base deja de ser el total de la fila y pasa
- * a ser `provBase = amount / (1 + pctInt)` (fórmula §4 de `backend.02_19`
- * replicada cliente, D-FE10-1); el mecanismo de cuotas queda INTACTO. Con el
- * dúo de internación no disponible se cortocircuita SOLO el bloque de
- * compras (fail-closed, D-FE10-3) — los ingresos `cogs` siguen.
- * Memoizada O(#ingresos × #términos) sobre `budget_lines` + getters (AC-S7-FE-2).
- * @returns {Array<{ idCostCenter: number, amount: number, effectiveDate: string|null }>}
- */
-const costPaymentRows = computed(() => {
-  if (!budgetPlanningStore.payableTermsLoaded || budgetPlanningStore.payableTermsError) return []
-  const incomes = cogsIncomeLines.value
-  const purchases = purchaseLines.value
-  if (!incomes.length && !purchases.length) return []
-  const rates = budgetPlanningStore.lineCostRates
-  const termsByLine = budgetPlanningStore.payableTermsByLine
-  const purchasing = purchasingKeys.value
-  const rows = []
-  for (const line of incomes) {
-    // FE-S9 §2.5-1 + A-02 §7.1 (D-4'): LÍNEA COMPRADORA (o CECO comprador bajo
-    // la degradación `cc:`) ⇒ su ingreso NO genera cuota cogs (el proveedor ya
-    // se paga por las compras de arriba — nunca doble cuenta). La compra en el
-    // CECO Facturación de la Línea apaga también la derivación de los CECOS
-    // zonales de esa Línea (defecto 266: 43M + 28.2M ⇒ ahora 43M exactos).
-    if (purchasing.has(sourceKeyForCostCenter(line.id_cost_center))) continue
-    // AC-S7-FE-2: ingreso editado a 0 (o tasa 0) ⇒ costo 0 ⇒ NI UNA cuota ⇒
-    // el bloque DESAPARECE (`rows.length === 0`). El monto nulo jamás se
-    // pinta como fila fantasma (las sumas no cambian: aportar 0 es aportar nada).
-    const amount = Number(line.projected_amount)
-    if (!Number.isFinite(amount) || amount === 0) continue
-    const lineId = lineIdForCostCenter(line.id_cost_center)
-    const pct = resolveCogsPctByLine(rates, lineId, monthEndOf(line.budget_date))
-    if (pct === null || pct === 0) continue
-    const cost = (amount * pct) / 100
-    const terms = lineId === null ? undefined : termsByLine.get(lineId)
-    if (terms && terms.length) {
-      for (const term of terms) {
-        const paymentPct = Number(term.payment_pct)
-        if (!Number.isFinite(paymentPct)) continue
-        rows.push({
-          idCostCenter: line.id_cost_center,
-          amount: cost * paymentPct,
-          effectiveDate: addDaysISO(line.budget_date, Number(term.payment_days)) ?? line.budget_date
-        })
-      }
-    } else {
-      rows.push({
-        idCostCenter: line.id_cost_center,
-        amount: cost,
-        effectiveDate: line.budget_date
-      })
-    }
-  }
-  // FE-S9 §2.5-2 + FE-S10 §2.4: CUOTAS DE COMPRA (stream PROVEEDOR) — mismo
-  // shape `{ idCostCenter, amount, effectiveDate }` (D-FE9-4: `buildPivotFrom`
-  // y FE-S8 sin cambios). Ancla = `budget_date` de la importación; término con
-  // `payment_days` sobre esa ancla (negativo ⇒ antes). SIN términos (o CECO
-  // sin `id_line`) ⇒ cuota única 100 % en la ancla (D-S7-4 extendido) — ahora
-  // SOBRE `provBase` (FE-S10): Línea sin tasa ⇒ pctInt 0 ⇒ `provBase ===
-  // amount` ⇒ DOM idéntico a FE-S9 (NFR-FE10-3). Mismos guards FE-S7: monto no
-  // finito o 0 ⇒ sin cuota; `payment_pct` basura ⇒ skip del término;
-  // `addDaysISO` `null` ⇒ la cuota queda anclada (el monto NUNCA se pierde).
-  // Fail-closed D-FE10-3: sin el dúo de internación NO se puede partir la
-  // base ⇒ este stream tampoco se deriva (la ruta `cogs` de arriba es
-  // independiente de rates y sigue intacta, A-8).
-  if (!internmentCatalogReady.value) return rows
-  const internmentPctsByLine = budgetPlanningStore.internmentRateByLine
-  for (const line of purchases) {
-    const amount = Number(line.projected_amount)
-    if (!Number.isFinite(amount) || amount === 0) continue
-    const lineId = lineIdForCostCenter(line.id_cost_center)
-    // §2.4-1: `Number(map.get(lineId) ?? 0)`; basura o negativa ⇒ 0 (CECO sin
-    // Línea ⇒ `get(null)` undefined ⇒ 0, misma fila del borde BE §4).
-    const pctIntRaw = Number(internmentPctsByLine.get(lineId) ?? 0)
-    const pctInt = !Number.isFinite(pctIntRaw) || pctIntRaw < 0 ? 0 : pctIntRaw
-    // §2.4-2: `provBase = amount / (1 + pctInt)` (pctInt 0 ⇒ amount EXACTO —
-    // `x / 1 === x` en IEEE-754: cero regresión numérica, NFR-FE10-3).
-    const provBase = amount / (1 + pctInt)
-    // FE-S14-IVA D-FE14-3/AC-FE14-3 (modo ON): el IVA de importación NO crea
-    // bloque nuevo ni embute en las cuotas — es UNA fila agregada "IVA de
-    // importación" del bloque "Pago a proveedores" en la FECHA DE COMPRA, con
-    // la MISMA descomposición §4 de backend.02_19/BE-S10 E5: base =
-    // Total/(1+%int) (`provBase` arriba; degradación %int = 0 sin tasa o sin
-    // Línea ⇒ base = Total) y monto = base × 19 % (`ivaOf`, cero hardcodes).
-    // Las cuotas del proveedor de abajo siguen NETAS (AC-FE14-3).
-    if (ivaActive.value) {
-      rows.push({
-        idCostCenter: line.id_cost_center,
-        rowKey: IMPORT_VAT_ROW_KEY,
-        label: IMPORT_VAT_ROW_LABEL,
-        amount: ivaOf(provBase, true),
-        effectiveDate: line.budget_date
-      })
-    }
-    const terms = lineId === null ? undefined : termsByLine.get(lineId)
-    if (terms && terms.length) {
-      for (const term of terms) {
-        const paymentPct = Number(term.payment_pct)
-        if (!Number.isFinite(paymentPct)) continue
-        rows.push({
-          idCostCenter: line.id_cost_center,
-          amount: provBase * paymentPct,
-          effectiveDate: addDaysISO(line.budget_date, Number(term.payment_days)) ?? line.budget_date
-        })
-      }
-    } else {
-      rows.push({
-        idCostCenter: line.id_cost_center,
-        amount: provBase,
-        effectiveDate: line.budget_date
-      })
-    }
-  }
-  return rows
-})
-
-/** ¿El bloque derivado tiene filas? (empty ⇒ no se renderiza, §5). */
-const costPaymentsActive = computed(() => costPaymentRows.value.length > 0)
-
-/* ─────────── FE-S10-INTERNMENT-SPLIT §2.4: stream de internación de las compras ─────────── */
-
-/**
- * Épsilon COP para suprimir filas de internación residuales de float crudo
- * (D-FE10-5/§2.4-4: `intBase > 0.005`; convención BE-S8 §4 "raw float, cero
- * redondeo intermedio" — NUNCA redondear el monto derivado, solo excluir).
- */
-const INTERNMENT_EPSILON_COP = 0.005
-
-/**
- * Cuotas DERIVADAS de pago de la INTERNACIÓN (FE-S10 §2.4-4): MISMO shape
- * `{ idCostCenter, amount, effectiveDate }` que `costPaymentRows` (precedente
- * D-FE9-4 ⇒ `buildPivotFrom` reutilizado sin tocar). Solo compras:
- *  - `pctInt = Number(internmentRateByLine.get(lineId) ?? 0)` (§2.4-1: no
- *    finito o negativo ⇒ 0, guard defensivo espejo del skip por pct basura);
- *  - `intBase = amount − amount / (1 + pctInt)` (BR-INT-01);
- *  - `pctInt === 0` ⇒ CERO filas (BR-INT-05/A-5) y `intBase ≤ 0.005` ⇒ cero
- *    filas (§2.4-4);
- *  - CON `internmentTermsByLine.get(lineId)` ⇒ una cuota `{ intBase ×
- *    payment_pct, addDaysISO(budget_date, payment_days) ?? budget_date }` por
- *    término (orden D-7 del getter; mismos guards FE-S7: pct no finito ⇒
- *    skip, addDays `null` ⇒ ancla);
- *  - SIN términos ⇒ cuota ÚNICA `{ intBase, budget_date }` (BR-INT-04, espejo
- *    D-S7-4). Ancla = fecha de importación también para este stream (A-3).
- * Fail-closed D-FE10-3: sin el dúo cargado (o con `internmentCatalogError`)
- * ⇒ `[]` (el bloque no se deriva; el aviso vive en `costTermsDegraded`).
- * O(L_compras) memoizada dentro del mismo loop de derivation (§2.4; NFR-
- * FE10-1: ≤2 pasadas constantes, cero anidados extra fuera de cuotas).
- * @returns {Array<{ idCostCenter: number, amount: number, effectiveDate: string|null }>}
- */
-const internmentPaymentRows = computed(() => {
-  if (!internmentCatalogReady.value) return []
-  const purchases = purchaseLines.value
-  if (!purchases.length) return []
-  const ratesByLine = budgetPlanningStore.internmentRateByLine
-  const termsByLine = budgetPlanningStore.internmentTermsByLine
-  const rows = []
-  for (const line of purchases) {
-    const amount = Number(line.projected_amount)
-    if (!Number.isFinite(amount) || amount === 0) continue
-    const lineId = lineIdForCostCenter(line.id_cost_center)
-    const pctIntRaw = Number(ratesByLine.get(lineId) ?? 0)
-    const pctInt = !Number.isFinite(pctIntRaw) || pctIntRaw < 0 ? 0 : pctIntRaw
-    if (pctInt === 0) continue // A-5/BR-INT-05: sin tasa ⇒ cero filas
-    const intBase = amount - amount / (1 + pctInt) // BR-INT-01
-    if (intBase <= INTERNMENT_EPSILON_COP) continue // §2.4-4 (float crudo)
-    const terms = lineId === null ? undefined : termsByLine.get(lineId)
-    if (terms && terms.length) {
-      for (const term of terms) {
-        const paymentPct = Number(term.payment_pct)
-        if (!Number.isFinite(paymentPct)) continue
-        rows.push({
-          idCostCenter: line.id_cost_center,
-          // FE-S14-IVA §4.1/D-FE14-3/AC-FE14-3: cada cuota del bloque "Pago
-          // de internación" ×1.19 (el servicio de internación paga IVA; E6
-          // del motor BE). Con modo OFF `grossDerived` es identidad exacta.
-          amount: grossDerived(intBase * paymentPct),
-          effectiveDate: addDaysISO(line.budget_date, Number(term.payment_days)) ?? line.budget_date
-        })
-      }
-    } else {
-      // BR-INT-04: Línea con tasa pero sin cuotas de internación ⇒ pago
-      // completo el día de la importación.
-      rows.push({
-        idCostCenter: line.id_cost_center,
-        amount: grossDerived(intBase),
-        effectiveDate: line.budget_date
-      })
-    }
-  }
-  return rows
-})
-
-/**
- * ¿Hay cuotas de internación ARRASTRADAS del escenario N−1? §2.5: el bloque
- * también se muestra con `origin:"internment"` en el carryover (el BE ya
- * filtró por año, BR-CO-09 — aquí solo se detecta presencia). Lectura directa
- * de `budgetPlanningStore.carryover` (SD6-4: SOLO lee).
- */
-const carryInternmentActive = computed(() => {
-  const carry = budgetPlanningStore.carryover
-  return (
-    carry.enabled &&
-    Array.isArray(carry.lines) &&
-    carry.lines.some((line) => line.origin === 'internment')
-  )
-})
-
-/** §2.5: render-condición del bloque (filas propias ∨ arrastre int ⇒ NFR-
- *  FE10-3: sin configuración ninguna de las dos ⇒ bloque ausente, DOM idéntico). */
-const internmentPaymentsActive = computed(
-  () => internmentPaymentRows.value.length > 0 || carryInternmentActive.value
-)
+/* `internmentCatalogReady`, `costPaymentRows` y `costPaymentsActive`
+ * (cuotas derivadas §5 + streams D-FE10) viven en `cashFlowPivot.js`
+ * (FE-S20 §7.2). */
 
 /** Nota literal del bloque §2.5 (ACEPTACIÓN — `−` U+2212 verbatim). */
 const INTERNMENT_PAYMENT_NOTE =
   'Desglose del valor importado: costo de internación = total − total/(1 + % internación de la Línea), pagado según sus propios términos. Informativo en caja: no altera el P&L (causación).'
 
-/** Pivote del bloque "Pago de internación" (CECO de la compra × mes de
- *  vencimiento de la cuota; cuotas fuera de año → Antes/Después, FE-S8
- *  intacto). `null` ⇒ sin bloque. */
-const internmentPaymentsPivot = computed(() => {
-  if (!internmentPaymentsActive.value) return null
-  return buildPivotFrom(internmentPaymentRows.value)
-})
-
-/* ─────────── FE-S14-IVA D-FE14-4: bloque "Pago de liquidación de IVA" (fuente settlementCache) ─────────── */
-
-/**
- * Caché viva de la liquidación en el store (patrón `carryover`: SOLO lee,
- * SD6-4 heredado — jamás dispara HTTP desde la derivación). La recurrencia
- * con arrastre es el ÚNICO dato IVA que viaja del BE (D-FE14-4: no se
- * recalcula en FE para evitar divergencia); el bloque se alimenta de ella.
- */
-const settlement = computed(() => budgetPlanningStore.settlement)
-
-/**
- * Pivote de los DESEMBOLSOS de liquidación (frontend.03_14 §4.1/AC-FE14-5):
- * una fila por período con `payment > 0` (A8 del BE: `pago_p` es el único
- * desembolso), ubicada en el MES de `payment_due_date` del Calendario IVA.
- * Existe SOLO con el modo Con IVA activo (con OFF el DOM debe volver a los
- * netos byte-a-byte, AC-FE14-1) y con calendario respondido — sin
- * `iva_periods` el Flujo NO colapsa: simplemente no hay bloque (AC-FE14-5).
- * Vencimientos del último período que caen en N+1 viven en la columna
- * "Después de N" (regla FE-S8/AC-OY-9 intacta).
- * @returns {object|null} shape idéntico al de `buildPivotFrom`.
- */
-const settlementPaymentsPivot = computed(() => {
-  if (!ivaActive.value) return null
-  const data = settlement.value.data
-  const periods = data && Array.isArray(data.periods) ? data.periods : []
-  if (!periods.length) return null
-  const rows = []
-  const columnTotals = Array.from({ length: 12 }, () => 0)
-  let grandTotal = 0
-  let beforeTotal = 0
-  let afterTotal = 0
-  let beforeAfterRowCount = 0
-  /** Hallazgo 5 (auditoría FE): Σ de pagos con vencimiento ilegible. */
-  let undatedTotal = 0
-  for (const period of periods) {
-    const payment = Number(period?.payment)
-    if (!Number.isFinite(payment) || payment <= 0) continue
-    const dueDate = typeof period.payment_due_date === 'string' ? period.payment_due_date : null
-    const month = monthIndexOf(dueDate)
-    const bucket = outOfYearBucket(dueDate)
-    const months = Array.from({ length: 12 }, () => 0)
-    let before = 0
-    let after = 0
-    if (month >= 0 && bucket === 0) {
-      months[month] += payment
-      columnTotals[month] += payment
-    }
-    if (bucket === -1) before = payment
-    else if (bucket === 1) after = payment
-    if (month < 0 && bucket === 0) undatedTotal += payment
-    if (before + after !== 0) beforeAfterRowCount += 1
-    beforeTotal += before
-    afterTotal += after
-    grandTotal += payment
-    const periodNo = Number(period.period_no)
-    rows.push({
-      id: `iva-liq-${Number.isFinite(periodNo) ? periodNo : rows.length + 1}`,
-      label: `Liquidación P${Number.isFinite(periodNo) ? periodNo : '—'} · vence ${formatDateEs(dueDate)}`,
-      months,
-      total: payment,
-      before,
-      after
-    })
-  }
-  if (!rows.length || grandTotal <= 0) return null
-  return {
-    rows,
-    columnTotals,
-    grandTotal,
-    beforeTotal,
-    afterTotal,
-    beforeAfterRowCount,
-    undatedTotal
-  }
-})
-
-/**
- * Planeación tributaria: pagos netos de tributos por mes (FE-S17, integración
- * hermana de D-FE14-4). Fuente ÚNICA: `budgetPlanningStore.tax.cashFlow` — la
- * agregación server-side del motor (anticipo de renta en diciembre del año,
- * pagos bimestrales SIMPLE y vencimientos ICA/reteIVA/retención/reteICA) ya
- * excluye como caja los créditos, así que cada bucket cae directamente en el
- * mes/etiqueta que el BE le asignó; NUNCA se deriva ni re-coloca aquí.
- *
- * Buckets de `payment_year` distinto de N viven SOLO en Antes/Después
- * (misma regla FE-S8/AC-OY-9). Buckets SIN fecha (el BE los advierte en sus
- * warnings) se excluyen de la agregación para conservar exacta la
- * reconciliación Σ meses + Antes/Después = total anual; su monto queda
- * informativo en `undatedTotal` (nota del bloque).
- *
- * Sin cálculo ejecutado (`calculation_executed !== true`) ⇒ pivote null:
- * bloque ausente y resumen byte-idéntico (sumando 0 — AC-S17-FE-*).
- */
-const taxPaymentsPivot = computed(() => {
-  const data = budgetPlanningStore.tax?.cashFlow
-  if (!data || data.calculation_executed !== true) return null
-  const yearN = scenarioYear.value
-  if (yearN === null) return null
-  const buckets = Array.isArray(data.monthly) ? data.monthly : []
-  if (!buckets.length) return null
-  const rows = []
-  const columnTotals = Array.from({ length: 12 }, () => 0)
-  let grandTotal = 0
-  let beforeTotal = 0
-  let afterTotal = 0
-  let beforeAfterRowCount = 0
-  let undatedTotal = 0
-  for (const bucket of buckets) {
-    const amount = Number(bucket?.net_outflow ?? bucket?.cash_outflow)
-    if (!Number.isFinite(amount) || amount === 0) continue
-    const payYearRaw = Number(bucket.payment_year)
-    const payMonthRaw = Number(bucket.payment_month)
-    const payYear = Number.isInteger(payYearRaw) ? payYearRaw : null
-    const payMonth = Number.isInteger(payMonthRaw) ? payMonthRaw : null
-    if (payYear === null) {
-      undatedTotal += amount
-      continue
-    }
-    const months = Array.from({ length: 12 }, () => 0)
-    let before = 0
-    let after = 0
-    if (payYear === yearN && payMonth !== null && payMonth >= 1 && payMonth <= 12) {
-      months[payMonth - 1] += amount
-      columnTotals[payMonth - 1] += amount
-    } else if (payYear < yearN) {
-      before = amount
-    } else if (payYear > yearN) {
-      after = amount
-    }
-    if (before + after !== 0) beforeAfterRowCount += 1
-    beforeTotal += before
-    afterTotal += after
-    grandTotal += amount
-    rows.push({
-      id: `tax-pass-${payYear}-${payMonth ?? 'x'}-${rows.length + 1}`,
-      label:
-        payMonth !== null
-          ? `Impuestos · vence ${payYear}-${String(payMonth).padStart(2, '0')}`
-          : `Impuestos · año ${payYear}`,
-      months,
-      total: amount,
-      before,
-      after
-    })
-  }
-  if (!rows.length) {
-    // Solo buckets sin fecha: nada entra al resumen; el aviso vive en el BE.
-    return null
-  }
-  return {
-    rows,
-    columnTotals,
-    grandTotal,
-    beforeTotal,
-    afterTotal,
-    beforeAfterRowCount,
-    undatedTotal
-  }
-})
+/* El pivote del bloque "Pago de internación", la caché `settlement` del
+ * store, los pivotes "Pago de liquidación de IVA" (FE-S14 D-FE14-4) y
+ * "Impuestos" (FE-S17) viven en `cashFlowPivot.js` (FE-S20 §7.2). */
 
 /** Nota del bloque de tributos (fuente server-side, cero hardcodes). */
 const TAX_PAYMENTS_NOTE = computed(() => {
@@ -1245,119 +460,15 @@ const costTermsDegraded = computed(() => {
     // MISMOS filtros de "produciría filas" que `costPaymentRows` (§5).
     const amount = Number(line.projected_amount)
     if (!Number.isFinite(amount) || amount === 0) return false
-    const lineId = lineIdForCostCenter(line.id_cost_center)
+    const lineId = lineIdForCostCenter(budgetPlanningStore.costCenters, line.id_cost_center)
     const pct = resolveCogsPctByLine(rates, lineId, monthEndOf(line.budget_date))
     return pct !== null && pct !== 0
   })
 })
 
-/**
- * Builder HERMANO de `buildPivot` para cuotas derivadas
- * `{ idCostCenter, amount, effectiveDate }` (FE-S7 §5): MISMA cartulación y
- * MISMAS reglas de celda/bucket/toggle que el original — pero el builder de
- * las líneas materiales queda UNTOUCHED (cero riesgo de regresión sobre
- * Entradas/Salidas fijos; el shape de entrada es distinto a `BudgetLine` y
- * `effectiveDate` YA es la fecha de pago, no un `payment_date || budget_date`).
- *
- * FE-S14-IVA (D-FE14-3): las filas pueden traer `rowKey`/`label` opcionales ⇒
- * se agrupan por esa clave SINTÉTICA con esa etiqueta fija (fila única "IVA de
- * importación" que agrega el IVA de todas las compras sin mezclarse con los
- * CECOS). Sin esas claves el comportamiento es idéntico al de FE-S7/FE-S10.
- * @param {Array<{ idCostCenter: number, amount: number, effectiveDate: string|null, rowKey?: string|number, label?: string }>} rows
- */
-function buildPivotFrom(rows) {
-  const byCeco = new Map()
-  const columnTotals = Array.from({ length: 12 }, () => 0)
-  let grandTotal = 0
-  /** Hallazgo 5 (auditoría FE): Σ de cuotas con fecha efectiva ILEGIBLE. */
-  let undatedTotal = 0
-
-  for (const item of rows) {
-    const amount = Number(item.amount)
-    if (!Number.isFinite(amount)) continue
-
-    // FE-S14-IVA D-FE14-3: `rowKey`/`label` opcionales → agrupación SINTÉTICA
-    // (fila única "IVA de importación" que suma todas las compras sin
-    // mezclarse con CECOS). Sin ellos: comportamiento FE-S7 idéntico.
-    const key = item.rowKey ?? item.idCostCenter
-    if (!byCeco.has(key)) {
-      byCeco.set(key, {
-        id: key,
-        label: item.label ?? budgetPlanningStore.costCenterLabel(item.idCostCenter),
-        months: Array.from({ length: 12 }, () => 0),
-        total: 0,
-        before: 0,
-        after: 0
-      })
-    }
-    const row = byCeco.get(key)
-    const month = monthIndexOf(item.effectiveDate)
-    const bucket = outOfYearBucket(item.effectiveDate)
-    // FE-S8-FLUJO-OY C-1 (AC-OY-9): MISMA regla que `buildPivot` — la cuota
-    // con fecha de pago fuera de N vive solo en su columna Antes/Después.
-    if (month >= 0 && bucket === 0) {
-      row.months[month] += amount
-      columnTotals[month] += amount
-    }
-    if (bucket === -1) row.before += amount
-    else if (bucket === 1) row.after += amount
-    // Hallazgo 5 (auditoría FE): misma contabilidad del caso ilegible.
-    if (month < 0 && bucket === 0) undatedTotal += amount
-    row.total += amount
-    grandTotal += amount
-  }
-
-  const out = [...byCeco.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'))
-  let beforeTotal = 0
-  let afterTotal = 0
-  let beforeAfterRowCount = 0
-  for (const row of out) {
-    beforeTotal += row.before
-    afterTotal += row.after
-    if (Math.abs(row.before) + Math.abs(row.after) > 0) beforeAfterRowCount += 1
-  }
-  return {
-    rows: out,
-    columnTotals,
-    grandTotal,
-    beforeTotal,
-    afterTotal,
-    beforeAfterRowCount,
-    undatedTotal
-  }
-}
-
-/** Pivote del bloque derivado (CECO de ingreso × mes de PAGO). `null` ⇒ sin bloque. */
-const costPaymentsPivot = computed(() => {
-  if (!costPaymentsActive.value) return null
-  return buildPivotFrom(costPaymentRows.value)
-})
-
-/** Capital servido por BE: bucket por CECO y fecha real de pago/vencimiento. */
-const financingPrincipalPivot = computed(() => {
-  const rows = props.financingPrincipalLines
-    .filter((line) => Number.isFinite(Number(line.amount)) && Number(line.amount) !== 0)
-    .map((line) => ({
-      idCostCenter: line.id_cost_center,
-      amount: line.amount,
-      effectiveDate: line.payment_date
-    }))
-  if (!rows.length) return null
-  return buildPivotFrom(rows)
-})
-
-/** New-credit disbursements are inflows, never expenses. */
-const financingDisbursementPivot = computed(() => {
-  const rows = props.financingDisbursementLines
-    .filter((line) => Number.isFinite(Number(line.amount)) && Number(line.amount) !== 0)
-    .map((line) => ({
-      idCostCenter: line.id_cost_center,
-      amount: line.amount,
-      effectiveDate: line.payment_date
-    }))
-  if (!rows.length) return null
-  return buildPivotFrom(rows)
-})
+/* Los pivotes de los BLOQUES derivados/motor (`costPaymentsPivot`,
+ * `financingPrincipalPivot`, `financingDisbursementPivot`) viven en la
+ * factory compartida `cashFlowPivot.js` (FE-S20 §7.2). */
 
 /** Nota del bloque "Compras del mes (importaciones)" (literal §2.4): destino del pago. */
 const COMPRAS_NOTE =
@@ -1527,115 +638,9 @@ const blocks = computed(() => {
 
 /* ------------------- Arrastre de saldos N−1 (FE-S6 §6.1) ------------------- */
 
-/** Caché viva del store (`enabled/source/lines/…`): SOLO lee (SD6-4). */
-const carryover = computed(() => budgetPlanningStore.carryover)
-
-/**
- * Única puerta de todo el componente B: OFF o `lines: []` ⇒ los computeds de
- * arrastre cortocircuitan, el bloque no se renderiza y el resumen no suma
- * nada (coste cero observable — NFR-S6-FE-2 / AC-S6-FE-6).
- */
-const carryActive = computed(
-  () =>
-    carryover.value.enabled &&
-    Array.isArray(carryover.value.lines) &&
-    carryover.value.lines.length > 0
-)
-
-/**
- * Pivote hermano del arrastre: MISMA ubicación mensual por fecha efectiva
- * (`monthIndexOf(payment_date || budget_date)` — siempre ∈ N por BR-CO-03/
- * BR-CO-09, se usa igual el índice 0-based del mes), mismas reglas de
- * celda/total. El server ya filtró (materiales fijos de la fuente con fecha
- * efectiva ∈ N + cuotas de costo derivadas, orden estable efectivo-asc con
- * `line` antes de `cogs` en empates, BR-CO-10); aquí solo se agrupa.
- *
- * FE-S7 §5: las cuotas derivadas llegan con `origin: "cogs"` y
- * `id_budget_line: null` — el agrupamiento JAMÁS usó el id de línea (clave =
- * CECO), así que `null` es inocuo; para poder etiquetarlas distinto sin
- * mezclarlas con el material del MISMO CECO, el grupo se clave por
- * `CECO|origen` (`row.key`, compuesto ⇒ cero colisión de `:key` en la tabla
- * aunque el CECO aparezca en ambas caras). Payloads sin ninguna fila `cogs`
- * producen exactamente los mismos grupos/orden/DOM que en FE-S6 (AC-S7-FE-8:
- * el origen único `'line'` conserva el orden de inserción estable). Una
- * pasada O(L_carry) memoizada.
- *
- * FE-S9 §2.7: BE-S8 añadió el tercer origen `'purchase'` (cuota de compra
- * derivada server-side, `id_budget_line: null`, `line_type:"expense"`) — el
- * FIX colapsa a `'line'` solo lo que NO es `cogs`/`purchase`; grupos y orden
- * quedan line < cogs < purchase. Payloads sin `'purchase'` (los anteriores a
- * BE-S8) producen un DOM idéntico a FE-S7/FE-S8 (AC-FE9-5).
- *
- * FE-S10 §2.6: BE-S9 añadió el CUARTO origen `'internment'` (cuota de
- * internación arrastrada, misma forma) — la normalización lo reconoce y el
- * rank extiende el desempate a line < cogs < purchase < internment (espejo
- * del rank BE §5.4-3). Payloads sin `'internment'` ⇒ DOM idéntico a FE-S9.
- * @param {(line: object) => boolean} match
- */
-/**
- * Orden de desempate por origen dentro del MISMO CECO (FE-S9 §2.7 + FE-S10
- * §2.6): `line` < `cogs` < `purchase` < `internment` — extensión del rank
- * BE §5.4-3 (`_carryover_order_key`, BR-CO-10 ampliado): para payloads sin
- * internment da exactamente el mismo resultado que FE-S9.
- */
-const CARRY_ORIGIN_RANK = { line: 0, cogs: 1, purchase: 2, internment: 3 }
-
-function buildCarryPivot(match) {
-  if (!carryActive.value) return null
-  const byCeco = new Map()
-  const columnTotals = Array.from({ length: 12 }, () => 0)
-  let grandTotal = 0
-
-  for (const line of carryover.value.lines) {
-    if (!match(line)) continue
-    const amount = Number(line.projected_amount)
-    if (!Number.isFinite(amount)) continue
-
-    // FE-S9 §2.7 + FE-S10 §2.6 (FIX obligatorio): normalizar a
-    // 'line' | 'cogs' | 'purchase' | 'internment' — antes TODO lo no-cogs
-    // colapsaba a 'line' y una cuota 'purchase' del BE-S8 se habría
-    // disfrazado de material; con BE-S9 la cuota de INTERNACIÓN llega con
-    // `origin:"internment"` (id_budget_line null, línea `expense` derivada).
-    // Payloads viejos (sin `origin` o con valores desconocidos) siguen
-    // cayendo a 'line': DOM idéntico (R-S9-3 tolerado en BE, montos iguales).
-    const origin = ['cogs', 'purchase', 'internment'].includes(line.origin) ? line.origin : 'line'
-    const key = `${line.id_cost_center}|${origin}`
-    if (!byCeco.has(key)) {
-      byCeco.set(key, {
-        key,
-        id: line.id_cost_center,
-        origin,
-        label: budgetPlanningStore.costCenterLabel(line.id_cost_center),
-        months: Array.from({ length: 12 }, () => 0),
-        total: 0
-      })
-    }
-    const row = byCeco.get(key)
-    const month = monthIndexOf(effectiveDateOf(line))
-    if (month >= 0) {
-      row.months[month] += amount
-      columnTotals[month] += amount
-    }
-    row.total += amount
-    grandTotal += amount
-  }
-
-  // Orden etiqueta-asc (igual que FE-S6) + desempate por origen
-  // line < cogs < purchase (FE-S9 §2.7 extiende el BR-CO-10 del server con
-  // el mismo criterio — estable garantizado).
-  const rows = [...byCeco.values()].sort(
-    (a, b) =>
-      a.label.localeCompare(b.label, 'es') ||
-      CARRY_ORIGIN_RANK[a.origin] - CARRY_ORIGIN_RANK[b.origin]
-  )
-  return { rows, columnTotals, grandTotal }
-}
-
-/** Cobros de arrastre (ingresos de la fuente N−1 con cobro ∈ N). */
-const cobrosArrastre = computed(() => buildCarryPivot((line) => line.line_type === 'income'))
-
-/** Pagos de arrastre (gastos de la fuente N−1 con pago ∈ N). */
-const pagosArrastre = computed(() => buildCarryPivot((line) => line.line_type === 'expense'))
+/* La caché `carryover`, la puerta `carryActive` y los pivotes de
+ * Cobros/Pagos de arrastre (`buildCarryPivot` + rank de orígenes) viven en
+ * `cashFlowPivot.js` (FE-S20 §7.2); aquí solo se ensambla la sección. */
 
 /**
  * Tablas del bloque "Saldos de {N−1} (arrastre)": solo las caras NO vacías
@@ -1714,232 +719,44 @@ const carryTitlesByOrigin = computed(() => ({
 
 /* ------------------- Fuera de año: control global (FE-S6 §6.2) ------------------- */
 
-/** ¿Algún bloque propio tiene montos fuera de año? ⇒ toggle visible y chips. */
-const anyOutOfYear = computed(
-  () =>
-    entradasPivot.value.beforeAfterRowCount +
-      fijosPivot.value.beforeAfterRowCount +
-      // FE-S7 §5: el bloque derivado es "propio" y sus cuotas pueden salir de
-      // N (términos negativos sobre enero / +120 sobre diciembre) ⇒ el toggle
-      // debe existir cuando solo ÉL tiene pendientes (AC-S7-FE-4). Sin filas
-      // derivadas el sumando es 0: DOM idéntico a la era pre-FE-S7 (AC-S7-FE-8).
-      (costPaymentsPivot.value ? costPaymentsPivot.value.beforeAfterRowCount : 0) +
-      // FE-S10 §2.5: mismo caso para "Pago de internación" (AC-OY-* siguen:
-      // cuota int fuera de N vive solo en Antes/Después). Sin filas ⇒ 0.
-      (internmentPaymentsPivot.value ? internmentPaymentsPivot.value.beforeAfterRowCount : 0) +
-      (financingPrincipalPivot.value ? financingPrincipalPivot.value.beforeAfterRowCount : 0) +
-      (financingDisbursementPivot.value
-        ? financingDisbursementPivot.value.beforeAfterRowCount
-        : 0) +
-      // FE-S14-IVA: vencimiento de liquidación del último período puede caer
-      // en N+1 ("Después de N"). Sin bloque ⇒ sumando 0 (DOM idéntico).
-      (settlementPaymentsPivot.value ? settlementPaymentsPivot.value.beforeAfterRowCount : 0) +
-      // FE-S17: el saldo de renta ordinaria se paga en N+1 ⇒ el toggle
-      // también existe por él (sin pivote ⇒ 0, DOM idéntico).
-      (taxPaymentsPivot.value ? taxPaymentsPivot.value.beforeAfterRowCount : 0) >
-    0
+/**
+ * Series/bandera fuera-de-año con la ÚNICA pasada compartida
+ * (`buildOoyBucketSeries`, FE-S20 — la exportación del resumen usa la MISMA
+ * agregación). `any` = ¿algún bloque propio tiene montos fuera de año? ⇒
+ * toggle visible y chips.
+ */
+const ooySeries = computed(() =>
+  buildOoyBucketSeries({
+    disbursement: financingDisbursementPivot.value,
+    entradas: entradasPivot.value,
+    fijos: fijosPivot.value,
+    costes: costPaymentsPivot.value,
+    internment: internmentPaymentsPivot.value,
+    principal: financingPrincipalPivot.value,
+    liquidation: settlementPaymentsPivot.value,
+    taxFlow: taxPaymentsPivot.value
+  })
 )
+
+const anyOutOfYear = computed(() => ooySeries.value.any)
 
 /**
  * Columnas "fuera de año" del resumen de liquidez (FE-S8-FLUJO-OY C-2/FR-4):
- * series `[antes, después]` derivadas SOLO de los totales ya calculados de los
- * pivotes — cero re-recorridos de `budget_lines` (NFR-OY-1) y recálculo vivo
- * desde la misma caché reactiva (NFR-OY-2). Visibles solo con `anyOutOfYear`
- * + toggle ON (mismo lenguaje visual que los bloques). Entradas = buckets del
- * pivote de ingresos propios; Salidas = fijos + pago a proveedores + pago de
- * internación (FE-S10 §2.5; arrastre y variables aportan 0 a los buckets por
- * construcción — BR-CO-03/BR-LINE-04, no se recorren); Neto = entradas −
- * salidas por columna.
+ * series `[antes, después]` de `buildOoyBucketSeries` (ÚNICA agregación,
+ * FE-S20) + flag de visibilidad (`anyOutOfYear` + toggle ON — mismo lenguaje
+ * visual que los bloques).
  */
-const ooyColumns = computed(() => {
-  const disbursement = financingDisbursementPivot.value
-  const entradas = [
-    entradasPivot.value.beforeTotal + (disbursement ? disbursement.beforeTotal : 0),
-    entradasPivot.value.afterTotal + (disbursement ? disbursement.afterTotal : 0)
-  ]
-  const costes = costPaymentsPivot.value
-  const internment = internmentPaymentsPivot.value
-  const principal = financingPrincipalPivot.value
-  // FE-S14-IVA: los vencimientos de liquidación fuera de N también bucketean.
-  const liquidation = settlementPaymentsPivot.value
-  // FE-S17: los tributos también bucketean fuera de año (renta ordinaria: el
-  // saldo se paga en N+1 — §6 del spec tributario).
-  const taxFlow = taxPaymentsPivot.value
-  const salidas = [
-    fijosPivot.value.beforeTotal +
-      (costes ? costes.beforeTotal : 0) +
-      (internment ? internment.beforeTotal : 0) +
-      (principal ? principal.beforeTotal : 0) +
-      (liquidation ? liquidation.beforeTotal : 0) +
-      (taxFlow ? taxFlow.beforeTotal : 0),
-    fijosPivot.value.afterTotal +
-      (costes ? costes.afterTotal : 0) +
-      (internment ? internment.afterTotal : 0) +
-      (principal ? principal.afterTotal : 0) +
-      (liquidation ? liquidation.afterTotal : 0) +
-      (taxFlow ? taxFlow.afterTotal : 0)
-  ]
-  return {
-    visible: anyOutOfYear.value && showOutOfYear.value,
-    entradas,
-    salidas,
-    neto: [entradas[0] - salidas[0], entradas[1] - salidas[1]]
-  }
-})
+const ooyColumns = computed(() => ({
+  visible: anyOutOfYear.value && showOutOfYear.value,
+  entradas: ooySeries.value.entradas,
+  salidas: ooySeries.value.salidas,
+  neto: ooySeries.value.neto
+}))
 
-/**
- * Resumen de liquidez (D-6, §4.5): construido SOLO de los
- * `columnTotals`/`grandTotal` de los bloques (ningún re-recorrido de
- * líneas). Neto = entradas − salidas por mes. FE-S8-FLUJO-OY C-3/FR-4:
- * `netoTotal` = entradasTotal − salidasTotal (neto ANUAL: reconcilia con las
- * filas aun con fuera-de-año; sin ellos coincide con Σ de los 12 netos —
- * R-OY-2). Acumulado = corrida desde Ene, Total = valor de diciembre (solo
- * meses ∈ N: con fuera-de-año ya NO equivale al neto anual).
- *
- * FE-S6 §6.1: las columnas mensuales de Entradas/Salidas +=
- * `cobros/pagosArrastre.columnTotals` ANTES de derivar neto/acumulado (el
- * acumulado sigue arrancando en 0 — SD6-6, cero saldo inicial); los Totales
- * anuales también. Con el arrastre inactivo (`carryActive` false) los `map`
- * suman 0: resultados numéricos idénticos a FE-S4B (AC-S6-FE-6) sin ninguna
- * pasada extra sobre `carryover.lines`.
- *
- * FE-S7 §5: el MISMO punto de integración para el bloque derivado —
- * `salidas[m] += costPaymentsPivot.columnTotals[m]` (y el total anual +=
- * `grandTotal`; FE-S8 C-1: la columna de un mes SIEMPRE excluye los buckets
- * antes/después — toggle ON u OFF: `row.total`/anual los conserva,
- * AC-S7-FE-4/AC-OY-9 "el total anual lo incluye"). Sin filas derivadas el
- * sumando es 0: resumen byte-idéntico a FE-S4B/FE-S6 (AC-S7-FE-8). El
- * acumulado sigue arrancando en 0 (ningún saldo nuevo arriba de la corrida).
- */
-const resumen = computed(() => {
-  const disbursement = financingDisbursementPivot.value
-  const cobros = cobrosArrastre.value
-  const pagos = pagosArrastre.value
-  const costes = costPaymentsPivot.value
-  // FE-S10 §2.5: el bloque propio "Pago de internación" entra a salidas por
-  // la MISMA agregación de pivotes (sin lista hard-coded de IDs de bloque);
-  // sin filas el sumando es 0: resumen byte-idéntico a FE-S9 (NFR-FE10-3).
-  const internment = internmentPaymentsPivot.value
-  const principal = financingPrincipalPivot.value
-  // FE-S14-IVA D-FE14-4: la liquidación entra a salidas por la misma vía.
-  const liquidation = settlementPaymentsPivot.value
-  const entradasPropias = entradasPivot.value.columnTotals
-  const fijos = fijosPivot.value.columnTotals
-  const variables = variablesPivot.value ? variablesPivot.value.columnTotals : null
-
-  const entradas = entradasPropias.map(
-    (value, m) =>
-      value +
-      (cobros ? cobros.columnTotals[m] : 0) +
-      (disbursement ? disbursement.columnTotals[m] : 0)
-  )
-  // FE-S17: los pagos tributarios entran a salidas por la misma vía del
-  // bloque IVA (D-FE14-4): el BE ya decidió mes/amount neto de créditos.
-  const taxFlow = taxPaymentsPivot.value
-  const salidas = entradas.map(
-    (_, m) =>
-      fijos[m] +
-      (variables ? variables[m] : 0) +
-      (pagos ? pagos.columnTotals[m] : 0) +
-      (costes ? costes.columnTotals[m] : 0) +
-      (internment ? internment.columnTotals[m] : 0) +
-      (principal ? principal.columnTotals[m] : 0) +
-      // FE-S14-IVA: pago de liquidación al mes de su vencimiento (D-FE14-4).
-      (liquidation ? liquidation.columnTotals[m] : 0) +
-      (taxFlow ? taxFlow.columnTotals[m] : 0)
-  )
-  const neto = entradas.map((value, m) => value - salidas[m])
-
-  let acc = 0
-  const acumulado = neto.map((value) => {
-    acc += value
-    return acc
-  })
-
-  const entradasTotal =
-    entradasPivot.value.grandTotal +
-    (cobros ? cobros.grandTotal : 0) +
-    (disbursement ? disbursement.grandTotal : 0)
-  const salidasTotal =
-    fijosPivot.value.grandTotal +
-    (variablesPivot.value ? variablesPivot.value.grandTotal : 0) +
-    (pagos ? pagos.grandTotal : 0) +
-    (costes ? costes.grandTotal : 0) +
-    (internment ? internment.grandTotal : 0) +
-    (principal ? principal.grandTotal : 0) +
-    (liquidation ? liquidation.grandTotal : 0) +
-    // FE-S17: los tributos del año y sus buckets fuera de año al total anual
-    // (AC-OY-9: el total anual lo incluye).
-    (taxFlow ? taxFlow.grandTotal : 0)
-  // FE-S8 C-3 (FR-4): neto ANUAL = entradas − salidas (ya no Σ de los 12
-  // netos: con fuera-de-año esos importes no viven en ningún mes pero sí en
-  // los totales; sin fuera-de-año el valor es idéntico — R-OY-2).
-  const netoTotal = entradasTotal - salidasTotal
-  const acumuladoTotal = acumulado[11]
-
-  return {
-    entradas,
-    salidas,
-    neto,
-    acumulado,
-    entradasTotal,
-    salidasTotal,
-    netoTotal,
-    acumuladoTotal
-  }
-})
-
-/**
- * ─────────── FE-S9-PURCHASES-BODEGA §2.6: fila "Bodega estimada (cierre)" ───────────
- * Derivación PURA de presentación (informativa): NUNCA toca entradas/salidas/
- * neto/acumulado — el resumen de caja cuadra igual. Se construye SOLO de
- * totales ya memoizados + una pasada de `cogsIncomeLines` (NFR-FE9-1).
- */
-
-/** Compras causadas por mes (`columnTotals` del bloque §2.4; ceros si no hay). */
-const comprasPorMes = computed(() => comprasPivot.value.columnTotals)
-
-/**
- * Costo de ventas CAUSADO por mes de causación: Σ `monto × pct / 100` sobre
- * los INGRESOS FIJOS propios con `pct = resolveCogsPctByLine(lineCostRates,
- * id_line(CECO), monthEnd(budget_date))` — MISMO resolvedor compartido de la
- * Ejecutiva/FE-S7 (cero divergencia). `pct` `null` ⇒ contribuye 0.
- * INDEPENDIENTE de `payableTermsByLine`: la bodega funciona aunque el
- * catálogo de términos esté caído (§2.6). Incluye TAMBIÉN los ingresos de
- * las Líneas compradoras y de sus CECOS zonales (es causación P&L, no caja:
- * el switch D-4' de A-02 solo afecta a las cuotas de pago).
- */
-const costoCausadoPorMes = computed(() => {
-  const out = Array.from({ length: 12 }, () => 0)
-  const rates = budgetPlanningStore.lineCostRates
-  for (const line of cogsIncomeLines.value) {
-    const amount = Number(line.projected_amount)
-    if (!Number.isFinite(amount) || amount === 0) continue
-    const month = monthIndexOf(line.budget_date)
-    if (month < 0) continue
-    const pct = resolveCogsPctByLine(
-      rates,
-      lineIdForCostCenter(line.id_cost_center),
-      monthEndOf(line.budget_date)
-    )
-    if (pct === null || !Number.isFinite(pct)) continue
-    out[month] += (amount * pct) / 100
-  }
-  return out
-})
-
-/** `bodega[m] = bodega[m−1] + compras[m] − costoCausado[m]`, `bodega[−1] = 0` (D-FE9-3). */
-const bodegaMes = computed(() => {
-  const compras = comprasPorMes.value
-  const costos = costoCausadoPorMes.value
-  const out = []
-  let acc = 0
-  for (let month = 0; month < 12; month += 1) {
-    acc += compras[month] - costos[month]
-    out.push(acc)
-  }
-  return out
-})
+/* El resumen de liquidez (D-6, §4.5 — agregación de TODOS los bloques con
+ * neto/acumulado y totales) y la fila "Bodega estimada" (§2.6: compras por
+ * mes, costo causado por mes y corrida) viven en la factory compartida
+ * `cashFlowPivot.js` (FE-S20 §7.2). */
 
 /** ¿Algún mes negativo? ⇒ nota literal bajo la tabla del resumen (§2.6). */
 const bodegaNegative = computed(() => bodegaMes.value.some((value) => value < 0))

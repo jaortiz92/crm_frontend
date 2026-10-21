@@ -20,7 +20,6 @@ const splashStore = useSplashStore()
 const isVisible = computed(() => splashStore.isVisible)
 const themeStore = useThemeStore()
 const logoSrc = computed(() => (themeStore.isDark ? logoDark : logoLight))
-
 </script>
 
 <style scoped>

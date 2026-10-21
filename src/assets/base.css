@@ -42,7 +42,7 @@
 }
 
 /* === DARK MODE === */
-:root[data-theme="dark"] {
+:root[data-theme='dark'] {
   /* --- Legacy vars --- */
   --gray-border: #3d4f63;
   --light-border: #2a3a4e;

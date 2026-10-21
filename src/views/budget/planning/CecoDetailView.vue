@@ -35,8 +35,15 @@
  *  - RF-8.9: fallo de un origen ⇒ notice discreto con Reintentar (acción del
  *    store con `force: true`); loading NO bloquea el render de la base — el
  *    spinner queda solo para el detalle del escenario.
+ *  - REVISIÓN 4 (`frontend.03_19` §11): el detalle recibe el drill-down del
+ *    bloque "Gastos variables (calculados)" de la Ejecutiva (RF-11.1). Aquí
+ *    computa la serie de ingresos fijos por mes de causación CORTADA POR
+ *    CECO (REVISIÓN 5 / spec `frontend.03_21` §5.3 — espejo B1c de
+ *    `backend.02_24` §5.2: base `tasa × I_c(m)` del propio CECO) y la inyecta
+ *    en pivot/tabla/exportación vía el monto `movementAmountReconciled` — la
+ *    cifra variable cuadra 1:1 con ambos bloques de la matriz (AC-16).
  */
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CecoMovementPivot from '@/components/budget/planning/CecoMovementPivot.vue'
 import CecoMovementTable from '@/components/budget/planning/CecoMovementTable.vue'
@@ -54,7 +61,7 @@ import {
   TAB_CAUSED,
   TAB_FLOW,
   movementsForTab,
-  movementAmount,
+  movementAmountReconciled,
   movementMonthOf,
   movementGroupOf,
   normalizeBudgetLines,
@@ -63,6 +70,21 @@ import {
   normalizePrincipalFlowLines,
   resolveCostCenterId
 } from '@/components/budget/planning/cecoMovements.js'
+import {
+  fixedIncomeCausationByCeco,
+  fixedIncomeCausationByVariableCeco,
+  entradasCausacionByCeco,
+  entradasCausacionByVariableCeco
+} from '@/components/budget/planning/planningFormat.js'
+/**
+ * FE-S20 (spec `frontend.03_20`): exportación del tab activo (Causado/Flujo)
+ * a Excel/CSV — reutiliza los movimientos YA FILTRADOS de la vista
+ * (`filteredLines`, sincronía 1:1 con `CecoMovementTable`) y el monto
+ * `movementAmount` del helper compartido; serialización en
+ * `plugins/tableExport.js` (cero HTTP, RF-9).
+ */
+import { buildExportFilename, exportSheets } from '@/plugins/tableExport.js'
+import { buildCecoSheets } from '@/components/budget/planning/planningExportSheets.js'
 
 const TAB_ORDER = [TAB_CAUSED, TAB_FLOW]
 const TAB_LABELS = {
@@ -362,18 +384,80 @@ const filteredLines = computed(() => {
 /** Bandera viva del modo (SIN toggle: solo lectura, RF-2.2 / AC-6). */
 const ivaActive = computed(() => budgetPlanningStore.ivaMode === true)
 
+/**
+ * REVISIÓN 5 (RF-11.3/RF-11.6 + spec `frontend.03_21` §5.3): serie de
+ * ingresos fijos por mes de causación CORTADA POR CECO — la base del monto
+ * variable ES la facturación del MES del PROPIO CECO del detalle (espejo
+ * B1c de `backend.02_24` §5.2), no la del escenario completo (bug corregido:
+ * la base global hacía que todos los CECOs con la misma tasa mostraran el
+ * mismo monto). Helper compartido `planningFormat.fixedIncomeCausationByCeco`
+ * sobre la MISMA caché `budget_lines` (cero HTTP, ASM-10); CECO sin líneas de
+ * ingreso ⇒ serie de 12 ceros (degradación honesta — BR-FE21-02). La misma
+ * serie alimenta el pivote variable de la Ejecutiva (vía las filas del
+ * pivote de Ingresos) y el bloque del Flujo — pivot/tabla/exportación quedan
+ * byte-cuadre con la matriz (AC-16/AC-FE21-4).
+ *
+ *  ENMIENDA A-01 (spec `frontend.03_21` §10, 2026-10-20): si el CECO del
+ *   detalle es de GASTO variable (Comisiones 210xxx / Despacho 320xxx), su
+ *   serie de base la define el CECO GENERADOR de facturación resuelto por
+ *   (id_zone, id_line) — `fixedIncomeCausationByVariableCeco`, la MISMA regla
+ *   de los pivotes (AC-FE21-8): sin esa resolución el detalle saldría todo en 0
+ *   desacoplado de la matriz. Un CECO con facturación propia conserva su serie
+ *   propia (propio CECO primero). Zona+línea sin facturación ⇒ serie de 12
+ *   ceros (AC-FE21-9, sin fallback).
+ *
+ *  ENMIENDA A-02 (spec `frontend.03_21` §11, 2026-10-21): la base se elige POR
+ *  COMPORTAMIENTO de la línea variable del CECO — `variable_sales` conserva la
+ *  serie I (facturación por mes de causación) y `variable_receivables` cambia
+ *  a la serie R de las ENTRADAS del Flujo (`entradasCausacionByVariableCeco`:
+ *  Σ cobros del CECO generador resuelto por su MES DE PAGO, NETA sin gross-up
+ *  — el modo IVA de los inflows es solo presentación). El resultado es el
+ *  PAR de series `{ sales, receivables }` que `movementAmountReconciled`
+ *  selecciona por línea (AC-FE21-10/AC-FE21-11): pivot/tabla/exportación
+ *  quedan byte-cuadre con ambos bloques de la matriz (AC-16).
+ */
+const fixedIncomeByMonth = computed(() => {
+  const zeroSeries = Array.from({ length: 12 }, () => 0)
+  if (!currentReady.value) return { sales: zeroSeries, receivables: zeroSeries }
+  const lines = scenario.value.budget_lines
+  const costCenters = budgetPlanningStore.costCenters
+  const id = costCenterId.value
+  // A-01/A-02: serie ya resuelta por el CECO de gasto variable POR
+  // COMPORTAMIENTO (facturado ⇒ I causado; recaudo ⇒ R cobro del mes de pago).
+  const salesSeries =
+    fixedIncomeCausationByVariableCeco(lines, costCenters).get(id) ??
+    // CECO de ingreso (o cualquier otro): su serie propia (compatibilidad).
+    fixedIncomeCausationByCeco(lines).get(id) ??
+    zeroSeries
+  const receivablesSeries =
+    entradasCausacionByVariableCeco(lines, costCenters, Number(scenario.value.budget_year)).get(id) ??
+    // Fallback de PRESENTACIÓN para CECOs sin resolución de recaudo: la serie
+    // de ENTRADAS propia del CECO (espejo `entradasCausacionByCeco`); sin
+    // cobros ⇒ 12 ceros (AC-FE21-11, sin fallback a otras zonas/líneas).
+    entradasCausacionByCeco(lines, Number(scenario.value.budget_year)).get(id) ??
+    zeroSeries
+  return { sales: salesSeries, receivables: receivablesSeries }
+})
+
 /** Etiquetas de mes para el filtro (Ene–Dic de `planningFormat`). */
 const MONTHS = MONTH_LABELS
 
 /**
  * Total del CECO de la TAB ACTIVA (RF-3.5) sobre el dataset filtrado, con el
- * MISMO `movementAmount` de pivote/tabla — cuadra con las filas base del
- * pivote de origen para el CECO (diferencia permitida: 0 por redondeo).
+ * MISMO `movementAmountReconciled` de pivote/tabla — cuadra con las filas
+ * base del pivote de origen para el CECO y, desde la REVISIÓN 4
+ * (`frontend.03_19` §11), también con el bloque "Gastos variables
+ * (calculados)" (monto reconciliado, AC-16).
  */
 const cecoTotal = computed(() => {
   let total = 0
   for (const line of filteredLines.value) {
-    const amount = movementAmount(line, activeTab.value, ivaActive.value)
+    const amount = movementAmountReconciled(
+      line,
+      activeTab.value,
+      ivaActive.value,
+      fixedIncomeByMonth.value
+    )
     if (Number.isFinite(amount)) total += amount
   }
   return total
@@ -403,6 +487,75 @@ function onTabKeydown(event, index) {
   const next = TAB_ORDER[(index + delta + TAB_ORDER.length) % TAB_ORDER.length]
   activateTab(next)
   document.getElementById(`ceco-tab-${next}`)?.focus()
+}
+
+/* ============ FE-S20 (spec `frontend.03_20`): Exportar (Excel/CSV) ============ */
+
+/** Slug de tab para el nombre de archivo `ceco-{code}-{tab}_{fecha}` (RF-6). */
+const EXPORT_TAB_SLUGS = {
+  [TAB_CAUSED]: 'causado',
+  [TAB_FLOW]: 'flujo'
+}
+
+/** Menú de formato abierto (RF-2) + ancla del cierre por click fuera. */
+const exportOpen = ref(false)
+const exportRoot = ref(null)
+
+/**
+ * RF-7/CA-6: deshabilitado con 0 movimientos FILTRADOS (la vista pasa el
+ * mismo dataset a la tabla) o con el detalle del escenario en vuelo.
+ */
+const exportDisabled = computed(
+  () => budgetPlanningStore.detailLoading || !currentReady.value || filteredLines.value.length === 0
+)
+
+/** `title` del botón deshabilitado (RF-7: explicativo). */
+const exportDisabledTitle = computed(() => {
+  if (budgetPlanningStore.detailLoading) {
+    return 'Exportación disponible cuando termine de cargar el escenario.'
+  }
+  return 'No hay movimientos que exportar (¿filtro sin resultados?).'
+})
+
+/** Cierre del menú al hacer click fuera (listener global, mismo patrón del editor). */
+function onDocClickForExport(event) {
+  if (!exportOpen.value) return
+  if (exportRoot.value && !exportRoot.value.contains(event.target)) exportOpen.value = false
+}
+
+onMounted(() => document.addEventListener('click', onDocClickForExport))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClickForExport))
+
+/**
+ * RF-2/RF-3/RF-4/RF-5/RF-6 + CA-2: exporta los movimientos del tab activo
+ * con los filtros RF-8.x aplicados (mismo dataset `filteredLines` de la
+ * tabla) y los montos `movementAmountReconciled` del helper compartido —
+ * REVISIÓN 4 (RF-11.5/AC-17): línea variable ⇒ monto reconciliado igual a
+ * pantalla. Sin HTTP (RF-9) y con error vía `alertService` (RF-10).
+ * @param {'csv'|'xlsx'} format
+ */
+function onExportSelect(format) {
+  exportOpen.value = false
+  try {
+    const sheets = buildCecoSheets({
+      movements: filteredLines.value,
+      tab: activeTab.value,
+      ivaActive: ivaActive.value,
+      fixedIncomeByMonth: fixedIncomeByMonth.value,
+      sheetName: TAB_LABELS[activeTab.value]
+    })
+    if (!sheets.length) throw new Error('El tab activo no tiene movimientos para exportar.')
+    exportSheets({
+      format,
+      filename: buildExportFilename(
+        `ceco-${cecoCodeParam.value || 'CECO'}-${EXPORT_TAB_SLUGS[activeTab.value]}`,
+        format
+      ),
+      sheets
+    })
+  } catch {
+    alertService.generalError('No se pudo generar el archivo de exportación.')
+  }
 }
 </script>
 
@@ -495,23 +648,84 @@ function onTabKeydown(event, index) {
       </div>
 
       <!-- =============================== Tabs =============================== -->
-      <div class="cd-tabs" role="tablist" aria-label="Perspectivas de los movimientos del CECO">
-        <button
-          v-for="(tab, index) in TAB_ORDER"
-          :id="`ceco-tab-${tab}`"
-          :key="tab"
-          class="cd-tab-pill"
-          :class="{ 'is-active': activeTab === tab }"
-          type="button"
-          role="tab"
-          :aria-selected="activeTab === tab"
-          :aria-controls="`ceco-panel-${tab}`"
-          :tabindex="activeTab === tab ? 0 : -1"
-          @click="activateTab(tab)"
-          @keydown="onTabKeydown($event, index)"
-        >
-          {{ TAB_LABELS[tab] }}
-        </button>
+      <!-- FE-S20 (spec `frontend.03_20`) RF-1/RF-2: barra de pills + control
+           "Exportar" (menú Excel/CSV) sobre la misma línea; se cierra al
+           hacer click fuera (listener global del script). -->
+      <div class="cd-tabs-row">
+        <div class="cd-tabs" role="tablist" aria-label="Perspectivas de los movimientos del CECO">
+          <button
+            v-for="(tab, index) in TAB_ORDER"
+            :id="`ceco-tab-${tab}`"
+            :key="tab"
+            class="cd-tab-pill"
+            :class="{ 'is-active': activeTab === tab }"
+            type="button"
+            role="tab"
+            :aria-selected="activeTab === tab"
+            :aria-controls="`ceco-panel-${tab}`"
+            :tabindex="activeTab === tab ? 0 : -1"
+            @click="activateTab(tab)"
+            @keydown="onTabKeydown($event, index)"
+          >
+            {{ TAB_LABELS[tab] }}
+          </button>
+        </div>
+        <div ref="exportRoot" class="cd-export">
+          <button
+            type="button"
+            class="cd-export-btn"
+            :class="{ 'is-open': exportOpen }"
+            :disabled="exportDisabled"
+            :title="
+              exportDisabled
+                ? exportDisabledTitle
+                : 'Exportar los movimientos de esta pestaña (Excel o CSV)'
+            "
+            aria-haspopup="menu"
+            :aria-expanded="exportOpen ? 'true' : 'false'"
+            @click.stop="exportOpen = !exportOpen"
+          >
+            <svg
+              class="cd-export-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span>Exportar</span>
+          </button>
+          <div
+            v-if="exportOpen"
+            class="cd-export-menu"
+            role="menu"
+            aria-label="Formato de exportación"
+          >
+            <button
+              type="button"
+              class="cd-export-item"
+              role="menuitem"
+              @click="onExportSelect('xlsx')"
+            >
+              Excel (.xlsx)
+            </button>
+            <button
+              type="button"
+              class="cd-export-item"
+              role="menuitem"
+              @click="onExportSelect('csv')"
+            >
+              CSV
+            </button>
+          </div>
+        </div>
       </div>
 
       <template v-if="hasAnyMovement">
@@ -573,11 +787,20 @@ function onTabKeydown(event, index) {
           <p class="cd-tab-note">
             Movimientos del CECO por causación (budget_date): presupuesto, nómina y financiación
             what-if (RF-8.5). Montos en COP (sin símbolo) sobre netos: cuadra con las filas base y
-            simuladas de la Vista Ejecutiva. El capital y los desembolsos de financiación no entran:
-            no son gasto del P&G (RF-8.3).
+            simuladas de la Vista Ejecutiva. La línea variable de gasto muestra el monto
+            reconciliado tasa × ingresos fijos del mes (REVISIÓN 4). El capital y los desembolsos de
+            financiación no entran: no son gasto del P&G (RF-8.3).
           </p>
-          <CecoMovementPivot :lines="filteredLines" :tab="TAB_CAUSED" />
-          <CecoMovementTable :lines="filteredLines" :tab="TAB_CAUSED" />
+          <CecoMovementPivot
+            :lines="filteredLines"
+            :tab="TAB_CAUSED"
+            :fixed-income-months="fixedIncomeByMonth"
+          />
+          <CecoMovementTable
+            :lines="filteredLines"
+            :tab="TAB_CAUSED"
+            :fixed-income-months="fixedIncomeByMonth"
+          />
         </div>
 
         <!-- ==================== Panel Flujo (RF-3.3) ==================== -->
@@ -591,11 +814,21 @@ function onTabKeydown(event, index) {
           <p class="cd-tab-note">
             Movimientos del CECO por pago: base/nómina/financiación con el fallback payment_date →
             budget_date y capital/desembolsos por su payment_date puro (RF-8.5) — cuadra con los
-            bloques "Gastos fijos", "Capital de financiación" y "Desembolsos" de la Vista Flujo. Las
-            líneas sin fecha quedan en la columna "Sin fecha de pago".
+            bloques "Gastos fijos", "Capital de financiación" y "Desembolsos" de la Vista Flujo. La
+            línea variable conservará el monto reconciliado (tasa × ingresos fijos por causación) y
+            cae en el mes de su budget_date, igual que el bloque "Gastos variables (calculados)" del
+            Flujo (REVISIÓN 4). Las líneas sin fecha quedan en la columna "Sin fecha de pago".
           </p>
-          <CecoMovementPivot :lines="filteredLines" :tab="TAB_FLOW" />
-          <CecoMovementTable :lines="filteredLines" :tab="TAB_FLOW" />
+          <CecoMovementPivot
+            :lines="filteredLines"
+            :tab="TAB_FLOW"
+            :fixed-income-months="fixedIncomeByMonth"
+          />
+          <CecoMovementTable
+            :lines="filteredLines"
+            :tab="TAB_FLOW"
+            :fixed-income-months="fixedIncomeByMonth"
+          />
         </div>
       </template>
 
@@ -797,12 +1030,20 @@ function onTabKeydown(event, index) {
   color: var(--color-text-secondary, #555555);
 }
 
-/* Tabs "pill" (patrón de BudgetGridEditor) */
+/* Tabs "pill" (patrón de BudgetGridEditor)
+ * FE-S20: la fila completa (pills + Exportar) lleva el margen inferior. */
+
+.cd-tabs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+}
 
 .cd-tabs {
   display: inline-flex;
   gap: 4px;
-  margin-bottom: 16px;
   padding: 4px;
   border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
   border-radius: 999px;
@@ -811,6 +1052,105 @@ function onTabKeydown(event, index) {
 
 :root[data-theme='dark'] .cd-tabs {
   background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* ─── FE-S20 (spec `frontend.03_20`) RF-1/RF-2/RF-7: botón + menú Exportar ─── */
+
+.cd-export {
+  position: relative;
+}
+
+.cd-export-btn {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 16px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 999px;
+  background-color: var(--color-surface-card, #ffffff);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #555555);
+  cursor: pointer;
+  transition:
+    background-color 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+    color 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+:root[data-theme='dark'] .cd-export-btn {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.cd-export-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.cd-export-btn:hover:not(:disabled),
+.cd-export-btn.is-open {
+  background-color: rgba(3, 101, 140, 0.08);
+  color: var(--color-text-primary, #070707);
+}
+
+:root[data-theme='dark'] .cd-export-btn:hover:not(:disabled),
+:root[data-theme='dark'] .cd-export-btn.is-open {
+  background-color: rgba(86, 200, 238, 0.12);
+  color: #56c8ee;
+}
+
+.cd-export-btn:focus-visible {
+  outline: 2px solid var(--color-brand, #03658c);
+  outline-offset: 1px;
+}
+
+.cd-export-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cd-export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 10px;
+  background-color: var(--color-surface-card, #ffffff);
+  box-shadow: 0 10px 30px rgba(7, 7, 7, 0.16);
+}
+
+:root[data-theme='dark'] .cd-export-menu {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme='dark'] .cd-export-item {
+  color: #d5dde4;
+}
+
+.cd-export-item {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 0.8rem;
+  color: var(--color-text-primary, #070707);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cd-export-item:hover {
+  background-color: rgba(3, 101, 140, 0.08);
+}
+
+.cd-export-item:focus-visible {
+  outline: 2px solid var(--color-brand, #03658c);
+  outline-offset: -2px;
 }
 
 .cd-tab-pill {

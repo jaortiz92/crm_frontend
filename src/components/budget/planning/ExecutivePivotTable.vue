@@ -86,29 +86,51 @@
  * cursor pointer + hover/focus de la CELDA + aria-label "Ver detalle de
  * movimientos de CECO {code}" (RF-1.3/RF-7.3). Las demás celdas permanecen
  * sin interacción (RF-1.2) y el click NO dispara HTTP (RF-1.4: la vista de
- * detalle deriva de la MISMA caché del store). Los bloques DERIVADOS
- * (Costo de ventas estimado / Gastos variables calculados) no enlazan:
- * no hay `budget_lines` que los reproduzcan (RF-3.4).
+ * detalle deriva de la MISMA caché del store).
+ *
+ * REVISIÓN 4 (spec `frontend.03_19` §11, RF-11.1/RF-11.2/RF-11.3): el bloque
+ * "Gastos variables (calculados)" TAMBIÉN enlaza — su pivote SÍ nace de
+ * `budget_lines` reales (gasto, `behavior_type != 'fixed'`), y el detalle de
+ * CECO muestra por línea el monto RECONCILIADO (`cecoMovements.movementAmountReconciled`:
+ * `tasa × Σ ingresos fijos del mes de causación` vía el helper compartido
+ * `planningFormat.fixedIncomeCausationSeries`), de modo que su Σ por CECO y
+ * mes cuadra EXACTO con las celdas de este bloque (AC-16/AC-17). "Costo de
+ * ventas (estimado)" continúa SIN enlace: no hay `budget_lines` que
+ * reproduzcan ese monto (no es una agregación de líneas, es una derivación
+ * de tasas de costo sobre filas de ingresos).
+ *
+ * FE-S20 (spec `frontend.03_20` §7.2): el CÓMPUTO de esta matriz (líneas,
+ * pivotes CECO×mes, tasas de costo FE-S4C/S7, P&G/Acumulado) se extrajo
+ * VERBATIM al helper compartido `executivePivot.js` — el botón "Exportar" de
+ * `BudgetGridEditor` reutiliza las MISMAS funciones de agregación, así que el
+ * archivo exportado es la matriz visible (CA-1). Este componente conserva el
+ * render: celdas `·`/`—`/compactas, filas %, tooltips y bloques.
  */
 import { computed } from 'vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import ScenarioTaxPnlSection from '@/components/budget/taxes/ScenarioTaxPnlSection.vue'
 import PivotMonthTable from './PivotMonthTable.vue'
+/**
+ * FE-S20 (spec `frontend.03_20` §7.2): el CÓMPUTO de la matriz Ejecutiva
+ * vive en el helper compartido `executivePivot.js` — LAS MISMAS funciones de
+ * agregación que consume el botón "Exportar" — extraídas verbatim de este
+ * componente (cero cambio de comportamiento); aquí queda solo la
+ * presentación (celdas formateadas, filas %, tooltips).
+ */
 import {
-  pnlTaxMonthly,
-  taxCalculationAvailable
-} from '@/components/budget/taxes/taxPresentation.js'
+  buildAcumuladoSeries,
+  createExecutivePivotModel,
+  pctText,
+  sumOrNull
+} from './executivePivot.js'
 import {
   BEHAVIOR_LABELS,
   LINE_TYPE_LABELS,
   MONTH_LABELS,
   VARIABLE_PIVOT_NOTE,
-  buildCogsRatePool,
   formatMoneyCompact,
   formatMoneyPlain,
-  formatVariableRate,
-  monthIndexOf,
-  resolveCogsPctFromPool
+  formatVariableRate
 } from './planningFormat.js'
 import { costCenterCodeOf } from './cecoMovements.js'
 
@@ -150,49 +172,47 @@ function cecoLink(rowId) {
 }
 
 /**
- * Tax expense is read from the same cached calculation used by the tax
- * scenario block. The P&L only places the server-provided result; it never
- * recalculates rates, advances or payment schedules.
+ * REVISIÓN 4 (frontend.03_19 §11): tooltip de la celda CECO. En filas que
+ * ENLAZAN el `title` es el nombre del concepto (paridad con la Vista Flujo,
+ * `CashFlowPivotTable` RF-1.3): la nota de tasas (`row.title = "Tasas: …"`
+ * del pivote variable) mantenía el tooltip nativo del `th` atravesando el
+ * `RouterLink` (que no tiene title propio) y tapaba el concepto. Las filas
+ * SIN enlace (derivadas o catálogo caído) conservan el fallback existente
+ * (`row.title ?? row.label`) — las tasas siguen visibles en el detalle del
+ * drill-down y en la tabla "Tasas variables (solo lectura)".
+ * @param {object} block bloque actual de `blocks` (con `linkable`)
+ * @param {object} row fila del pivote
+ * @returns {string}
  */
-const taxPnl = computed(() => {
-  const tax = budgetPlanningStore.tax
-  if (
-    !taxCalculationAvailable(tax.summary) ||
-    tax.stale ||
-    tax.budgetId !== props.scenario?.id_budget
-  ) {
-    return null
-  }
-  return pnlTaxMonthly(tax.summary, props.scenario?.budget_year)
-})
-
-const lines = computed(() =>
-  props.scenario && Array.isArray(props.scenario.budget_lines) ? props.scenario.budget_lines : []
-)
+function labelTitleOf(block, row) {
+  return block.linkable && cecoLink(row.id) ? row.label : (row.title ?? row.label)
+}
 
 /* ───────── FE-S14-IVA D-FE14-7: sin IVA — la Ejecutiva SIEMPRE NETOS ─────────
  * Decisión de enmienda 2026-09-23: el modo "Con IVA" NO toca esta vista (es el
- * P&G en netos por causación). `budgetPlanningStore.ivaMode` no se lee aquí. */
+ * P&G en netos por causación). `budgetPlanningStore.ivaMode` no se lee aquí.
+ *
+ * FE-S20 (spec `frontend.03_20` §7.2): líneas y pivotes provienen del modelo
+ * compartido `executivePivot.js` (getter ⇒ reactividad con la prop intacta);
+ * el `taxPnl` del cálculo tributario cacheado y el `costPivot` con la
+ * resolución de tasas FE-S4C/S7 viven dentro de ese helper verbatim. */
 
-/** Líneas de costo fijo (base del pivote): `behavior_type === 'fixed'`. */
-const fixedLines = computed(() => lines.value.filter((line) => line.behavior_type === 'fixed'))
+const model = createExecutivePivotModel({
+  scenario: () => props.scenario,
+  store: budgetPlanningStore
+})
+const {
+  variableSourceLines,
+  incomePivot,
+  expensePivot,
+  variablePivot,
+  hasIncomeRows,
+  costDegradation,
+  costPivot,
+  pnl
+} = model
 
-/** Líneas variables crudas: alimentan la tabla de tasas (§8.2, todos los tipos). */
-const variableSourceLines = computed(() =>
-  lines.value.filter((line) => line.behavior_type !== 'fixed')
-)
-
-/**
- * Fuente del pivote estimado: SOLO líneas de GASTO variable. El motor backend
- * (`budgetEngine.project_cash_flow`) filtra `line_type == "expense"` en ambas
- * consultas variables (variable_sales/variable_receivables) y una línea de
- * INGRESO variable no es gasto (su `projected_amount` además se fuerza a 0
- * por BR-LINE-03). Espejo del filtro de `CashFlowPivotTable
- * .variableSourceLines` — cero divergencia Ejecutiva/Flujo/motor.
- */
-const variableExpenseLines = computed(() =>
-  variableSourceLines.value.filter((line) => line.line_type === 'expense')
-)
+/** Detalle por línea de las variables: tabla de tasas de solo lectura. */
 
 /** Detalle por línea de las variables: tabla de tasas de solo lectura. */
 const variableLines = computed(() => {
@@ -209,232 +229,11 @@ const variableLines = computed(() => {
   )
 })
 
-/**
- * Construye el pivote de un bloque (ingresos o gastos fijos) en una pasada:
- * filas por CECO (agrupa todas sus líneas), columnas Ene–Dic por
- * `monthIndexOf(budget_date)`, totales por fila/columna/bloque. Los montos
- * se suman crudos; el formato COP ocurre al render.
- * @param {string} lineType 'income' | 'expense'
- */
-function buildPivot(lineType) {
-  const byCeco = new Map()
-  const columnTotals = Array.from({ length: 12 }, () => 0)
-  let grandTotal = 0
-
-  for (const line of fixedLines.value) {
-    if (line.line_type !== lineType) continue
-    const amount = Number(line.projected_amount)
-    if (!Number.isFinite(amount)) continue
-
-    const key = line.id_cost_center
-    if (!byCeco.has(key)) {
-      byCeco.set(key, {
-        id: key,
-        label: budgetPlanningStore.costCenterLabel(key),
-        months: Array.from({ length: 12 }, () => 0),
-        total: 0
-      })
-    }
-    const row = byCeco.get(key)
-    const month = monthIndexOf(line.budget_date)
-    if (month >= 0) {
-      row.months[month] += amount
-      columnTotals[month] += amount
-    }
-    row.total += amount
-    grandTotal += amount
-  }
-
-  const rows = [...byCeco.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'))
-  return { rows, columnTotals, grandTotal }
-}
-
-const incomePivot = computed(() => buildPivot('income'))
-const expensePivot = computed(() => buildPivot('expense'))
-
-/**
- * Pivote ESTIMADO de gastos variables (Opción A, réplica client-side de la
- * regla de `budgetEngine.project_cash_flow`): cada línea variable de GASTO
- * `v` aporta `tasa_v × ingresos del mes de v` a la celda
- * `monthIndexOf(v.budget_date)`,
- * donde `ingresos del mes` se reutiliza de `incomePivot.columnTotals` —
- * misma fuente agregada que el bloque Ingresos → coherencia garantizada y
- * recálculo reactivo gratis al editar montos en el Editor de Celdas.
- * Los montos son DERIVADOS (no se almacenan; ASM-10: la matriz es
- * presentación). `null` si no hay líneas variables o no hay ingresos: el
- * bloque simplemente no se renderiza.
- *
- * FE-S14-IVA D-FE14-7: siempre NETOS — el estimado corre sobre el ingreso
- * neto del mes y no recibe gross-up (la Ejecutiva nunca muestra IVA).
- */
-function buildVariablePivot() {
-  const source = variableExpenseLines.value
-  const incomeTotals = incomePivot.value.columnTotals
-  if (!source.length || !incomeTotals.some((value) => value !== 0)) return null
-
-  const byCeco = new Map()
-  const columnTotals = Array.from({ length: 12 }, () => 0)
-  let grandTotal = 0
-
-  for (const line of source) {
-    const key = line.id_cost_center
-    if (!byCeco.has(key)) {
-      byCeco.set(key, {
-        id: key,
-        label: budgetPlanningStore.costCenterLabel(key),
-        months: Array.from({ length: 12 }, () => 0),
-        total: 0,
-        rates: []
-      })
-    }
-    const row = byCeco.get(key)
-    row.rates.push(formatVariableRate(line.variable_rate))
-
-    const month = monthIndexOf(line.budget_date)
-    if (month < 0) continue
-    const rate = Number(line.variable_rate) || 0
-    const amount = rate * incomeTotals[month]
-    row.months[month] += amount
-    row.total += amount
-    columnTotals[month] += amount
-    grandTotal += amount
-  }
-
-  const rows = [...byCeco.values()]
-    .sort((a, b) => a.label.localeCompare(b.label, 'es'))
-    .map((row) => ({ ...row, title: `Tasas: ${row.rates.join(' / ')}` }))
-  return { rows, columnTotals, grandTotal }
-}
-
-/** Pivote estimado — SIEMPRE neto (D-FE14-7: la Ejecutiva nunca muestra IVA). */
-const variablePivot = computed(() => buildVariablePivot())
-
-/* ─────────────────── FE-S4C: resolución de tasas de costo (§3.1) ─────────────────── */
-
-/** Guard §5.4: sin CECOs de ingreso no hay nada que estimar ni P&G que cerrar. */
-const hasIncomeRows = computed(() => incomePivot.value.rows.length > 0)
-
-/**
- * Último día calendario de cada mes 0–11 del `budget_year` en ISO local
- * `YYYY-MM-DD` (D-3). PROHIBIDO `toISOString()` (corrimiento UTC, patrón
- * `localToday()` de `ratesConfig.js`): se arma con `new Date(year, m + 1, 0)`
- * + padding manual de componentes locales.
- */
-const monthEndISO = computed(() => {
-  const parsed = Number(props.scenario?.budget_year)
-  const year = Number.isFinite(parsed) && parsed > 0 ? parsed : new Date().getFullYear()
-  return Array.from({ length: 12 }, (_, month) => {
-    const last = new Date(year, month + 1, 0)
-    const mm = String(last.getMonth() + 1).padStart(2, '0')
-    const dd = String(last.getDate()).padStart(2, '0')
-    return `${last.getFullYear()}-${mm}-${dd}`
-  })
-})
-
-/**
- * Catálogo cacheado (§3.2: el store ya filtra `is_active === true`); se
- * re-filtra defensivamente dentro del resolvedor compartido.
- * `lineCostRatesError`/`Loaded` diferencian la degradación (§5.1/§5.2) sin
- * disparar jamás un request nuevo (NFR-CY-1).
- */
-const activeCostRates = computed(() =>
-  (Array.isArray(budgetPlanningStore.lineCostRates)
-    ? budgetPlanningStore.lineCostRates
-    : []
-  ).filter((rate) => rate && rate.is_active === true)
-)
-
-/**
- * Resolución por mes (réplica mensual del Q6 de `budgetEngine.get_pnl`):
- * FE-S7 §4 extrajo el pool+scan a `buildCogsRatePool`/`resolveCogsPctByLine`
- * en `planningFormat.js` (pool vigente al cierre del mes, comparación
- * lexicográfica de ISOs con padding, orden `id_line_cost_rate` DESC → la
- * primera coincidencia de cada línea gana —semántica `setdefault` = mayor
- * id— y la primera coincidencia global (`id_line == null`) es el respaldo).
- * Aquí queda SOLO el pool por mes, que `costDegradation` consulta para el
- * "¿cubre alguna tasa el año?"; los pct de celda se resuelven con
- * `resolveCogsPctByLine` (misma cadena línea → global → `null`, cero
- * cambio de comportamiento — AC-PYG-1..12 intactos).
- */
-const monthlyRates = computed(() =>
-  monthEndISO.value.map((monthEnd) => buildCogsRatePool(activeCostRates.value, monthEnd))
-)
-
-/**
- * CECO → `id_line` vía el catálogo `costCenters` cacheado. Desconocido o
- * catálogo A5 caído (R-4) ⇒ `null` ⇒ el CECO cae a la tasa global (§3.1).
- * @param {number|null|undefined} idCostCenter
- * @returns {number|null}
- */
-function lineIdForCostCenter(idCostCenter) {
-  if (idCostCenter === null || idCostCenter === undefined) return null
-  const found = budgetPlanningStore.costCenters.find((item) => item.id_cost_center === idCostCenter)
-  return typeof found?.id_line === 'number' ? found.id_line : null
-}
-
-/**
- * Degradación §5.1/§5.2 (D-8): `'error'` = fetch fallado (sin conexión);
- * `'empty'` = cargadas pero ninguna cubre el `budget_year`; `null` = el
- * costo es estimable. Cuando no es `null`, 4.1 muestra `pv-empty` y
- * P&G/Acumulado pintan `—` en costo/margen/neto y sus % (NUNCA 0).
- */
-const costDegradation = computed(() => {
-  if (budgetPlanningStore.lineCostRatesError) return 'error'
-  if (!budgetPlanningStore.lineCostRatesLoaded) return null
-  const covered = monthlyRates.value.some((pool) => pool.globalPct !== null || pool.byLine.size > 0)
-  return covered ? null : 'empty'
-})
-
-/**
- * Pivote ESTIMADO de costo de ventas (§4.1, D-1/D-2/D-3): filas = mismo
- * CECO/orden de `incomePivot.rows` (lista completa, siempre); celda mes m =
- * `ingreso_m × pct / 100` (⚠️ `cogs_pct` es 0–100, NO 0–1 como
- * `variable_rate`), o `null` (→ `·`) si ese mes no resolvió tasa. CECO sin
- * NI UN mes resuelto ⇒ exclusión anual: `total = null` (→ `·`) y etiqueta a
- * `excludedLabels` (nota `pv-warn`, §3.1 regla 4). `null` si no estimable.
- */
-const costPivot = computed(() => {
-  if (costDegradation.value || !hasIncomeRows.value) return null
-  const pools = monthlyRates.value
-  const excludedLabels = []
-  const columnTotals = Array.from({ length: 12 }, () => 0)
-  let grandTotal = 0
-
-  const rows = incomePivot.value.rows.map((incomeRow) => {
-    const lineId = lineIdForCostCenter(incomeRow.id)
-    const months = Array.from({ length: 12 }, () => null)
-    const pcts = []
-    let total = 0
-    for (let m = 0; m < 12; m += 1) {
-      // FE-S7 §4: la cadena línea → global → `null` vive ahora en el
-      // resolvedor compartido (`resolveCogsPctFromPool`, el MISMO cuerpo que
-      // usa `resolveCogsPctByLine` en la Vista Flujo) sobre los pools
-      // memoizados de `monthlyRates` — resultado idéntico al del scan inline
-      // pre-refactor (AC-PYG-1..12), cero rebuilds del catálogo por celda.
-      const pct = resolveCogsPctFromPool(pools[m], lineId)
-      if (pct === null) continue
-      months[m] = (incomeRow.months[m] * pct) / 100
-      total += months[m]
-      columnTotals[m] += months[m]
-      grandTotal += months[m]
-      if (!pcts.includes(pct)) pcts.push(pct)
-    }
-    if (!pcts.length) excludedLabels.push(incomeRow.label)
-    return {
-      id: incomeRow.id,
-      label: incomeRow.label,
-      months,
-      total: pcts.length ? total : null,
-      title: pcts.length
-        ? `Tasa(s): ${pcts.map((pct) => `${pctText(pct)} %`).join(', ')}`
-        : 'Sin tasa de costo aplicable'
-    }
-  })
-
-  return { rows, columnTotals, grandTotal, excludedLabels }
-})
-
-/* ─────────────── FE-S4C: helpers de formato local (§6.5 — no tocar `planningFormat.js`) ─────────────── */
+/* Los cómputos de pivotes (buildPivot/buildVariablePivot), la resolución de
+ * tasas de costo FE-S4C/S7 (monthEndISO, activeCostRates, monthlyRates,
+ * lineIdForCostCenter, costDegradation, costPivot) y el modelo P&G vivieron
+ * aquí y ahora provienen del modelo compartido `executivePivot.js`
+ * (FE-S20 §7.2 — misma agregación para pantalla y exportación). */
 
 /**
  * FE-S18 (spec frontend.03_18) RF-7/RF-2.2: UMBRAL de compactación de celda.
@@ -467,14 +266,9 @@ function fitMoney(value) {
 }
 
 /**
- * Puro 0–100 → texto con 1 decimal y ceros finales razonables:
- * 62.5 → '62.5', 58.0 → '58' (formato `pvPct`/tooltip §4.1).
- * @param {number} pct
- * @returns {string}
+ * Puro 0–100 → texto con 1 decimal (formato `pvPct`): ÚNICA definición en
+ * `executivePivot.js` (FE-S20 — compartida con el costPivot del helper).
  */
-function pctText(pct) {
-  return String(Number(pct.toFixed(1)))
-}
 
 /**
  * Proporción (0–1 — `x / ingresos`) → `'62.5 %'`; `—` si `null`, `NaN` o
@@ -501,18 +295,7 @@ function moneyCell(value) {
   }
 }
 
-/** Σ de las 12 columnas; `null` (→ `—`) si la fuente no es estimable. */
-function sumOrNull(values) {
-  return values.some((value) => value === null)
-    ? null
-    : values.reduce((acc, value) => acc + value, 0)
-}
-
-/** Corrida acumulada Ene→mes (§4.3). */
-function runningSums(values) {
-  let acc = 0
-  return values.map((value) => (acc += value))
-}
+/** Σ de las 12 columnas (ÚNICA definición en `executivePivot.js` — FE-S20). */
 
 /**
  * Celda de los bloques-pivote (Ingresos/Costo/Gastos): `·` para 0 o para
@@ -530,35 +313,10 @@ function rowTotal(value) {
 
 /* ─────────────── FE-S4C: Resultado (P&G) y Acumulado — solo de columnas computadas (§3.3) ─────────────── */
 
-/**
- * Base compartida P&G/Acumulado (§3.3): NI ÚNICO re-recorrido de líneas;
- * columnas de los pivots superiores. `costo`/`margen`/`resultado` en `null`
- * (filas completas `—`, D-8) cuando el costo no es estimable. El TOTAL del
- * P&G es Σ de las 12 columnas (cierre aritmético), NO `grandTotal` (R-2).
- */
-const pnl = computed(() => {
-  const ingresos = incomePivot.value.columnTotals
-  const costo = costPivot.value ? costPivot.value.columnTotals : null
-  const fijos = expensePivot.value.columnTotals
-  const variables = variablePivot.value ? variablePivot.value.columnTotals : null
-  const impuestos = taxPnl.value?.months ?? null
-  const gastos = ingresos.map((_, m) => fijos[m] + (variables ? variables[m] : 0))
-  const margen = costo ? ingresos.map((value, m) => value - costo[m]) : null
-  const resultado = margen ? margen.map((value, m) => value - gastos[m]) : null
-  const resultadoDespuesImpuestos =
-    resultado && impuestos ? resultado.map((value, m) => value - impuestos[m]) : null
-  return {
-    ingresos,
-    costo,
-    fijos,
-    variables,
-    gastos,
-    impuestos,
-    margen,
-    resultado,
-    resultadoDespuesImpuestos
-  }
-})
+/* El modelo P&G (`pnl`, §3.3: cierre aritmético sobre columnas ya
+ * computadas, NI UN re-recorrido de líneas) vive en `executivePivot.js`
+ * (FE-S20 — `buildPnlModel`); el Total del P&G es Σ de las 12 columnas, NO
+ * `grandTotal` (R-2). */
 
 /**
  * Filas de §4.2 en orden; `Margen bruto`, `Resultado
@@ -636,22 +394,14 @@ const pnlRows = computed(() => {
  * tributario o costo no estimable); `Gastos %` sigue operativo (su
  * denominador, ingresos acumulados, siempre existe) e ingresos/gastos
  * acumulan igual.
+ *
+ * FE-S20 (spec `frontend.03_20` §7.2): las series acumuladas corren en
+ * `buildAcumuladoSeries` (`executivePivot.js`) — el MISMO cómputo que consume
+ * la exportación; aquí solo se formatean las celdas.
  */
 const acumulado = computed(() => {
-  const { ingresos, costo, gastos, margen, impuestos } = pnl.value
-  const nulls = Array.from({ length: 12 }, () => null)
-  const ingresosAcc = runningSums(ingresos)
-  const costoAcc = costo ? runningSums(costo) : nulls
-  const gastosAcc = runningSums(gastos)
-  const netoAcc = margen ? ingresosAcc.map((value, m) => value - costoAcc[m] - gastosAcc[m]) : nulls
-  // Impuestos por causación (FE-S12/S14): meses diarios de `pnlTaxMonthly`
-  // (SIMPLE/Ordinario cierran en diciembre; ICA en su mes de liquidación).
-  // Sin cálculo tributario ejecutado (`impuestos` null) toda la cola
-  // tributaria degrada a `—` (patrón D-8 del costo).
-  const impuestosAcc = impuestos ? runningSums(impuestos) : nulls
-  const netoDespuesImpuestosAcc = impuestos
-    ? impuestosAcc.map((value, m) => (netoAcc[m] === null ? null : netoAcc[m] - value))
-    : nulls
+  const { ingresosAcc, costoAcc, gastosAcc, netoAcc, impuestosAcc, netoDespuesImpuestosAcc } =
+    buildAcumuladoSeries(pnl.value)
 
   const amountRow = (label, values, strong = false) => ({
     label,
@@ -746,10 +496,12 @@ const costWarnText = computed(() => {
  * "Con IVA" no altera esta vista (el IVA solo genera efecto en el Flujo).
  */
 const blocks = computed(() => {
-  // FE-S16 RF-1.1: SOLO las filas base del P&G (Ingresos/Gastos fijos) son
-  // navegables al drill-down de movimientos (AC-1). Los bloques DERIVADOS
-  // ("Costo de ventas (estimado)" y "Gastos variables (calculados)") no lo
-  // son: no hay `budget_lines` que reproduzcan esos montos — RF-3.4.
+  // FE-S16 RF-1.1 + REVISIÓN 4 (frontend.03_19 §11 RF-11.1): enlazables los
+  // bloques BASE del P&G (Ingresos/Gastos fijos) y TAMBIÉN "Gastos variables
+  // (calculados)" — su cifra SÍ proviene de `budget_lines` (gasto variable)
+  // y el detalle reproduce el monto reconciliado (AC-16). "Costo de ventas
+  // (estimado)" NO enlaza: es derivación de tasas de costo sin líneas propias
+  // que lo reproduzcan (RF-3.4).
   const list = [
     {
       title: 'Ingresos',
@@ -779,7 +531,10 @@ const blocks = computed(() => {
       title: 'Gastos variables (calculados)',
       emptyText: 'Sin líneas de gastos variables en este escenario.',
       pivot: variablePivot.value,
-      note: VARIABLE_PIVOT_NOTE
+      note: VARIABLE_PIVOT_NOTE,
+      // REVISIÓN 4 RF-11.1: celda CECO clicable — el detalle muestra el
+      // monto reconciliado por línea (AC-16/AC-17).
+      linkable: true
     })
   }
   return list
@@ -876,7 +631,8 @@ const blocks = computed(() => {
         :aria-label="block.aria ?? `Pivote ${block.title} por centro de costo y mes`"
       >
         <tr v-for="row in block.pivot.rows" :key="row.id">
-          <th class="pt-row-label" scope="row" :title="row.title ?? row.label">
+          <!-- REVISIÓN 4: `title` consciente del link (ver `labelTitleOf`). -->
+          <th class="pt-row-label" scope="row" :title="labelTitleOf(block, row)">
             <!-- FE-S16 RF-1: ÚNICA celda interactiva del pivote — el código
                  del CECO enlaza al detalle de movimientos (cursor + hover +
                  focus visible; hover en la CELDA, no en la fila, RF-1.3).

@@ -95,7 +95,6 @@ const { invoice } = toRefs(props)
         <dt>Descuento:</dt>
         <dd>{{ formatters.formatterGeneralNumber(invoice.total_discount) }}</dd>
       </div>
-
     </dl>
   </div>
 </template>

@@ -34,6 +34,13 @@
  *    y el tab Flujo aplica el gross-up × 1.19 por línea con los helpers de
  *    `planningFormat` (`withIva` + `lineChargesIva`) centralizado en
  *    `movementAmount`. Reacciona en vivo al toggle del editor.
+ *  - REVISIÓN 4 (`frontend.03_19` §11, RF-11.3/RF-11.4/AC-16): la línea
+ *    variable de GASTO muestra el monto RECONCILIADO de la matriz
+ *    (`movementAmountReconciled` con la serie compartida
+ *    `fixedIncomeMonths`), posicionada por su mes de CAUSACIÓN en ambos tabs
+ *    (criterio de los builders `buildVariableExpensePivot`/
+ *    `buildVariableFlowPivot`) — Σ por grupo/mes cuadra EXACTO con el bloque
+ *    "Gastos variables (calculados)" correspondiente.
  *
  * Formato de dinero: `0` → '·', cifras COP SIN símbolo (`formatMoneyPlain`)
  * y compacto + `title` completo cuando la celda de 106px no cabe (espejo
@@ -44,12 +51,13 @@
 import { computed } from 'vue'
 import PivotMonthTable from './PivotMonthTable.vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
-import { MONTH_LABELS } from './planningFormat.js'
+import { MONTH_LABELS, monthIndexOf } from './planningFormat.js'
 import {
   GROUP_ROW_ORDER,
   MOVEMENT_GROUP_LABELS,
   TAB_FLOW,
-  movementAmount,
+  isReconciledVariableMovement,
+  movementAmountReconciled,
   movementMonthOf,
   movementGroupOf,
   pivotMoneyText,
@@ -64,7 +72,15 @@ const props = defineProps({
    */
   lines: { type: Array, required: true },
   /** Tab activo: `TAB_CAUSED` = por `budget_date`; `TAB_FLOW` = por pago. */
-  tab: { type: String, required: true }
+  tab: { type: String, required: true },
+  /**
+   * REVISIÓN 4 (RF-11.3/RF-11.4): serie de Σ ingresos fijos por mes de
+   * causación del escenario (`fixedIncomeCausationSeries`) — base del monto
+   * RECONCILIADO de la línea variable de gasto (igual que el bloque "Gastos
+   * variables (calculados)" de la matriz; AC-16). Sin serie ⇒ esas líneas
+   * aportan 0 (misma degradación que la matriz).
+   */
+  fixedIncomeMonths: { type: Array, required: true }
 })
 
 const budgetPlanningStore = useBudgetPlanningStore()
@@ -89,7 +105,17 @@ const grouped = computed(() => {
   let grandTotal = 0
 
   for (const movement of props.lines) {
-    const amount = movementAmount(movement, props.tab, ivaActive.value)
+    // REVISIÓN 4 (RF-11.3/RF-11.4): línea variable de gasto ⇒ monto
+    // RECONCILIADO con la matriz (tasa × ingresos fijos del mes de
+    // causación; idéntico en ambos tabs — solo cambia la columna vía el
+    // posicionamiento de más abajo). El resto conserva `movementAmount`
+    // byte-a-byte (RF-8.6/AC-10/AC-11).
+    const amount = movementAmountReconciled(
+      movement,
+      props.tab,
+      ivaActive.value,
+      props.fixedIncomeMonths
+    )
     if (!Number.isFinite(amount)) continue
     const groupKey = movementGroupOf(movement)
     if (!byGroup.has(groupKey)) {
@@ -104,8 +130,16 @@ const grouped = computed(() => {
     const row = byGroup.get(groupKey)
     row.count += 1
     // RF-8.5: posicionamiento por ORIGEN (base estricto; sims con fallback
-    // `cfMonth`; capital/desembolsos `payment_date` puro).
-    const month = movementMonthOf(movement, props.tab)
+    // `cfMonth`; capital/desembolsos `payment_date` puro). REVISIÓN 4
+    // (RF-11.4/AC-16): la línea variable de gasto se posiciona por su MES DE
+    // CAUSACIÓN en AMBOS tabs — los builders de la matriz
+    // (`buildVariableExpensePivot`/`buildVariableFlowPivot`) posicionan por
+    // `budget_date`, no por `payment_date`, y el cuadre byte-cuadre exige el
+    // mismo criterio aquí. Mes inválido no puebla columna (los PivotMoney
+    // enseñan '·' porque el monto reconciliado ya es 0).
+    const month = isReconciledVariableMovement(movement)
+      ? monthIndexOf(movement.budget_date)
+      : movementMonthOf(movement, props.tab)
     if (month >= 0) {
       row.months[month] += amount
       columnTotals[month] += amount

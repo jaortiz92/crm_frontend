@@ -411,9 +411,8 @@ onBeforeUnmount(() => {
                  columna `Con IVA` — literal de spec (backend.02_20 §5.6: la
                  columna es OPCIONAL y NULL≡True, D-S10-3). -->
             <p class="bi-zone-note">
-              El archivo debe incluir la columna Con IVA (Si/No) en la fila de encabezados.
-              Archivos sin la columna: todos los gastos se asumen CON IVA (ajustable renglón a
-              renglón).
+              El archivo debe incluir la columna Con IVA (Si/No) en la fila de encabezados. Archivos
+              sin la columna: todos los gastos se asumen CON IVA (ajustable renglón a renglón).
             </p>
           </section>
 

@@ -148,11 +148,7 @@ export function aggregateTaxPayments(cashFlow, scenarioYear) {
       })
     }
     const group = groups.get(key)
-    const typedRows = Array.isArray(row.by_type)
-      ? row.by_type
-      : row.tax_type
-        ? [row]
-        : []
+    const typedRows = Array.isArray(row.by_type) ? row.by_type : row.tax_type ? [row] : []
     if (typedRows.length) {
       for (const typedRow of typedRows) {
         const type = TAX_TYPE_BY_KEY[typedRow.tax_type] ? typedRow.tax_type : null

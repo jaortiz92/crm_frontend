@@ -10,7 +10,7 @@ const { task } = toRefs(props)
 <template>
   <div class="detail-card">
     <h1 class="task-name">Tarea #{{ task.id_task }}</h1>
-    
+
     <div class="task-description">
       {{ task.task }}
     </div>

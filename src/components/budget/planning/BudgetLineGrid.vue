@@ -110,9 +110,7 @@ const lines = computed(() =>
  */
 function isSimulated(line) {
   return (
-    line.is_simulated === true ||
-    line.id_budget_line === null ||
-    line.id_budget_line === undefined
+    line.is_simulated === true || line.id_budget_line === null || line.id_budget_line === undefined
   )
 }
 
@@ -780,7 +778,12 @@ onBeforeUnmount(clearTimers)
                       ? 'Proyección what-if de financiación: solo interés/seguro; no materializada en este escenario'
                       : 'Proyección what-if del motor de nómina (BE-S11): no está materializada en este escenario'
                   "
-                >{{ line.source_engine === 'financing_credit_sim' ? 'Financiación simulada' : 'Simulada' }}</span>
+                  >{{
+                    line.source_engine === 'financing_credit_sim'
+                      ? 'Financiación simulada'
+                      : 'Simulada'
+                  }}</span
+                >
               </td>
               <td>{{ budgetPlanningStore.collectionLabel(line.id_collection) }}</td>
               <td
@@ -904,7 +907,11 @@ onBeforeUnmount(clearTimers)
                 <button
                   type="button"
                   class="btn-icon-sm"
-                  :title="isSimulated(line) ? 'Línea simulada: no se puede eliminar (no existe en BD)' : 'Eliminar línea'"
+                  :title="
+                    isSimulated(line)
+                      ? 'Línea simulada: no se puede eliminar (no existe en BD)'
+                      : 'Eliminar línea'
+                  "
                   :disabled="isSimulated(line) || lineBusy(line.id_budget_line)"
                   :aria-label="`Eliminar línea ${budgetPlanningStore.costCenterLabel(line.id_cost_center)} ${line.budget_date}`"
                   @click="openDelete(line)"

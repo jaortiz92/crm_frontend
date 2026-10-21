@@ -116,10 +116,272 @@ export function formatMoneyCompact(value) {
  * tooltip ⓘ junto al subtítulo del bloque (RF-3.2). No son cifras ni
  * comportamiento: texto de presentación compartido.
  */
+/**
+ * Fe-S18 RF-4.2 / ENMIENDA A-02 (spec `frontend.03_21` §11, 2026-10-21) — NOTA
+ * ÚNICA del bloque "Gastos variables (calculados)", compartida por las Vistas
+ * Ejecutiva y Flujo. La base se resuelve POR CECO generador (A-01) y DIFIERE
+ * por comportamiento de la línea (A-02):
+ *  - variable_sales (facturado): tasa × ingresos fijos (I) del MES DE
+ *    CAUSACIÓN (budget_date) del CECO resuelto.
+ *  - variable_receivables (recaudo): tasa × ENTRADAS del Flujo (R, cobros por
+ *    su MES DE PAGO) del CECO resuelto — base NETA (el modo IVA del Flujo
+ *    solo afecta a la PRESENTACIÓN del bloque Entradas, nunca a la base de
+ *    comisiones).
+ * El monto NO se almacena en las líneas del escenario; se recalcula al ajustar
+ * el presupuesto. El drill-down de movimientos por CECO muestra esta MISMA
+ * cifra reconciliada por línea (REVISIÓN 5 / frontend.03_21 §5.3 + A-02 §11).
+ */
 export const VARIABLE_PIVOT_NOTE =
-  'Monto estimado = tasa × ingresos presupuestados del mes (en la Vista Flujo: ' +
-  'ingresos fijos por su mes de causación). No se almacena en las líneas del ' +
-  'escenario; se recalcula al ajustar el presupuesto.'
+  'Monto estimado según el comportamiento de la línea, con base por CECO ' +
+  'resuelto (A-01): facturado = tasa × ingreso presupuestado del MES de ' +
+  'causación; recaudo = tasa × ENTRADAS del Flujo del MES de cobro (base ' +
+  'neta — specs backend.02_24 §5.2 / frontend.03_21 §4/§11). No se almacena ' +
+  'en las líneas del escenario; se recalcula al ajustar el presupuesto. El ' +
+  'drill-down de movimientos por CECO muestra esta MISMA cifra reconciliada ' +
+  'por línea (REVISIÓN 5 / frontend.03_21 §5.3).'
+
+/* ─────────── REVISIÓN 4 (frontend.03_19 §11): base compartida del variable ─────────── */
+
+/**
+ * REVISIÓN 4 (RF-11.3/RF-11.4) — Serie ÚNICA de "Σ ingresos fijos por mes de
+ * CAUSACIÓN": cada línea `line_type === 'income'` con
+ * `behavior_type === 'fixed'` suma su `projected_amount` (crudo y finito) en
+ * `monthIndexOf(budget_date)`; meses sin ingresos o líneas ilegibles aportan
+ * 0 / se omiten (`month < 0` ⇒ `continue` — igual que los pivotes).
+ *
+ * Esta serie ES la celda mensual de la fuente del monto variable:
+ *  - Vista Ejecutiva: `incomePivot.columnTotals` de `executivePivot.js`
+ *    (`buildFixedPivot(lines, 'income')` — el helper la reproduce EXACTO,
+ *    por eso puebla el pivote variable de la Ejecutiva).
+ *  - Vista Flujo: reemplaza el bucle inline `baseIngresosCausados` de
+ *    `cashFlowPivot.js` (D-5 — misma definición, ahora con única fuente).
+ *  - Drill-down de CECO (REVISIÓN 4): la consumen `movementAmountReconciled`
+ *    (`cecoMovements.js`), pivot/tabla del detalle y `buildCecoSheets`.
+ *
+ * Test FE-S20/§11: el cuadre 1:1 entre matriz y detalle depende de que esta
+ * función sea la ÚNICA implementación de la base evitando duplicados (RF-7.4).
+ * @param {Array<object>|null|undefined} lines `budget_lines` crudas del escenario
+ * @returns {number[]} serie de 12 posiciones (índice 0 = Ene).
+ */
+export function fixedIncomeCausationSeries(lines) {
+  const base = Array.from({ length: 12 }, () => 0)
+  if (!Array.isArray(lines)) return base
+  for (const line of lines) {
+    if (line?.line_type !== 'income' || line?.behavior_type !== 'fixed') continue
+    const amount = Number(line.projected_amount)
+    if (!Number.isFinite(amount)) continue
+    const month = monthIndexOf(line.budget_date)
+    if (month >= 0) base[month] += amount
+  }
+  return base
+}
+
+/**
+ * REVISIÓN 5 (spec `frontend.03_21` §5.1 / espejo `backend.02_24` §5.2) — Map
+ * de la MISMA regla de `fixedIncomeCausationSeries` cortada POR CECO:
+ * `Map<id_cost_center, number[12]>` — Σ almacenada en
+ * `monthIndexOf(budget_date)` de las líneas `income` + `behavior_type ===
+ * 'fixed'` de CADA CECO. Consumidores del base per-CECO:
+ *  - Vista Flujo: `baseIngresosCausadosPorCeco` de `cashFlowPivot.js`
+ *    (D-5 — base B1c del variable).
+ *  - Drill-down de CECO: `CecoDetailView.vue` toma la serie del CECO
+ *    resuelto (AC-FE21-4/AC-16) y la inyecta en pivot/tabla/exportación.
+ * CECO sin ingresos ⇒ sin fila en el Map (`get(c)` → `undefined`) — los
+ * llamadores degradan a 0 (BR-FE21-02: sin exclusión, sin NaN).
+ * @param {Array<object>|null|undefined} lines `budget_lines` crudas del escenario
+ * @returns {Map<number|string, number[]>} `id_cost_center → months[12]`
+ */
+export function fixedIncomeCausationByCeco(lines) {
+  const byCeco = new Map()
+  if (!Array.isArray(lines)) return byCeco
+  for (const line of lines) {
+    if (line?.line_type !== 'income' || line?.behavior_type !== 'fixed') continue
+    const amount = Number(line.projected_amount)
+    if (!Number.isFinite(amount)) continue
+    const month = monthIndexOf(line.budget_date)
+    if (month < 0) continue
+    const key = line.id_cost_center
+    if (!byCeco.has(key))
+      byCeco.set(
+        key,
+        Array.from({ length: 12 }, () => 0)
+      )
+    byCeco.get(key)[month] += amount
+  }
+  return byCeco
+}
+
+/* ─────────── ENMIENDA A-01 (spec frontend.03_21 §10): resolución por (zona, línea) ─────────── */
+
+/**
+ * ENMIENDA A-01 (2026-10-20) — Resolución del CECO GENERADOR de la base de un
+ * gasto variable. Hallazgo real: los CECOs de ingreso ("Facturación…",
+ * códigos 000xxx) están DESACOPLADOS de los CECOs de gasto variable
+ * ("Comisiones…" 210xxx / "Despacho…" 320xxx); la base buscada con el
+ * `id_cost_center` de la línea variable salía TODA en 0.
+ *
+ * Regla de decisión (A-01): la base se resuelve por **(id_zone, id_line)** del
+ * CECO de la línea variable contra los CECOs con facturación (o recaudo):
+ *  1. Propio CECO primero (compatibilidad): si `cecoId` ∈ `incomeCecoIds`
+ *     ⇒ devolver `cecoId` (el CECO/receptor que también factura se sirve a sí).
+ *  2. Si no: clave `(id_zone, id_line)` desde el catálogo del propio `cecoId`;
+ *     candidatos = CECOs whose `(zone, line)` === clave Y con ingreso.
+ *     EXACTAMENTE 1 ⇒ devolver; 0 o múltiples ⇒ `null` (SIN fallback).
+ *
+ * `null` ⇒ el llamador degrada la base a 0 (AC-FE21-9: zona+línea sin
+ * facturación ⇒ 0, jamás al total global).
+ * @param {number|string|null|undefined} cecoId `id_cost_center` de la línea variable
+ * @param {Iterable<number|string>|Set<number|string>} incomeCecoIds
+ *   CECOs que tienen ingreso (claves de `fixedIncomeCausationByCeco` o
+ *   `incomePivot.rows.map(r => r.id)`).
+ * @param {Array<object>|null|undefined} costCenters catálogo del store
+ *   (`id_cost_center`, `id_zone`, `id_line` — schema `CostCenter`).
+ * @returns {number|string|null} CECO generador resuelto o `null`.
+ */
+export function resolveVariableBaseCeco(cecoId, incomeCecoIds, costCenters) {
+  const incomeSet = incomeCecoIds instanceof Set ? incomeCecoIds : new Set(incomeCecoIds ?? [])
+  if (incomeSet.has(cecoId)) return cecoId
+  const catalog = Array.isArray(costCenters) ? costCenters : []
+  const self = catalog.find((cc) => cc && cc.id_cost_center === cecoId)
+  if (!self) return null
+  const zone = self.id_zone
+  const line = self.id_line
+  if (zone == null || line == null) return null
+  const candidates = catalog.filter(
+    (cc) => cc && incomeSet.has(cc.id_cost_center) && cc.id_zone === zone && cc.id_line === line
+  )
+  return candidates.length === 1 ? candidates[0].id_cost_center : null
+}
+
+/**
+ * ENMIENDA A-01 (spec `frontend.03_21` §10) — Base de ingresos fijos por mes
+ * de causación, KEYED POR EL CECO DE GASTO VARIABLE: `Map<id_cost_center de la
+ * línea variable, number[12]>`. Por cada CECO variable del escenario se
+ * resuelve su CECO generador con `resolveVariableBaseCeco` (propio CECO
+ * primero, luego única resolución por (zona, línea); 0 o múltiples candidatos
+ * ⇒ sin fila — degradación a 0 en el llamador) y se copia su serie.
+ *
+ * Consumidor: `baseVariablePorCeco` de `cashFlowPivot.js` (bloque "Gastos
+ * variables (calculados)" de la Vista Flujo) y `CecoDetailView.vue`
+ * (reconciliación 1:1 del drill-down — AC-FE21-4). Serie idéntica a la de
+ * `fixedIncomeCausationByCeco` del CECO generador (cero duplicación de la
+ * agregación, RF-7.4).
+ * @param {Array<object>|null|undefined} lines `budget_lines` crudas del escenario
+ * @param {Array<object>|null|undefined} costCenters catálogo del store
+ * @returns {Map<number|string, number[]>} `cecoVariableLine → months[12]`
+ */
+export function fixedIncomeCausationByVariableCeco(lines, costCenters) {
+  const out = new Map()
+  const allLines = Array.isArray(lines) ? lines : []
+  const incomeByCeco = fixedIncomeCausationByCeco(allLines)
+  const variableCecos = new Set()
+  for (const line of allLines) {
+    if (line?.line_type === 'expense' && line?.behavior_type !== 'fixed') {
+      variableCecos.add(line.id_cost_center)
+    }
+  }
+  for (const ceco of variableCecos) {
+    const base = resolveVariableBaseCeco(ceco, incomeByCeco.keys(), costCenters)
+    if (base === null) continue
+    out.set(ceco, incomeByCeco.get(base))
+  }
+  return out
+}
+
+/* ─────────── ENMIENDA A-02 (spec frontend.03_21 §11): base de recaudo = ENTRADAS del flujo ─────────── */
+
+/**
+ * ENMIENDA A-02 (2026-10-21) — Mes de COBRO/ENTRADA de una línea (fe-12): es
+ * el `cfMonth` de la Vista Flujo — `payment_date` con fallback a `budget_date`
+ * (R-1). Extraído para que la base de recaudo y los pivotes de cobro usen LA
+ * MISMA convención temporal (RF-7.4).
+ * @param {object|null|undefined} line
+ * @returns {number} índice 0–11 (Ene = 0) o −1 si no es parseable.
+ */
+export function cfMonthOf(line) {
+  return monthIndexOf(line?.payment_date || line?.budget_date)
+}
+
+/**
+ * ENMIENDA A-02 (spec `frontend.03_21` §11) — Serie de ENTRADAS del Flujo por
+ * CECO: `Map<id_cost_center, number[12]>` — Σ de importes NETAOS
+ * (`projected_amount` crudo, SIN el gross-up ×1.19 del modo IVA — D-FE14-7:
+ * la base de comisiones es neta; el modo ON del bloque Entradas es SOLO
+ * presentación) de las líneas `income` + `behavior_type === 'fixed'` en su
+ * **MES DE PAGO** (`cfMonthOf`), no en su mes de causación.
+ *
+ * Es la variante NETA y explícita del pivote "Entradas" de `cashFlowPivot.js`
+ * (`buildFlowPivot` con `monthOf: cfMonth` + `amountOf: grossLineAmount` —
+ * ese pivote PINTA entrada bruta con el modo ON, esta serie es la BASE de
+ * recaudo de `variable_receivables`). Igual que `fixedIncomeCausationByCeco`
+ * pero por MES DE PAGO; misma degradación: CECO sin cobros ⇒ sin fila en el
+ * Map (BR-FE21-02/AC-FE21-11).
+ * @param {Array<object>|null|undefined} lines `budget_lines` crudas del escenario
+ * @returns {Map<number|string, number[]>} `id_cost_center → months[12]`
+ */
+export function entradasCausacionByCeco(lines, scenarioYear = null) {
+  const byCeco = new Map()
+  if (!Array.isArray(lines)) return byCeco
+  for (const line of lines) {
+    if (line?.line_type !== 'income' || line?.behavior_type !== 'fixed') continue
+    const amount = Number(line.projected_amount)
+    if (!Number.isFinite(amount)) continue
+    const month = cfMonthOf(line)
+    if (month < 0) continue
+    // ENMIENDA A-02 - cuadre con el backend: solo cobranza cuyo ANO DE COBRO
+    // cae dentro del budget_year del escenario; un cobro de dic-N vencido en
+    // ene-N+1 alimenta el presupuesto N+1 (el backend filtra
+    // year(coalesce) == budget_year).
+    const pays = String(line.payment_date || line.budget_date || '')
+    if (scenarioYear != null && Number.isFinite(Number(scenarioYear)) &&
+      Number(pays.slice(0, 4)) !== Number(scenarioYear)) {
+      continue
+    }
+    const key = line.id_cost_center
+    if (!byCeco.has(key))
+      byCeco.set(
+        key,
+        Array.from({ length: 12 }, () => 0)
+      )
+    byCeco.get(key)[month] += amount
+  }
+  return byCeco
+}
+
+/**
+ * ENMIENDA A-02 (spec `frontend.03_21` §11) — Base de RECAUDO por mes de COBRO
+ * KEYED POR EL CECO DE GASTO VARIABLE: mismo patrón de
+ * `fixedIncomeCausationByVariableCeco` (A-01: propio CECO primero, luego única
+ * resolución por (id_zone, id_line) con `resolveVariableBaseCeco`; 0 o
+ * múltiples candidatos ⇒ sin fila ⇒ degradación a 0, SIN fallback) pero sobre
+ * la serie de ENTRADAS por mes de pago (`entradasCausacionByCeco`).
+ *
+ * Consumidores: el bloque variable de la Vista Flujo y de la Vista Ejecutiva
+ * (A-02: solo para líneas `behavior_type === 'variable_receivables'`) y la
+ * serie de drill-down de `CecoDetailView` (AC-FE21-4/AC-FE21-10). Las series
+ * devueltas son NETA (sin gross-up — la base de comisiones nunca lleva IVA;
+ * el modo ON de los inflows solo afecta a la presentación del bloque Entradas).
+ * @param {Array<object>|null|undefined} lines `budget_lines` crudas del escenario
+ * @param {Array<object>|null|undefined} costCenters catálogo del store
+ * @returns {Map<number|string, number[]>} `cecoVariableLine → months[12]`
+ */
+export function entradasCausacionByVariableCeco(lines, costCenters, scenarioYear = null) {
+  const out = new Map()
+  const allLines = Array.isArray(lines) ? lines : []
+  const entradasByCeco = entradasCausacionByCeco(allLines, scenarioYear)
+  const variableCecos = new Set()
+  for (const line of allLines) {
+    if (line?.line_type === 'expense' && line?.behavior_type !== 'fixed') {
+      variableCecos.add(line.id_cost_center)
+    }
+  }
+  for (const ceco of variableCecos) {
+    const base = resolveVariableBaseCeco(ceco, entradasByCeco.keys(), costCenters)
+    if (base === null) continue
+    out.set(ceco, entradasByCeco.get(base))
+  }
+  return out
+}
 
 /**
  * Fecha `dd/mm/aaaa`. Los `date` puros ISO ('YYYY-MM-DD') se parsean por

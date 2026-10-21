@@ -752,245 +752,247 @@ onBeforeUnmount(() => {
           Generada por el motor — se regenera con el import/recálculo de nómina.
         </p>
         <fieldset class="lf-fields" :disabled="isEngineLine">
-        <div class="lf-field">
-          <label class="lf-label" for="lf-line-type">Tipo de línea *</label>
-          <!-- FE-S9 §2.2: tres opciones (Ingreso/Gasto/Compra). En create el
+          <div class="lf-field">
+            <label class="lf-label" for="lf-line-type">Tipo de línea *</label>
+            <!-- FE-S9 §2.2: tres opciones (Ingreso/Gasto/Compra). En create el
                valor inicial lo fija la sección "+ Añadir X"; en edit queda
                deshabilitado (BR-LINE-06: el tipo no se muta). -->
-          <select
-            id="lf-line-type"
-            v-model="selectedType"
-            class="lf-input"
-            :disabled="isEdit || busy"
-          >
-            <option v-for="option in LINE_TYPE_OPTIONS" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-          <p v-if="isPurchase" class="lf-hint">{{ PURCHASE_HINT }}</p>
-          <p v-else-if="isEdit" class="lf-hint">
-            El tipo no se puede cambiar: para otro tipo, cree una línea nueva
-          </p>
-        </div>
-
-        <div class="lf-field">
-          <label class="lf-label" for="lf-ceco">CECO *</label>
-          <select
-            id="lf-ceco"
-            v-model="form.idCostCenter"
-            class="lf-input"
-            :class="{ 'is-invalid': Boolean(fieldMessage('ceco')) || isFlagged('ceco') }"
-            :disabled="busy"
-          >
-            <option value="">Seleccione un CECO…</option>
-            <option
-              v-for="center in budgetPlanningStore.costCenters"
-              :key="center.id_cost_center"
-              :value="String(center.id_cost_center)"
+            <select
+              id="lf-line-type"
+              v-model="selectedType"
+              class="lf-input"
+              :disabled="isEdit || busy"
             >
-              {{ center.cost_center_code }} — {{ center.cost_center_name }}
-            </option>
-          </select>
-          <p
-            v-if="fieldMessage('ceco') || isFlagged('ceco')"
-            class="lf-field-error"
-            aria-live="polite"
-          >
-            {{ fieldMessage('ceco') || 'Revisa este valor.' }}
-          </p>
-        </div>
+              <option v-for="option in LINE_TYPE_OPTIONS" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+            <p v-if="isPurchase" class="lf-hint">{{ PURCHASE_HINT }}</p>
+            <p v-else-if="isEdit" class="lf-hint">
+              El tipo no se puede cambiar: para otro tipo, cree una línea nueva
+            </p>
+          </div>
 
-        <div class="lf-field">
-          <!-- FE-S9 §2.2: en modo compra la fecha proyectada SE LLAMA "Fecha
+          <div class="lf-field">
+            <label class="lf-label" for="lf-ceco">CECO *</label>
+            <select
+              id="lf-ceco"
+              v-model="form.idCostCenter"
+              class="lf-input"
+              :class="{ 'is-invalid': Boolean(fieldMessage('ceco')) || isFlagged('ceco') }"
+              :disabled="busy"
+            >
+              <option value="">Seleccione un CECO…</option>
+              <option
+                v-for="center in budgetPlanningStore.costCenters"
+                :key="center.id_cost_center"
+                :value="String(center.id_cost_center)"
+              >
+                {{ center.cost_center_code }} — {{ center.cost_center_name }}
+              </option>
+            </select>
+            <p
+              v-if="fieldMessage('ceco') || isFlagged('ceco')"
+              class="lf-field-error"
+              aria-live="polite"
+            >
+              {{ fieldMessage('ceco') || 'Revisa este valor.' }}
+            </p>
+          </div>
+
+          <div class="lf-field">
+            <!-- FE-S9 §2.2: en modo compra la fecha proyectada SE LLAMA "Fecha
                de importación" (el payload sigue enviando `budget_date`). -->
-          <label class="lf-label" for="lf-budget-date">{{
-            isPurchase ? 'Fecha de importación *' : 'Fecha proyectada *'
-          }}</label>
-          <input
-            id="lf-budget-date"
-            v-model="form.budgetDate"
-            class="lf-input"
-            :class="{
-              'is-invalid': Boolean(fieldMessage('budgetDate')) || isFlagged('budgetDate')
-            }"
-            type="date"
-            :disabled="busy"
-            :aria-invalid="fieldMessage('budgetDate') ? 'true' : 'false'"
-          />
-          <p
-            v-if="fieldMessage('budgetDate') || isFlagged('budgetDate')"
-            class="lf-field-error"
-            aria-live="polite"
-          >
-            {{ fieldMessage('budgetDate') || 'Revisa este valor.' }}
-          </p>
-        </div>
+            <label class="lf-label" for="lf-budget-date">{{
+              isPurchase ? 'Fecha de importación *' : 'Fecha proyectada *'
+            }}</label>
+            <input
+              id="lf-budget-date"
+              v-model="form.budgetDate"
+              class="lf-input"
+              :class="{
+                'is-invalid': Boolean(fieldMessage('budgetDate')) || isFlagged('budgetDate')
+              }"
+              type="date"
+              :disabled="busy"
+              :aria-invalid="fieldMessage('budgetDate') ? 'true' : 'false'"
+            />
+            <p
+              v-if="fieldMessage('budgetDate') || isFlagged('budgetDate')"
+              class="lf-field-error"
+              aria-live="polite"
+            >
+              {{ fieldMessage('budgetDate') || 'Revisa este valor.' }}
+            </p>
+          </div>
 
-        <!-- FE-S9 §2.2: compra ⇒ se OCULTA la fecha de pago (el BE fuerza
+          <!-- FE-S9 §2.2: compra ⇒ se OCULTA la fecha de pago (el BE fuerza
              payment_date a NULL: las cuotas se derivan por términos). -->
-        <div v-if="!isPurchase" class="lf-field">
-          <label class="lf-label" for="lf-payment-date">Fecha de pago</label>
-          <input
-            id="lf-payment-date"
-            v-model="form.paymentDate"
-            class="lf-input"
-            :class="{ 'is-invalid': isFlagged('paymentDate') }"
-            type="date"
-            :disabled="busy"
-          />
-          <p class="lf-hint">Si se omite, se asume la fecha proyectada</p>
-          <p v-if="isFlagged('paymentDate')" class="lf-field-error" aria-live="polite">
-            Revisa este valor.
-          </p>
-        </div>
+          <div v-if="!isPurchase" class="lf-field">
+            <label class="lf-label" for="lf-payment-date">Fecha de pago</label>
+            <input
+              id="lf-payment-date"
+              v-model="form.paymentDate"
+              class="lf-input"
+              :class="{ 'is-invalid': isFlagged('paymentDate') }"
+              type="date"
+              :disabled="busy"
+            />
+            <p class="lf-hint">Si se omite, se asume la fecha proyectada</p>
+            <p v-if="isFlagged('paymentDate')" class="lf-field-error" aria-live="polite">
+              Revisa este valor.
+            </p>
+          </div>
 
-        <!-- FE-S9 A-01 §6.1: la Temporada se muestra TAMBIÉN en compra
+          <!-- FE-S9 A-01 §6.1: la Temporada se muestra TAMBIÉN en compra
              (informativa: no genera cuotas; 404 de colección cae en el
              mensaje campo `collection` vigente). Comportamiento, fecha de
              pago y tasa variable SIGUEN ocultos en compra (§2.2 intacto). -->
-        <div class="lf-field">
-          <label class="lf-label" for="lf-collection">Temporada</label>
-          <select
-            id="lf-collection"
-            v-model="form.idCollection"
-            class="lf-input"
-            :class="{
-              'is-invalid': Boolean(serverFieldErrors.collection) || isFlagged('collection')
-            }"
-            :disabled="busy"
-          >
-            <option value="">— ninguna —</option>
-            <option
-              v-for="collection in budgetPlanningStore.collections"
-              :key="collection.id_collection"
-              :value="String(collection.id_collection)"
+          <div class="lf-field">
+            <label class="lf-label" for="lf-collection">Temporada</label>
+            <select
+              id="lf-collection"
+              v-model="form.idCollection"
+              class="lf-input"
+              :class="{
+                'is-invalid': Boolean(serverFieldErrors.collection) || isFlagged('collection')
+              }"
+              :disabled="busy"
             >
-              {{ collection.short_collection_name }}
-            </option>
-          </select>
-          <p
-            v-if="serverFieldErrors.collection || isFlagged('collection')"
-            class="lf-field-error"
-            aria-live="polite"
-          >
-            {{ serverFieldErrors.collection || 'Revisa este valor.' }}
-          </p>
-        </div>
+              <option value="">— ninguna —</option>
+              <option
+                v-for="collection in budgetPlanningStore.collections"
+                :key="collection.id_collection"
+                :value="String(collection.id_collection)"
+              >
+                {{ collection.short_collection_name }}
+              </option>
+            </select>
+            <p
+              v-if="serverFieldErrors.collection || isFlagged('collection')"
+              class="lf-field-error"
+              aria-live="polite"
+            >
+              {{ serverFieldErrors.collection || 'Revisa este valor.' }}
+            </p>
+          </div>
 
-        <!-- FE-S9 §2.2: compra ⇒ comportamiento FIJO a `fixed`: el selector
+          <!-- FE-S9 §2.2: compra ⇒ comportamiento FIJO a `fixed`: el selector
              se oculta (a diferencia del edit de FE-S4D, que lo deshabilita). -->
-        <div v-if="!isPurchase" class="lf-field">
-          <label class="lf-label" for="lf-behavior">Comportamiento</label>
-          <select
-            id="lf-behavior"
-            v-model="form.behaviorType"
-            class="lf-input"
-            :class="{ 'is-invalid': isFlagged('behavior') }"
-            :disabled="isEdit || busy"
-          >
-            <option v-for="option in BEHAVIOR_OPTIONS" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-          <p v-if="isEdit" class="lf-hint">Para cambiar el comportamiento, cree una línea nueva</p>
-        </div>
+          <div v-if="!isPurchase" class="lf-field">
+            <label class="lf-label" for="lf-behavior">Comportamiento</label>
+            <select
+              id="lf-behavior"
+              v-model="form.behaviorType"
+              class="lf-input"
+              :class="{ 'is-invalid': isFlagged('behavior') }"
+              :disabled="isEdit || busy"
+            >
+              <option v-for="option in BEHAVIOR_OPTIONS" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+            <p v-if="isEdit" class="lf-hint">
+              Para cambiar el comportamiento, cree una línea nueva
+            </p>
+          </div>
 
-        <div class="lf-field">
-          <label class="lf-label" for="lf-amount"
-            >Monto<template v-if="!isVariable"> *</template></label
-          >
-          <input
-            id="lf-amount"
-            v-model="form.amountText"
-            class="lf-input"
-            :class="{ 'is-invalid': Boolean(fieldMessage('amount')) || isFlagged('amount') }"
-            type="text"
-            inputmode="decimal"
-            autocomplete="off"
-            :disabled="isVariable || busy"
-            :placeholder="isVariable ? 'derivado de la tasa' : 'Ej.: 1200000'"
-            :aria-invalid="fieldMessage('amount') ? 'true' : 'false'"
-          />
-          <p v-if="isVariable" class="lf-hint">derivado de la tasa</p>
-          <p
-            v-else-if="isEdit && updatePayload && 'projected_amount' in updatePayload"
-            class="lf-hint"
-          >
-            Actual: {{ formatMoney(props.line?.projected_amount) }}
-          </p>
-          <!-- FE-S10 §2.7: fila informativa SOLO lectura (no campo, no
+          <div class="lf-field">
+            <label class="lf-label" for="lf-amount"
+              >Monto<template v-if="!isVariable"> *</template></label
+            >
+            <input
+              id="lf-amount"
+              v-model="form.amountText"
+              class="lf-input"
+              :class="{ 'is-invalid': Boolean(fieldMessage('amount')) || isFlagged('amount') }"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              :disabled="isVariable || busy"
+              :placeholder="isVariable ? 'derivado de la tasa' : 'Ej.: 1200000'"
+              :aria-invalid="fieldMessage('amount') ? 'true' : 'false'"
+            />
+            <p v-if="isVariable" class="lf-hint">derivado de la tasa</p>
+            <p
+              v-else-if="isEdit && updatePayload && 'projected_amount' in updatePayload"
+              class="lf-hint"
+            >
+              Actual: {{ formatMoney(props.line?.projected_amount) }}
+            </p>
+            <!-- FE-S10 §2.7: fila informativa SOLO lectura (no campo, no
                payload) — solo modo compra con Línea de rate > 0 y monto
                numérico; AC-FE10-7: los payloads son idénticos a FE-S9. -->
-          <p v-if="purchaseBreakdownText" class="lf-hint" aria-live="polite">
-            {{ purchaseBreakdownText }}
-          </p>
-          <p
-            v-if="fieldMessage('amount') || isFlagged('amount')"
-            class="lf-field-error"
-            aria-live="polite"
-          >
-            {{ fieldMessage('amount') || 'Revisa este valor.' }}
-          </p>
-        </div>
+            <p v-if="purchaseBreakdownText" class="lf-hint" aria-live="polite">
+              {{ purchaseBreakdownText }}
+            </p>
+            <p
+              v-if="fieldMessage('amount') || isFlagged('amount')"
+              class="lf-field-error"
+              aria-live="polite"
+            >
+              {{ fieldMessage('amount') || 'Revisa este valor.' }}
+            </p>
+          </div>
 
-        <div v-if="isVariable" class="lf-field">
-          <label class="lf-label" for="lf-rate"
-            >Tasa (%)<template v-if="!isEdit"> *</template></label
-          >
-          <input
-            id="lf-rate"
-            v-model="form.ratePct"
-            class="lf-input"
-            :class="{ 'is-invalid': Boolean(fieldMessage('rate')) || isFlagged('rate') }"
-            type="number"
-            step="0.01"
-            min="0"
-            max="100"
-            :disabled="busy"
-            placeholder="Ej.: 8"
-            :aria-invalid="fieldMessage('rate') ? 'true' : 'false'"
-          />
-          <p class="lf-hint">Se envía como fracción (8 % ⇒ 0.08)</p>
-          <p
-            v-if="fieldMessage('rate') || isFlagged('rate')"
-            class="lf-field-error"
-            aria-live="polite"
-          >
-            {{ fieldMessage('rate') || 'Revisa este valor.' }}
-          </p>
-        </div>
+          <div v-if="isVariable" class="lf-field">
+            <label class="lf-label" for="lf-rate"
+              >Tasa (%)<template v-if="!isEdit"> *</template></label
+            >
+            <input
+              id="lf-rate"
+              v-model="form.ratePct"
+              class="lf-input"
+              :class="{ 'is-invalid': Boolean(fieldMessage('rate')) || isFlagged('rate') }"
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              :disabled="busy"
+              placeholder="Ej.: 8"
+              :aria-invalid="fieldMessage('rate') ? 'true' : 'false'"
+            />
+            <p class="lf-hint">Se envía como fracción (8 % ⇒ 0.08)</p>
+            <p
+              v-if="fieldMessage('rate') || isFlagged('rate')"
+              class="lf-field-error"
+              aria-live="polite"
+            >
+              {{ fieldMessage('rate') || 'Revisa este valor.' }}
+            </p>
+          </div>
 
-        <!-- FE-S14-IVA §5: checkbox `Con IVA` (solo GASTOS). Create ⇒ default
+          <!-- FE-S14-IVA §5: checkbox `Con IVA` (solo GASTOS). Create ⇒ default
              true; edit ⇒ valor persistido (NULL sale marcado, D-FE14-2). En
              INGRESO/COMPRA se OCULTA con la nota literal de la spec. -->
-        <div v-if="showIvaFlag" class="lf-field">
-          <label class="lf-check" for="lf-has-iva">
-            <input id="lf-has-iva" v-model="form.hasIva" type="checkbox" :disabled="busy" />
-            <span>Con IVA</span>
-          </label>
-          <p class="lf-hint">
-            Gasto gravado: en el modo “Con IVA” se muestra y programa su
-            recaudo/pago bruto (neto × 1.19). Desmárquelo solo para gastos sin
-            IVA (excluidos); no aplica a ingresos ni compras.
-          </p>
-        </div>
-        <p v-else class="lf-hint lf-iva-note" role="note">{{ IVA_HIDDEN_NOTE }}</p>
+          <div v-if="showIvaFlag" class="lf-field">
+            <label class="lf-check" for="lf-has-iva">
+              <input id="lf-has-iva" v-model="form.hasIva" type="checkbox" :disabled="busy" />
+              <span>Con IVA</span>
+            </label>
+            <p class="lf-hint">
+              Gasto gravado: en el modo “Con IVA” se muestra y programa su recaudo/pago bruto (neto
+              × 1.19). Desmárquelo solo para gastos sin IVA (excluidos); no aplica a ingresos ni
+              compras.
+            </p>
+          </div>
+          <p v-else class="lf-hint lf-iva-note" role="note">{{ IVA_HIDDEN_NOTE }}</p>
 
-        <div class="lf-field">
-          <label class="lf-label" for="lf-description">Descripción</label>
-          <input
-            id="lf-description"
-            v-model="form.description"
-            class="lf-input"
-            :class="{ 'is-invalid': isFlagged('description') }"
-            type="text"
-            maxlength="255"
-            :disabled="busy"
-          />
-          <p v-if="isFlagged('description')" class="lf-field-error" aria-live="polite">
-            Revisa este valor.
-          </p>
-        </div>
+          <div class="lf-field">
+            <label class="lf-label" for="lf-description">Descripción</label>
+            <input
+              id="lf-description"
+              v-model="form.description"
+              class="lf-input"
+              :class="{ 'is-invalid': isFlagged('description') }"
+              type="text"
+              maxlength="255"
+              :disabled="busy"
+            />
+            <p v-if="isFlagged('description')" class="lf-field-error" aria-live="polite">
+              Revisa este valor.
+            </p>
+          </div>
         </fieldset>
 
         <p v-if="alertMessage" class="lf-alert" role="alert" aria-live="assertive">

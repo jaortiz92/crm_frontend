@@ -60,7 +60,7 @@
  *    (el P&G/Acumulado Ejecutivo y el Resumen de liquidez del Flujo abren
  *    cada pestaña con su thead ya en pantalla).
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ExecutivePivotTable from '@/components/budget/planning/ExecutivePivotTable.vue'
 import CashFlowPivotTable from '@/components/budget/planning/CashFlowPivotTable.vue'
@@ -76,6 +76,21 @@ import {
   classifyCollaboratorError
 } from '@/services/budgetCollaboratorService.js'
 import { formatMoneyPlain, statusChipOf } from '@/components/budget/planning/planningFormat.js'
+/**
+ * FE-S20 (spec `frontend.03_20`): exportación de la tabla del tab activo a
+ * Excel/CSV — el ensamble de hojas (`planningExportSheets.js`) reutiliza las
+ * MISMAS funciones de agregación que alimentan `ExecutivePivotTable`/
+ * `CashFlowPivotTable`/`BudgetLineGrid`/`IvaSettlementPanel` (cero
+ * duplicación), y la serialización vive en el plugin `tableExport.js` (sin
+ * HTTP: todo sale de la caché del store, RF-9).
+ */
+import { buildExportFilename, exportSheets } from '@/plugins/tableExport.js'
+import {
+  buildEditorSheets,
+  buildExecutiveSheets,
+  buildFlowSheets,
+  buildSettlementSheets
+} from '@/components/budget/planning/planningExportSheets.js'
 
 const TAB_ORDER = ['executive', 'flow', 'editor', 'settlement']
 
@@ -391,12 +406,8 @@ async function loadPayrollSimulation(force = false) {
 }
 
 const financingSimCount = computed(() => financingSimLines.value.length)
-const financingSimInterest = computed(() =>
-  Number(financingSim.value.data?.total_interest ?? 0)
-)
-const financingSimInsurance = computed(() =>
-  Number(financingSim.value.data?.total_insurance ?? 0)
-)
+const financingSimInterest = computed(() => Number(financingSim.value.data?.total_interest ?? 0))
+const financingSimInsurance = computed(() => Number(financingSim.value.data?.total_insurance ?? 0))
 const financingSimTotal = computed(() =>
   Number(financingSim.value.data?.total_annual_expenses ?? 0)
 )
@@ -488,6 +499,118 @@ function onTabKeydown(event, index) {
   const next = TAB_ORDER[(index + delta + TAB_ORDER.length) % TAB_ORDER.length]
   activateTab(next)
   document.getElementById(`planning-tab-${next}`)?.focus()
+}
+
+/* ============ FE-S20 (spec `frontend.03_20`): Exportar (Excel/CSV) ============ */
+
+/** Slug de tab para el nombre de archivo `presupuesto-{id}_{tab}_{fecha}` (RF-6). */
+const EXPORT_TAB_SLUGS = {
+  executive: 'vista-ejecutiva',
+  flow: 'vista-flujo',
+  editor: 'editor-celdas',
+  settlement: 'liquidacion'
+}
+
+/** Menú de formato abierto (RF-2) + ancla del cierre por click fuera. */
+const exportOpen = ref(false)
+const exportRoot = ref(null)
+
+/**
+ * RF-7: botón deshabilitado sin datos para el tab o con carga en vuelo.
+ * Checks de PRESENCIA ligeros (no re-agregan): líneas del escenario
+ * (Ejecutiva/Editor), líneas/capital/desembolsos/arrastre (Flujo — espejo del
+ * guard `hasLines` de `CashFlowPivotTable`) y períodos de la liquidación.
+ */
+const exportDisabled = computed(() => {
+  if (budgetPlanningStore.detailLoading) return true
+  const lines = scenarioView.value?.budget_lines ?? []
+  switch (activeTab.value) {
+    case 'executive':
+    case 'editor':
+      return lines.length === 0
+    case 'flow':
+      return (
+        lines.length === 0 &&
+        financingPrincipalLines.value.length === 0 &&
+        financingDisbursementLines.value.length === 0 &&
+        !(
+          Array.isArray(budgetPlanningStore.carryover.lines) &&
+          budgetPlanningStore.carryover.lines.length > 0
+        )
+      )
+    case 'settlement': {
+      const state = budgetPlanningStore.settlement
+      if (state.loading) return true
+      const periods = state.data?.periods
+      return !Array.isArray(periods) || periods.length === 0
+    }
+    default:
+      return true
+  }
+})
+
+/** `title` del botón deshabilitado (RF-7: explicativo, nunca silent RF-10). */
+const exportDisabledTitle = computed(() => {
+  if (budgetPlanningStore.detailLoading) {
+    return 'Exportación disponible cuando termine de cargar el escenario.'
+  }
+  if (activeTab.value === 'settlement' && budgetPlanningStore.settlement.loading) {
+    return 'Exportación disponible cuando termine de calcular la liquidación.'
+  }
+  return 'No hay datos que exportar en esta pestaña.'
+})
+
+/** Cierre del menú al hacer click fuera (patrón simple con listener global). */
+function onDocClickForExport(event) {
+  if (!exportOpen.value) return
+  if (exportRoot.value && !exportRoot.value.contains(event.target)) exportOpen.value = false
+}
+
+onMounted(() => document.addEventListener('click', onDocClickForExport))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClickForExport))
+
+/**
+ * RF-3/RF-4/RF-5/RF-6: construye las hojas del TAB ACTIVO desde la caché del
+ * store (los derivados ya respetan filtros/`ivaMode` según aplique — CA-2/
+ * CA-4) y llama `exportSheets` (cero HTTP, RF-9); cualquier error inesperado
+ * se notifica con `alertService` (RF-10).
+ * @param {'csv'|'xlsx'} format
+ */
+function onExportSelect(format) {
+  exportOpen.value = false
+  const tab = activeTab.value
+  try {
+    let sheets = []
+    if (tab === 'executive') {
+      sheets = buildExecutiveSheets({ scenario: scenarioView.value, store: budgetPlanningStore })
+    } else if (tab === 'flow') {
+      sheets = buildFlowSheets({
+        scenario: scenarioView.value,
+        financingPrincipalLines: financingPrincipalLines.value,
+        financingDisbursementLines: financingDisbursementLines.value,
+        store: budgetPlanningStore
+      })
+    } else if (tab === 'editor') {
+      sheets = buildEditorSheets({
+        scenario: scenarioView.value,
+        ivaMode: ivaMode.value,
+        store: budgetPlanningStore
+      })
+    } else {
+      sheets = buildSettlementSheets({ store: budgetPlanningStore })
+    }
+    if (!sheets.length) throw new Error('La pestaña activa no tiene datos para exportar.')
+    exportSheets({
+      format,
+      filename: buildExportFilename(
+        `presupuesto-${idBudget.value}_${EXPORT_TAB_SLUGS[tab]}`,
+        format
+      ),
+      sheets
+    })
+  } catch {
+    alertService.generalError('No se pudo generar el archivo de exportación.')
+  }
 }
 
 function onTargetDone() {
@@ -667,13 +790,12 @@ function backToPlanning() {
       >
         <span v-if="payrollSim.loading">Proyectando nómina simulada…</span>
         <span v-else-if="payrollSim.error">
-          No se pudo simular la nómina en este escenario (¿faltan parámetros de la
-          vigencia?).
+          No se pudo simular la nómina en este escenario (¿faltan parámetros de la vigencia?).
         </span>
         <span v-else-if="payrollSimCount">
           Nómina simulada: {{ payrollSimCount }} líneas · Σ anual
-          {{ formatMoneyPlain(payrollSimTotal) }} — cifras what-if (no materializadas);
-          marca Meta Activa para proyectarlas de verdad.
+          {{ formatMoneyPlain(payrollSimTotal) }} — cifras what-if (no materializadas); marca Meta
+          Activa para proyectarlas de verdad.
         </span>
         <span v-else>Nómina simulada: sin colaboradores con salario vigente proyectable.</span>
         <button
@@ -700,12 +822,13 @@ function backToPlanning() {
           No se pudo cargar la simulación de financiación para este escenario.
         </span>
         <span v-else-if="financingSimCount">
-          Financiación simulada: {{ financingSimCount }} líneas de gasto
-          ({{ financingSim.data?.financing_credits_count ?? 0 }} créditos) · Intereses
-          {{ formatMoneyPlain(financingSimInterest) }} · Seguros
+          Financiación simulada: {{ financingSimCount }} líneas de gasto ({{
+            financingSim.data?.financing_credits_count ?? 0
+          }}
+          créditos) · Intereses {{ formatMoneyPlain(financingSimInterest) }} · Seguros
           {{ formatMoneyPlain(financingSimInsurance) }} · Σ gastos anuales
-          {{ formatMoneyPlain(financingSimTotal) }} — cifras what-if/no materializadas; al marcar Meta
-          Activa se materializan.
+          {{ formatMoneyPlain(financingSimTotal) }} — cifras what-if/no materializadas; al marcar
+          Meta Activa se materializan.
         </span>
         <span v-else>
           Financiación simulada: sin líneas de interés o seguro proyectables. Estas cifras what-if
@@ -723,23 +846,84 @@ function backToPlanning() {
       </div>
 
       <!-- =============================== Tabs =============================== -->
-      <div class="ge-tabs" role="tablist" aria-label="Vistas del escenario">
-        <button
-          v-for="(tab, index) in TAB_ORDER"
-          :id="`planning-tab-${tab}`"
-          :key="tab"
-          class="tab-pill"
-          :class="{ 'is-active': activeTab === tab }"
-          type="button"
-          role="tab"
-          :aria-selected="activeTab === tab"
-          :aria-controls="`planning-panel-${tab}`"
-          :tabindex="activeTab === tab ? 0 : -1"
-          @click="activateTab(tab)"
-          @keydown="onTabKeydown($event, index)"
-        >
-          {{ TAB_LABELS[tab] }}
-        </button>
+      <!-- FE-S20 (spec `frontend.03_20`) RF-1/RF-2: barra de pills + control
+           "Exportar" (menú de formato Excel/CSV) sobre la misma línea; el
+           menú se cierra al hacer click fuera (listener global del script). -->
+      <div class="ge-tabs-row">
+        <div class="ge-tabs" role="tablist" aria-label="Vistas del escenario">
+          <button
+            v-for="(tab, index) in TAB_ORDER"
+            :id="`planning-tab-${tab}`"
+            :key="tab"
+            class="tab-pill"
+            :class="{ 'is-active': activeTab === tab }"
+            type="button"
+            role="tab"
+            :aria-selected="activeTab === tab"
+            :aria-controls="`planning-panel-${tab}`"
+            :tabindex="activeTab === tab ? 0 : -1"
+            @click="activateTab(tab)"
+            @keydown="onTabKeydown($event, index)"
+          >
+            {{ TAB_LABELS[tab] }}
+          </button>
+        </div>
+        <div ref="exportRoot" class="ge-export">
+          <button
+            type="button"
+            class="ge-export-btn"
+            :class="{ 'is-open': exportOpen }"
+            :disabled="exportDisabled"
+            :title="
+              exportDisabled
+                ? exportDisabledTitle
+                : 'Exportar la tabla de esta pestaña (Excel o CSV)'
+            "
+            aria-haspopup="menu"
+            :aria-expanded="exportOpen ? 'true' : 'false'"
+            @click.stop="exportOpen = !exportOpen"
+          >
+            <svg
+              class="ge-export-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span>Exportar</span>
+          </button>
+          <div
+            v-if="exportOpen"
+            class="ge-export-menu"
+            role="menu"
+            aria-label="Formato de exportación"
+          >
+            <button
+              type="button"
+              class="ge-export-item"
+              role="menuitem"
+              @click="onExportSelect('xlsx')"
+            >
+              Excel (.xlsx)
+            </button>
+            <button
+              type="button"
+              class="ge-export-item"
+              role="menuitem"
+              @click="onExportSelect('csv')"
+            >
+              CSV
+            </button>
+          </div>
+        </div>
       </div>
 
       <div
@@ -1165,12 +1349,21 @@ function backToPlanning() {
   color: #f6c177;
 }
 
-/* Tabs "pill" (mismo patrón visual de Reglas Financieras) */
+/* Tabs "pill" (mismo patrón visual de Reglas Financieras)
+ * FE-S20: la fila completa (pills + Exportar) lleva el margen inferior;
+ * la caja de pills queda igual que antes. */
+
+.ge-tabs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+}
 
 .ge-tabs {
   display: inline-flex;
   gap: 4px;
-  margin-bottom: 16px;
   padding: 4px;
   border: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
   border-radius: 999px;
@@ -1179,6 +1372,105 @@ function backToPlanning() {
 
 :root[data-theme='dark'] .ge-tabs {
   background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* ─── FE-S20 (spec `frontend.03_20`) RF-1/RF-2/RF-7: botón + menú Exportar ─── */
+
+.ge-export {
+  position: relative;
+}
+
+.ge-export-btn {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 16px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 999px;
+  background-color: var(--color-surface-card, #ffffff);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #555555);
+  cursor: pointer;
+  transition:
+    background-color 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+    color 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+:root[data-theme='dark'] .ge-export-btn {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.ge-export-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.ge-export-btn:hover:not(:disabled),
+.ge-export-btn.is-open {
+  background-color: rgba(3, 101, 140, 0.08);
+  color: var(--color-text-primary, #070707);
+}
+
+:root[data-theme='dark'] .ge-export-btn:hover:not(:disabled),
+:root[data-theme='dark'] .ge-export-btn.is-open {
+  background-color: rgba(86, 200, 238, 0.12);
+  color: #56c8ee;
+}
+
+.ge-export-btn:focus-visible {
+  outline: 2px solid var(--color-brand, #03658c);
+  outline-offset: 1px;
+}
+
+.ge-export-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ge-export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 10px;
+  background-color: var(--color-surface-card, #ffffff);
+  box-shadow: 0 10px 30px rgba(7, 7, 7, 0.16);
+}
+
+:root[data-theme='dark'] .ge-export-menu {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme='dark'] .ge-export-item {
+  color: #d5dde4;
+}
+
+.ge-export-item {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 0.8rem;
+  color: var(--color-text-primary, #070707);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ge-export-item:hover {
+  background-color: rgba(3, 101, 140, 0.08);
+}
+
+.ge-export-item:focus-visible {
+  outline: 2px solid var(--color-brand, #03658c);
+  outline-offset: -2px;
 }
 
 .tab-pill {

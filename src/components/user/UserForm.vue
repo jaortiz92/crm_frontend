@@ -127,7 +127,6 @@ onMounted(async () => {
               :min="1000000000"
               :max="10000000000"
             />
-
           </div>
           <div class="field-input">
             <label>Departamento</label>

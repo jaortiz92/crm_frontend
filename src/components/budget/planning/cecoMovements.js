@@ -21,6 +21,16 @@
  *    PURCHASE cruda como el bloque "Compras del mes").
  *  - Formateo de celda de pivote en un ÚNICO lugar (umbral de compactación
  *    ESPEJO del FE-S18 RF-2.2 de las vistas vigentes).
+ *  - REVISIÓN 4 (spec `frontend.03_19` §11, RF-11.3/RF-11.4): `movementAmountReconciled`
+ *    — el drill-down del bloque "Gastos variables (calculados)" (ahora
+ *    `linkable` en `ExecutivePivotTable`) presenta la MISMA cifra derivada de
+ *    la matriz `tasa × Σ ingresos fijos del mes de causación` (base
+ *    `fixedIncomeCausationSeries` de `planningFormat.js`); el resto de los
+ *    movimientos conserva `movementAmount` byte-a-byte (RF-8.6). ENMIENDA
+ *    A-02 (spec `frontend.03_21` §11, 2026-10-21): la serie es POR
+ *    COMPORTAMIENTO de la línea (I causado para `variable_sales`; ENTRADAS
+ *    del Flujo por mes de pago —NETA— para `variable_receivables`), resuelta
+ *    con las series A-01/A-02 por CECO (ver `movementAmountReconciled`).
  *
  * Cero dependencias reactivas: los llamadores pasan el estado (tab, ivaMode,
  * catálogo) — los componentes consumen sus `computed` del store como hacen
@@ -97,6 +107,89 @@ export function movementAmount(line, tab, ivaActive) {
   return withIva(net, lineChargesIva(line))
 }
 
+/* ═══════════ REVISIÓN 4 — RF-11: monto RECONCILIADO de la línea variable ═══════════ */
+
+/**
+ * ¿El movimiento es una línea variable de GASTO cuya cifra la define la
+ * derivación de la matriz y no el dato crudo? (RF-11.2/RF-11.3): movimiento
+ * base (`budget_lines`) de `expense` con `behavior_type !== 'fixed'` — la
+ * MISMA selección de `buildVariableExpensePivot` (`executivePivot.js`) y del
+ * bloque `variablesPivot` del Flujo (`cashFlowPivot.js`).
+ * @param {object|null|undefined} movement forma común del drill-down
+ * @returns {boolean}
+ */
+export function isReconciledVariableMovement(movement) {
+  return (
+    (movement?.source_kind ?? SOURCE_KINDS.BASE) === SOURCE_KINDS.BASE &&
+    movement?.line_type === 'expense' &&
+    movement?.behavior_type !== 'fixed'
+  )
+}
+
+/**
+ * REVISIÓN 4 (RF-11.3/RF-11.4 / spec `frontend.03_19` §11): monto PRESENTADO
+ * de un movimiento del drill-down donde las líneas variables de GASTO muestra
+ * el monto RECONCILIADO con la matriz — EXACTAMENTE la cifra del pivote de
+ * origen: `Number(variable_rate) × Σ ingresos fijos del mes de CAUSACIÓN de
+ * la línea` (base 12 posiciones de `fixedIncomeCausationSeries` en
+ * `planningFormat.js`, la MISMA serie que alimenta `buildVariableExpensePivot`
+ * de la Ejecutiva y `variablesPivot` del Flujo; cero duplicación — RF-7.4).
+ *
+ * Reglas byte-cuadre con la matriz:
+ *  - Mes inválido (`monthIndexOf(budget_date) < 0`) o mes sin ingresos fijos
+ *    ⇒ aporte 0 (idéntico al `continue` de `buildVariableExpensePivot`/
+ *    `buildVariableFlowPivot`: la línea no entra en ninguna celda).
+ *  - Tab Causado: SIEMPRE neto (D-FE14-7 — espejo de la Ejecutiva).
+ *  - Tab Flujo: monto idéntico al Causado, con sólo el gross-up × 1.19 del
+ *    monto DERIVADO según el flag efectivo (`lineChargesIva`, D-FE14) —
+ *    byte-idéntico a `buildVariableFlowPivot`; el posicionamiento mensual
+ *    usa el mes de CAUSACIÓN porque ese builder (a diferencia de los bloques
+ *    fijos con `cfMonth`) posiciona por `budget_date` — AC-16.
+ *  - Resto de movimientos (fijos, ingresos, compras, motores, capital):
+ *    conservan el `movementAmount` de RF-8.6 byte-a-byte (cláusula
+ *    inquebrantable RF-8.6/AC-10/AC-11).
+ *
+ *  - Resto de movimientos (fijos, ingresos, compras, motores, capital):
+ *    conservan el `movementAmount` de RF-8.6 byte-a-byte (cláusula
+ *    inquebrantable RF-8.6/AC-10/AC-11).
+ *
+ * ENMIENDA A-02 (spec `frontend.03_21` §11, 2026-10-21): la serie de base se
+ * elige POR COMPORTAMIENTO de la línea — `variable_sales` usa la serie I
+ * (facturación por mes de causación) y `variable_receivables` la serie R
+ * (ENTRADAS del Flujo por mes de pago, NETA). El parámetro acepta AMBAS
+ * formas: una `number[12]` plana (LEGACY, comportamientos previos/enmienda
+ * A-01 — se usa como base de todos los comportamiento, retro-compatibilidad
+ * con llamadores existentes) o un objeto `{ sales, receivables }` de las
+ * series ya resueltas A-01/A-02 por CECO. La TASA sigue visible en la
+ * columna/tasa y el crudo queda en tooltip del render
+ * (`CecoMovementTable`/`CecoMovementPivot`).
+ * @param {object|null|undefined} line movimiento de la forma común
+ * @param {string} tab `TAB_CAUSED` | `TAB_FLOW`
+ * @param {boolean} ivaActive modo "Con IVA" (`budgetPlanningStore.ivaMode`)
+ * @param {number[]|{sales?: number[], receivables?: number[]}|null|undefined}
+ *   [fixedIncomeByMonth] serie(s) compartida(s) de base por mes, resuelta(s)
+ *   por comportamiento (A-02). Sin serie para el comportamiento ⇒ la línea
+ *   variable aporta 0 (degradación honesta: sin base no hay cifra
+ *   reconciliada que mostrar).
+ * @returns {number}
+ */
+export function movementAmountReconciled(line, tab, ivaActive, fixedIncomeByMonth) {
+  if (!isReconciledVariableMovement(line)) return movementAmount(line, tab, ivaActive)
+  const rate = Number(line?.variable_rate) || 0
+  // ENMIENDA A-02: serie por comportamiento (plana legacy ⇒ I para todos).
+  const behaviorSeries = Array.isArray(fixedIncomeByMonth)
+    ? fixedIncomeByMonth
+    : line?.behavior_type === 'variable_receivables'
+      ? (fixedIncomeByMonth?.receivables ?? null)
+      : (fixedIncomeByMonth?.sales ?? null)
+  if (!Array.isArray(behaviorSeries)) return 0
+  const month = monthIndexOf(line?.budget_date)
+  if (month < 0 || month > 11) return 0
+  const amount = rate * (Number(behaviorSeries[month]) || 0)
+  if (tab !== TAB_FLOW || !ivaActive) return amount
+  return withIva(amount, lineChargesIva(line))
+}
+
 /**
  * Código de CECO (`cost_center_code`, RF-1.1) de un `id_cost_center` de los
  * pivotes de origen: ENCAJE EXACTO contra el catálogo. `null` ⇒ el llamador
@@ -112,6 +205,23 @@ export function costCenterCodeOf(costCenters, idCostCenter) {
   const list = Array.isArray(costCenters) ? costCenters : []
   const found = list.find((item) => item && item.id_cost_center === idCostCenter)
   return found ? String(found.cost_center_code) : null
+}
+
+/**
+ * CECO → `id_line` vía el catálogo `costCenters` cacheado (FE-S4C §3.1).
+ * Helper COMPARTIDO (FE-S20 / spec `frontend.03_20`: única definición para
+ * `executivePivot.js` y `cashFlowPivot.js`, que antes lo duplicaban inline en
+ * sus componentes): desconocido o catálogo caído (R-4) ⇒ `null` ⇒ el CECO cae
+ * a la tasa global de costo (§3.1).
+ * @param {Array<object>|null|undefined} costCenters catálogo del store
+ * @param {number|string|null|undefined} idCostCenter
+ * @returns {number|null}
+ */
+export function lineIdForCostCenter(costCenters, idCostCenter) {
+  if (idCostCenter === null || idCostCenter === undefined) return null
+  const list = Array.isArray(costCenters) ? costCenters : []
+  const found = list.find((item) => item && item.id_cost_center === idCostCenter)
+  return typeof found?.id_line === 'number' ? found.id_line : null
 }
 
 /**

@@ -3,10 +3,25 @@ import { budgetTaxService } from '@/services/budgetTaxService.js'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 
 const emptyState = () => ({
-  profiles: [], rates: [], calendar: [], assumptions: null, summary: null, comparison: null, cashFlow: null,
-  selectedRegime: 'ordinary', taxYear: new Date().getFullYear(), loading: false, saving: false,
-  ratesLoading: false, rateSaving: false, calendarLoading: false, calendarSaving: false, calendarDeleting: false, calculating: false,
-  error: null, lastErrorKind: null
+  profiles: [],
+  rates: [],
+  calendar: [],
+  assumptions: null,
+  summary: null,
+  comparison: null,
+  cashFlow: null,
+  selectedRegime: 'ordinary',
+  taxYear: new Date().getFullYear(),
+  loading: false,
+  saving: false,
+  ratesLoading: false,
+  rateSaving: false,
+  calendarLoading: false,
+  calendarSaving: false,
+  calendarDeleting: false,
+  calculating: false,
+  error: null,
+  lastErrorKind: null
 })
 
 function errorKind(error) {
@@ -32,22 +47,40 @@ export const useBudgetTaxStore = defineStore('budgetTaxStore', {
       // Opción 1: el catálogo de perfiles es ahora de TODOS los años, así
       // que aquí se fija el contexto (año + régimen) que antes venía
       // implícito en la lista filtrada por tax_year.
-      const matchingProfiles = state.profiles.filter((profile) => (
-        profile.regime === state.selectedRegime
-        && Number(profile.tax_year) === Number(state.taxYear)
-      ))
-      return matchingProfiles.find((profile) => profile.is_active || profile.status === 'active') || matchingProfiles[0] || null
+      const matchingProfiles = state.profiles.filter(
+        (profile) =>
+          profile.regime === state.selectedRegime &&
+          Number(profile.tax_year) === Number(state.taxYear)
+      )
+      return (
+        matchingProfiles.find((profile) => profile.is_active || profile.status === 'active') ||
+        matchingProfiles[0] ||
+        null
+      )
     },
     simpleResults: (state) => {
-      const rows = state.summary?.results || state.summary?.simple_results || state.summary?.simple?.periods || []
-      return Array.isArray(rows) ? rows.filter((row) => row.tax_type === 'simple' || row.regime === 'simple') : []
+      const rows =
+        state.summary?.results ||
+        state.summary?.simple_results ||
+        state.summary?.simple?.periods ||
+        []
+      return Array.isArray(rows)
+        ? rows.filter((row) => row.tax_type === 'simple' || row.regime === 'simple')
+        : []
     },
-    hasConfiguration: (state) => Boolean(state.assumptions || state.profiles.some((profile) => profile.is_active || profile.status === 'active')),
+    hasConfiguration: (state) =>
+      Boolean(
+        state.assumptions ||
+          state.profiles.some((profile) => profile.is_active || profile.status === 'active')
+      ),
     missingConfiguration: (state) => {
       const warnings = []
-      if (!state.assumptions?.id_tax_profile) warnings.push('Sin supuestos asociados al presupuesto')
+      if (!state.assumptions?.id_tax_profile)
+        warnings.push('Sin supuestos asociados al presupuesto')
       if (!state.activeProfile) warnings.push('Sin perfil tributario activo')
-      const ratesForRegime = state.rates.filter((rate) => !rate.regime || rate.regime === state.selectedRegime)
+      const ratesForRegime = state.rates.filter(
+        (rate) => !rate.regime || rate.regime === state.selectedRegime
+      )
       if (!ratesForRegime.length) warnings.push('Sin tarifas configuradas')
       if (!state.calendar.length) warnings.push('Sin calendario configurado')
       return warnings
@@ -56,7 +89,9 @@ export const useBudgetTaxStore = defineStore('budgetTaxStore', {
   actions: {
     async request(callback) {
       this.error = null
-      try { return { ok: true, data: (await callback()).data } } catch (error) {
+      try {
+        return { ok: true, data: (await callback()).data }
+      } catch (error) {
         this.lastErrorKind = errorKind(error)
         const detail = error.response?.data?.detail
         this.error = detail || 'No fue posible consultar la información tributaria.'
@@ -76,7 +111,9 @@ export const useBudgetTaxStore = defineStore('budgetTaxStore', {
       // Opción 1: los perfiles cargan SIN filtro de año (catálogo completo,
       // el dropdown "Perfil a editar" debe listarlos todos); tarifas y
       // calendario SÍ se anclan al año fiscal evaluado.
-      this.loading = true; this.taxYear = Number(year); this.selectedRegime = regime
+      this.loading = true
+      this.taxYear = Number(year)
+      this.selectedRegime = regime
       const result = await Promise.all([
         this.request(() => budgetTaxService.getProfiles()),
         this.request(() => budgetTaxService.getRates(this.taxYear)),
@@ -103,32 +140,39 @@ export const useBudgetTaxStore = defineStore('budgetTaxStore', {
       return result.ok && Number.isInteger(year) ? year : null
     },
     async loadBudget(idBudget) {
-      this.loading = true; this.error = null
+      this.loading = true
+      this.error = null
       const [assumptions, summary, cashFlow] = await Promise.all([
         this.request(() => budgetTaxService.getAssumptions(idBudget)),
         this.request(() => budgetTaxService.getSummary(idBudget)),
         this.request(() => budgetTaxService.getCashFlow(idBudget))
       ])
-      this.assumptions = assumptions.data || null; this.summary = summary.data || null; this.cashFlow = cashFlow.data || null
+      this.assumptions = assumptions.data || null
+      this.summary = summary.data || null
+      this.cashFlow = cashFlow.data || null
       this.loading = false
       return assumptions.ok && summary.ok && cashFlow.ok
     },
     async saveAssumptions(idBudget, payload) {
       if (this.saving) return { ok: false, kind: 'busy' }
-      this.saving = true; const result = await this.request(() => budgetTaxService.updateAssumptions(idBudget, payload));
+      this.saving = true
+      const result = await this.request(() => budgetTaxService.updateAssumptions(idBudget, payload))
       if (result.ok) {
         this.assumptions = result.data
         invalidatePlanningTaxCache(idBudget)
       }
-      this.saving = false; return result
+      this.saving = false
+      return result
     },
     async saveProfile(payload, idTaxProfile = null) {
       if (this.saving) return { ok: false, kind: 'busy' }
 
       this.saving = true
-      const result = await this.request(() => idTaxProfile
-        ? budgetTaxService.updateProfile(idTaxProfile, payload)
-        : budgetTaxService.createProfile(payload))
+      const result = await this.request(() =>
+        idTaxProfile
+          ? budgetTaxService.updateProfile(idTaxProfile, payload)
+          : budgetTaxService.createProfile(payload)
+      )
 
       if (result.ok) {
         this.taxYear = Number(payload.tax_year)
@@ -146,9 +190,11 @@ export const useBudgetTaxStore = defineStore('budgetTaxStore', {
       if (this.rateSaving) return { ok: false, kind: 'busy' }
 
       this.rateSaving = true
-      const result = await this.request(() => idTaxRate
-        ? budgetTaxService.updateRate(idTaxRate, payload)
-        : budgetTaxService.createRate(payload))
+      const result = await this.request(() =>
+        idTaxRate
+          ? budgetTaxService.updateRate(idTaxRate, payload)
+          : budgetTaxService.createRate(payload)
+      )
 
       if (result.ok) {
         this.taxYear = Number(payload.tax_year)
@@ -159,13 +205,19 @@ export const useBudgetTaxStore = defineStore('budgetTaxStore', {
       this.rateSaving = false
       return result
     },
-    async saveCalendarPeriod(payload, idCalendarPeriod = null, calendarRegime = this.selectedRegime) {
+    async saveCalendarPeriod(
+      payload,
+      idCalendarPeriod = null,
+      calendarRegime = this.selectedRegime
+    ) {
       if (this.calendarSaving || this.calendarDeleting) return { ok: false, kind: 'busy' }
 
       this.calendarSaving = true
-      const result = await this.request(() => idCalendarPeriod
-        ? budgetTaxService.updateCalendarPeriod(idCalendarPeriod, payload)
-        : budgetTaxService.createCalendarPeriod(payload))
+      const result = await this.request(() =>
+        idCalendarPeriod
+          ? budgetTaxService.updateCalendarPeriod(idCalendarPeriod, payload)
+          : budgetTaxService.createCalendarPeriod(payload)
+      )
 
       if (result.ok) {
         this.taxYear = Number(payload.tax_year)
@@ -176,11 +228,17 @@ export const useBudgetTaxStore = defineStore('budgetTaxStore', {
       this.calendarSaving = false
       return result
     },
-    async deleteCalendarPeriod(idCalendarPeriod, calendarYear = this.taxYear, calendarRegime = this.selectedRegime) {
+    async deleteCalendarPeriod(
+      idCalendarPeriod,
+      calendarYear = this.taxYear,
+      calendarRegime = this.selectedRegime
+    ) {
       if (this.calendarSaving || this.calendarDeleting) return { ok: false, kind: 'busy' }
 
       this.calendarDeleting = true
-      const result = await this.request(() => budgetTaxService.deleteCalendarPeriod(idCalendarPeriod))
+      const result = await this.request(() =>
+        budgetTaxService.deleteCalendarPeriod(idCalendarPeriod)
+      )
 
       if (result.ok) {
         this.taxYear = Number(calendarYear)
@@ -193,16 +251,20 @@ export const useBudgetTaxStore = defineStore('budgetTaxStore', {
     },
     async calculateBudget(idBudget) {
       if (this.calculating) return { ok: false, kind: 'busy' }
-      this.calculating = true; const result = await this.request(() => budgetTaxService.calculate(idBudget));
+      this.calculating = true
+      const result = await this.request(() => budgetTaxService.calculate(idBudget))
       if (result.ok) {
         this.summary = result.data
         await this.loadBudget(idBudget)
         invalidatePlanningTaxCache(idBudget)
       }
-      this.calculating = false; return result
+      this.calculating = false
+      return result
     },
     async compare(idBudget, regimeA = 'ordinary', regimeB = 'simple') {
-      const result = await this.request(() => budgetTaxService.getComparison(idBudget, regimeA, regimeB))
+      const result = await this.request(() =>
+        budgetTaxService.getComparison(idBudget, regimeA, regimeB)
+      )
       if (result.ok) this.comparison = result.data
       return result
     }
