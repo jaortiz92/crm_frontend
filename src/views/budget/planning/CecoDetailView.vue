@@ -56,15 +56,18 @@ import {
   formatMoneyPlain
 } from '@/components/budget/planning/planningFormat.js'
 import {
+  CARRYOVER_ORIGIN_LABELS,
   MOVEMENT_GROUP_FILTERS,
   SOURCE_KINDS,
   TAB_CAUSED,
   TAB_FLOW,
+  isCarryoverOrigin,
   movementsForTab,
   movementAmountReconciled,
   movementMonthOf,
   movementGroupOf,
   normalizeBudgetLines,
+  normalizeCarryoverLines,
   normalizeFinancingSimLines,
   normalizePayrollSimLines,
   normalizePrincipalFlowLines,
@@ -135,6 +138,12 @@ async function load(force = false) {
     // (active/draft/closed). Sin await: el render de la base jamás se
     // bloquea (RF-8.9).
     loadEngineMovements()
+    // FE-S21 RF-CR-04 (Tarea 6): cache FRESCO del arrastre por cambio de
+    // escenario — la AGENDA `fetchCarryover` del store es no-op cacheada y
+    // single-flight (dedupe igual que hoy). Lectura read-only; si falla
+    // queda `error` silencioso y el grupo de arrastre simplemente no
+    // aparece (degradación honesta — el notice va SOLO para motores).
+    void budgetPlanningStore.fetchCarryover(idBudget.value)
     return
   }
   if (result.kind === 'auth') return
@@ -343,6 +352,105 @@ const allCecoMovements = computed(() => [
 
 /** Estado vacío (RF-8.8) con cualquier dato disponible, motores incluidos. */
 const hasAnyMovement = computed(() => allCecoMovements.value.length > 0)
+
+/* ════════════════ FE-S21-CARRYDRILL — grupo "Arrastre {N−1}" ════════════════ */
+
+/**
+ * RF-CR-04: disponibilidad del grupo de arrastre — flag ON del cache del
+ * store + sin `no_source` + líneas existentes. Con flag OFF o `no_source` el
+ * grupo NO se renderiza ni error (AC-S21-FE-5). Los pivotes del año propio
+ * ya disparan `fetchCarryover` por lazy (query del editor); aquí el
+ * `load()` asegura el fetch fresco (dedupe del store — Tarea 6).
+ */
+const carryoverState = computed(() => budgetPlanningStore.carryover)
+
+const carryoverAvailable = computed(
+  () =>
+    carryoverState.value.enabled === true &&
+    carryoverState.value.unavailableReason !== 'no_source' &&
+    Array.isArray(carryoverState.value.lines) &&
+    carryoverState.value.lines.length > 0
+)
+
+/**
+ * Año fuente del título "Arrastre {N−1}" (RF-CR-05): `source.budget_year`
+ * del cache; fallback `scenarioYear − 1`; null si no computa (grupo oculto).
+ */
+const carryGroupYear = computed(() => {
+  const sourceYear = Number(carryoverState.value.source?.budget_year)
+  if (Number.isInteger(sourceYear)) return sourceYear
+  const own = Number(scenario.value?.budget_year)
+  return Number.isInteger(own) ? own - 1 : null
+})
+
+/**
+ * RF-CR-04/07: movimientos de arrastre DEL CECO del detalle — MISMO slice
+ * de `store.carryover.lines` que `buildCarryPivot`, normalizado a la forma
+ * común (`normalizeCarryoverLines`) y filtrado POR CECO. Cuadre 1:1 con la
+ * fila del pivote por CECO+origen (crudo sin gross-up).
+ */
+const carryMovements = computed(() => {
+  if (!carryoverAvailable.value) return []
+  const id = costCenterId.value
+  if (id === null) return []
+  return normalizeCarryoverLines(carryoverState.value.lines).filter(
+    (movement) => movement.id_cost_center === id
+  )
+})
+
+/**
+ * RF-CR-05/09: filtro de ORIGEN del grupo de arrastre (distintivo del
+ * grupo; los filtros del año propio quedan como hoy). PRESELECCIÓN desde
+ * `?carry={origin}` del link del pivote (RF-CR-01); 'all' = TODOS los
+ * orígenes (limpiado — AC-S21-FE-2). Solo valores legales.
+ */
+const carryOriginFilter = ref(
+  isCarryoverOrigin(String(route.query.carry ?? '')) ? String(route.query.carry) : 'all'
+)
+
+const CARRY_ORIGIN_OPTIONS = [
+  { value: 'all', label: 'Todos los orígenes' },
+  { value: 'line', label: CARRYOVER_ORIGIN_LABELS.line },
+  { value: 'cogs', label: CARRYOVER_ORIGIN_LABELS.cogs },
+  { value: 'purchase', label: CARRYOVER_ORIGIN_LABELS.purchase },
+  { value: 'internment', label: CARRYOVER_ORIGIN_LABELS.internment }
+]
+
+/** Sincronización viva del PRESET (deep-link cambiado en vuelo → 'all' si inválido). */
+watch(
+  () => route.query.carry,
+  (value) => {
+    if (isCarryoverOrigin(String(value ?? ''))) carryOriginFilter.value = String(value)
+  }
+)
+
+/** RF-CR-07/09: slice visible del arrastre — origen + mes del tab (Flujo). */
+const carryFilteredMovements = computed(() => {
+  const origin = carryOriginFilter.value
+  const month = filters.month
+  return carryMovements.value.filter((movement) => {
+    if (origin !== 'all' && movement.carryover_origin !== origin) return false
+    if (month === 'all') return true
+    const m = movementMonthOf(movement, TAB_FLOW)
+    if (month === 'none') return m === -1
+    return m === Number(month)
+  })
+})
+
+/** Σ del grupo visible (mismo `movementAmountReconciled` crudo del kind). */
+const carryFilteredTotal = computed(() => {
+  let total = 0
+  for (const movement of carryFilteredMovements.value) {
+    const amount = movementAmountReconciled(
+      movement,
+      TAB_FLOW,
+      ivaActive.value,
+      fixedIncomeByMonth.value
+    )
+    if (Number.isFinite(amount)) total += amount
+  }
+  return total
+})
 
 /**
  * Dataset POR TAB (RF-3.4 revisada): capital/desembolsos SOLO Flujo; base +
@@ -730,7 +838,7 @@ function onExportSelect(format) {
         </div>
       </div>
 
-      <template v-if="hasAnyMovement">
+      <template v-if="hasAnyMovement || (carryoverAvailable && carryMovements.length > 0)">
         <!-- ===================== Barra de filtros (RF-6.1) ===================== -->
         <div class="cd-filters" role="group" aria-label="Filtros de los movimientos del CECO">
           <label class="cd-filter">
@@ -831,6 +939,53 @@ function onExportSelect(format) {
             :tab="TAB_FLOW"
             :fixed-income-months="fixedIncomeByMonth"
           />
+
+          <!-- ═════ FE-S21-CARRYDRILL RF-CR-05: grupo "Arrastre {N−1}" ═════
+               SOLO en el tab Flujo; NO invade el pivote/tabla del año
+               propio (dataset aparte del MISMO slice del store). Con
+               slice vacío (filtro origen/mes sin resultado) muestra su
+               estado "0 resultados" — sin crash (RF-CR-07). -->
+          <section
+            v-if="carryoverAvailable && carryMovements.length > 0"
+            class="cd-carry-group"
+            aria-label="Movimientos de arrastre del CECO"
+          >
+            <header class="cd-carry-header">
+              <h4 class="cd-carry-title">
+                Arrastre de {{ carryGroupYear ?? 'año anterior' }}
+                <span class="cd-carry-count">
+                  {{ carryFilteredMovements.length }}
+                  {{ carryFilteredMovements.length === 1 ? 'movimiento' : 'movimientos' }} ·
+                  {{ formatMoneyPlain(carryFilteredTotal) }}
+                </span>
+              </h4>
+              <label class="cd-filter">
+                <span>Origen</span>
+                <select
+                  v-model="carryOriginFilter"
+                  class="cd-select"
+                  aria-label="Filtrar movimientos de arrastre por origen"
+                >
+                  <option
+                    v-for="option in CARRY_ORIGIN_OPTIONS"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+            </header>
+            <CecoMovementTable
+              v-if="carryFilteredMovements.length"
+              :lines="carryFilteredMovements"
+              :tab="TAB_FLOW"
+              :fixed-income-months="fixedIncomeByMonth"
+              :carry-year="carryGroupYear"
+              carry-mode
+            />
+            <p v-else class="cd-carry-empty" role="status">0 resultados con el filtro actual.</p>
+          </section>
         </div>
       </template>
 
@@ -1285,6 +1440,47 @@ function onExportSelect(format) {
 .cd-notice-retry:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ═══════════ FE-S21-CARRYDRILL: grupo "Arrastre {N−1}" (tab Flujo) ═══════════ */
+.cd-carry-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px dashed var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 8px;
+  background-color: var(--color-surface, #f7f7f7);
+}
+
+.cd-carry-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.cd-carry-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #070707);
+}
+
+.cd-carry-count {
+  margin-left: 8px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--color-text-muted, #8a8a8a);
+  font-variant-numeric: tabular-nums;
+}
+
+.cd-carry-empty {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #8a8a8a);
 }
 
 @media (max-width: 768px) {

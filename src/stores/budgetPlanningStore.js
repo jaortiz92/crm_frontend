@@ -5,6 +5,10 @@ import { costCenterService } from '@/services/costCenterService.js'
 import { collectionService } from '@/services/collectionService.js'
 import { useUserStore } from '@/stores/userStore.js'
 import { alertService } from '@/services/alertService.js'
+// FE-S7-INITBAL RF-FE-04: derivación del valor por arrastre con el motor
+// `cashFlowPivot` sobre los datos del escenario fuente (import AQUÍ y no en
+// las vistas: la orquestación es de la ACCIÓN, reusada editor y modal).
+import { deriveInitialBalanceFromSource } from '@/components/budget/planning/initialBalanceDerivation.js'
 import router from '@/router/index.js'
 
 /**
@@ -107,6 +111,14 @@ function writeIvaModePreference(idBudget, value) {
  */
 const SETTLEMENT_DEBOUNCE_MS = 400
 let settlementRefreshTimer = null
+
+/**
+ * ENMIENDA v1.2 (FE-S21-CARRYDRILL): promesa del GET de arrastre en vuelo (el
+ * single-flight real de `fetchCarryover`, a nivel de módulo — no es parte del
+ * estado reactivo ni se serializa). Permite al dedupe «esperar el vuelo y
+ * re-agendar para este id» cuando el GET en el aire pertenece a otro escenario.
+ */
+let carryoverInflight = null
 
 /**
  * Humaniza el `detail` de un 422 FastAPI (array `{loc, msg, type}`) a una
@@ -438,6 +450,45 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
       error: false
     },
 
+    /**
+     * FE-S7-INITBAL (frontend.03_22 §4): caché de la configuración de saldos
+     * iniciales (efectivo y bodega) del escenario abierto.
+     *
+     *  - `data`: respuesta `PlanningInitialBalanceDetail` del GET
+     *    (`cash`/`warehouse` `{mode, manual_value}`, `carryover_source`,
+     *    `unavailable_reason`). El GET es LAZY (lo dispara el editor) y su
+     *    fallo queda en `error` para banner/reintento del chip.
+     *  - `derivedCash`/`derivedWarehouse`: valor POR ARRASTRE derivado en el
+     *    FE con el motor `cashFlowPivot` sobre los datos del escenario fuente
+     *    (RF-FE-04: el BE NO deriva el valor — SA-1). `derivedSourceId`
+     *    amarra los valores a la fuente de la que salieron (descarte
+     *    defensivo si cambió el escenario fuente). El derivado NUNCA se
+     *    persiste (dinámico, BR-IB-05, igual que las líneas de FE-S6).
+     *  - La derivación deduplica en el editor (`deriveAttemptedFor`), no en
+     *    el estado (single-flight local).
+     */
+    initialBalance: {
+      /** @type {object|null} `PlanningInitialBalanceDetail` crudo */
+      data: null,
+      /** escenario al que pertenece `data` (descarte de respuestas tardías) */
+      budgetId: null,
+      loaded: false,
+      loading: false,
+      error: false,
+      /** PUT en vuelo (anti-spam del botón Guardar, patrón `carryover.saving`) */
+      saving: false,
+      /** @type {number|null} valor derivado de efectivo (cierre dic N−1 fuente) */
+      derivedCash: null,
+      /** @type {number|null} valor derivado de bodega (bodega dic N−1 fuente) */
+      derivedWarehouse: null,
+      /** @type {number|null} id del escenario fuente del que se derivó */
+      derivedSourceId: null,
+      /** derivación (motor cashFlowPivot sobre la fuente) en vuelo */
+      deriving: false,
+      /** @type {number|null} última fuente para la que se intentó derivar */
+      deriveAttemptedSourceId: null
+    },
+
     /** Flujo de capital del schedule activo; separado de toda línea P&L. */
     financingPrincipalFlow: {
       /** @type {object|null} respuesta cruda del endpoint */
@@ -589,7 +640,81 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
               row.budget_year === year && row.status === 'active' && row.id_budget !== exceptId
           ) ?? null
         )
+      },
+
+    /**
+     * FE-S7-INITBAL (RF-FE-04/05/06): valor EFECTIVO de cada saldo con el
+     * seeding resuelto para el escenario abierto. Único consumidor: el motor
+     * `cashFlowPivot` (factory `createCashFlowPivotModel`) para sembrar el
+     * acumulado de caja y `bodega[0]` de N; y la UI (chip/modal) para mostrar
+     * el "Tomará este valor".
+     *
+     * Reglas:
+     *  - Config no cargada / de otro escenario ⇒ `{cash: 0, warehouse: 0,
+     *    ready: false}` (regresión cero BR-IB-06: el flujo arranca hoy en 0).
+     *  - Modo `manual` ⇒ el manual persistido (efectivo admite negativos,
+     *    BR-IB-08).
+     *  - Modo `carryover` CON fuente y derivado listo ⇒ el valor DERIVADO
+     *    (no se persiste nunca).
+     *  - Modo `carryover` SIN fuente (`unavailable_reason === "no_source"` o
+     *    `carryover_source: null`) ⇒ degradación RF-FE-05: el valor del
+     *    manual (el editor habilita el input). VERDAD SOBRE LA FUENTE en
+     *    `hasSource`/`noSource` para el warning de la UI.
+     * @returns {{cash: number, warehouse: number, ready: boolean, hasSource: boolean, noSource: boolean, source: object|null}}
+     */
+    initialBalanceEffective: (state) => {
+      const ib = state.initialBalance
+      const data = ib.loaded && ib.budgetId === state.currentScenarioId ? ib.data : null
+      if (!data || typeof data !== 'object') {
+        return {
+          cash: 0,
+          warehouse: 0,
+          ready: false,
+          hasSource: false,
+          noSource: false,
+          source: null
+        }
       }
+      const source =
+        data.carryover_source && typeof data.carryover_source === 'object'
+          ? data.carryover_source
+          : null
+      // V1.1 (backend.02_25 SD7-10): la fuente se resuelve SIEMPRE; la única
+      // señal de indisponibilidad es `unavailable_reason === "no_source"`.
+      // (v1.0 aquí se OR-eaba con `source === null` — defecto del 126: con
+      // ambos manual + fuente existente el FE avisaba degradación falsa.)
+      const noSource = data.unavailable_reason === 'no_source'
+      const derivedCash =
+        ib.derivedSourceId === source?.id_budget && Number.isFinite(ib.derivedCash)
+          ? Number(ib.derivedCash)
+          : null
+      const derivedWarehouse =
+        ib.derivedSourceId === source?.id_budget && Number.isFinite(ib.derivedWarehouse)
+          ? Number(ib.derivedWarehouse)
+          : null
+      const manualOf = (side) => {
+        const value = Number(side?.manual_value)
+        return Number.isFinite(value) ? value : 0
+      }
+      const cashSide = data.cash ?? {}
+      const warehouseSide = data.warehouse ?? {}
+      const cash =
+        cashSide.mode === 'carryover' && source && derivedCash !== null
+          ? derivedCash
+          : manualOf(cashSide)
+      const warehouse =
+        warehouseSide.mode === 'carryover' && source && Number.isFinite(derivedWarehouse)
+          ? derivedWarehouse
+          : manualOf(warehouseSide)
+      return {
+        cash,
+        warehouse,
+        ready: true,
+        hasSource: Boolean(source),
+        noSource,
+        source
+      }
+    }
   },
 
   actions: {
@@ -791,6 +916,9 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         this.carryover.loaded = false
         this.carryover.error = false
         this.carryover.unavailableReason = null
+        // FE-S7-INITBAL: la config de saldos de OTRO escenario tampoco se
+        // asoma (el GET lo dispara el editor al abrir).
+        this.resetInitialBalanceCache()
         // FE-S14-IVA: el modo se re-hidrata POR ESCENARIO (persistente en
         // localStorage; default ON D-FE14-1) y la caché de liquidación se
         // RESETEA: la de otro escenario jamás debe asomarse (y el GET fresco
@@ -1228,6 +1356,18 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
      * ⇒ `handleAuth` estándar. Si el escenario cambió mientras el request
      * volaba, la respuesta se descarta (BR-CO-04 recalcula en la próxima
      * lectura; el flag `enabled` NO se toca aquí: es propiedad del detalle).
+     *
+     * ENMIENDA v1.2 (FE-S21-CARRYDRILL / bug "grupo Arrastre N−1 vacío en el
+     * deep-link"): el dedupe `carryover.loading` inicial era un no-op CIEGO:
+     * si el GET en vuelo pertenecía a OTRO escenario (ligera carrera
+     * editor→detalle), su respuesta acababa descartada por el guard
+     * `currentScenario?.id_budget === idBudget` y el llamador del deep-link
+     * (`CecoDetailView.load()`) dejaba la caché SIN líneas (`loaded: false`)
+     * sin re-agendar el GET propio — grupo vacío. Ahora el dedupe «ESPERA el
+     * vuelo y re-agenda para ESTE id» cuando tras el settle (`carryoverInflight`,
+     * promesa single-flight a nivel de módulo) la caché sigue sin pertenecer al
+     * escenario pedido; el vuelo propio del MISMO id conserva el no-op original
+     * (AC-S6-FE-1 intacto: una sola request por activación).
      * @param {number|string} idBudget
      * @param {boolean} [force=false]
      * @returns {Promise<{ ok: boolean, kind?: string, [key: string]: any }>}
@@ -1235,41 +1375,51 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
     async fetchCarryover(idBudget, force = false) {
       const carryover = this.carryover
       if (!force) {
-        if (carryover.loading) return { ok: true }
         if (carryover.loaded && this.currentScenario?.id_budget === idBudget) return { ok: true }
+        if (carryover.loading && carryoverInflight) {
+          await carryoverInflight.catch(() => {})
+          if (carryover.loaded && this.currentScenario?.id_budget === idBudget) return { ok: true }
+          // El vuelo era de OTRO escenario (respuesta descartada): el flujo
+          // propio continúa abajo y emite el GET para ESTE id.
+        }
       }
       carryover.loading = true
-      try {
-        const response = await budgetPlanningService.fetchCarryover(idBudget)
-        if (this.currentScenario?.id_budget === idBudget) {
-          const data = response?.data ?? null
-          if (data && typeof data === 'object') {
-            carryover.source = data.source && typeof data.source === 'object' ? data.source : null
-            carryover.lines = Array.isArray(data.lines) ? data.lines : []
-            carryover.unavailableReason = data.unavailable_reason ?? null
-          } else {
+      const unit = (async () => {
+        try {
+          const response = await budgetPlanningService.fetchCarryover(idBudget)
+          if (this.currentScenario?.id_budget === idBudget) {
+            const data = response?.data ?? null
+            if (data && typeof data === 'object') {
+              carryover.source = data.source && typeof data.source === 'object' ? data.source : null
+              carryover.lines = Array.isArray(data.lines) ? data.lines : []
+              carryover.unavailableReason = data.unavailable_reason ?? null
+            } else {
+              carryover.source = null
+              carryover.lines = []
+              carryover.unavailableReason = null
+            }
+            carryover.error = false
+            carryover.loaded = true
+          }
+          return { ok: true }
+        } catch (err) {
+          const classified = classifyPlanningError(err)
+          this.handleAuth(classified)
+          if (classified.kind !== 'auth' && classified.kind !== 'notfound') {
+            carryover.error = true
+            carryover.loaded = false
             carryover.source = null
             carryover.lines = []
             carryover.unavailableReason = null
           }
-          carryover.error = false
-          carryover.loaded = true
+          return { ok: false, ...classified }
+        } finally {
+          carryover.loading = false
+          carryoverInflight = null
         }
-        return { ok: true }
-      } catch (err) {
-        const classified = classifyPlanningError(err)
-        this.handleAuth(classified)
-        if (classified.kind !== 'auth' && classified.kind !== 'notfound') {
-          carryover.error = true
-          carryover.loaded = false
-          carryover.source = null
-          carryover.lines = []
-          carryover.unavailableReason = null
-        }
-        return { ok: false, ...classified }
-      } finally {
-        carryover.loading = false
-      }
+      })()
+      carryoverInflight = unit
+      return unit
     },
 
     /**
@@ -1334,6 +1484,183 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
       } finally {
         this.carryover.saving = false
       }
+    },
+
+    /* ──────── Saldos iniciales configurables (FE-S7-INITBAL) ──────── */
+
+    /** Limpia la caché de saldos iniciales al cambiar de escenario. */
+    resetInitialBalanceCache() {
+      this.initialBalance.data = null
+      this.initialBalance.budgetId = null
+      this.initialBalance.loaded = false
+      this.initialBalance.loading = false
+      this.initialBalance.error = false
+      this.initialBalance.saving = false
+      this.initialBalance.derivedCash = null
+      this.initialBalance.derivedWarehouse = null
+      this.initialBalance.derivedSourceId = null
+      this.initialBalance.deriving = false
+      this.initialBalance.deriveAttemptedSourceId = null
+    },
+
+    /**
+     * Valor ARRIBADO por arrastre (RF-FE-04) anclado a la fuente. Lo llama
+     * `initialBalanceDerivation.js` tras correr el motor `cashFlowPivot`
+     * sobre los datos del escenario fuente (N−1). El valor NO se persiste
+     * (BR-IB-05: dinámico — si N−1 cambia, la próxima derivación lo refleja).
+     * @param {number} sourceId `id_budget` del escenario fuente
+     * @param {{ cash: number, warehouse: number }} derived
+     * @returns {void}
+     */
+    setInitialBalanceDerived(sourceId, { cash, warehouse }) {
+      const derivedCash = Number(cash)
+      const derivedWarehouse = Number(warehouse)
+      this.initialBalance.derivedSourceId = Number(sourceId)
+      this.initialBalance.derivedCash = Number.isFinite(derivedCash) ? derivedCash : null
+      this.initialBalance.derivedWarehouse = Number.isFinite(derivedWarehouse)
+        ? derivedWarehouse
+        : null
+    },
+
+    /**
+     * GET `/budget/planning/{id}/initial-balance` (FE-S7-INITBAL §3 /
+     * backend.02_25 §5.2). Patrón `fetchCarryover`: no-op cacheado salvo
+     * `force`, dedupe en vuelo, respuesta tardía descartada si cambió el
+     * escenario. Fallo SILENCIOSO para la vista (jamás toast): el chip muestra
+     * `error` y el flujo sigue con 0 — degradación RF-FE-05. Al cargar con
+     * fuente y modo `carryover`, la derivación LA DISPARA el editor
+     * (`initialBalanceDerivation.js`), no aquí (misma separación que el
+     * fetch de líneas del arrastre).
+     * @param {number|string} idBudget
+     * @param {boolean} [force=false]
+     * @returns {Promise<{ ok: boolean, kind?: string, [key: string]: any }>}
+     */
+    async fetchInitialBalance(idBudget, force = false) {
+      const ib = this.initialBalance
+      if (!force) {
+        if (ib.loading) return { ok: true }
+        if (ib.loaded && ib.budgetId === Number(idBudget)) return { ok: true }
+      }
+      ib.loading = true
+      try {
+        const response = await budgetPlanningService.getInitialBalance(idBudget)
+        if (this.currentScenario?.id_budget === Number(idBudget)) {
+          const data = response?.data ?? null
+          ib.data = data && typeof data === 'object' ? data : null
+          ib.budgetId = data ? Number(idBudget) : null
+          ib.loaded = true
+          ib.error = false
+        }
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyPlanningError(err)
+        this.handleAuth(classified)
+        if (classified.kind !== 'auth') {
+          ib.error = true
+          ib.loaded = false
+          ib.data = null
+          ib.budgetId = Number(idBudget)
+        }
+        return { ok: false, ...classified }
+      } finally {
+        ib.loading = false
+      }
+    },
+
+    /**
+     * PUT `/budget/planning/{id}/initial-balance` (FE-S7-INITBAL / BE-S7
+     * BR-IB-03). Guard `saving` (spam del Guardar ⇒ UN solo PUT). 200 = el
+     * DETALLE COMPLETO (patrón `setCarryoverFlag`): fusión idéntica al éxito
+     * de `fetchScenarioDetail` + refetch FORZADO del GET de config (la fuente
+     * pudo resolver distinto); el flujo/bodega re-seeden por reactividad del
+     * getter `initialBalanceEffective` (_RF-FE-03: refetch re-seed_; las
+     * líneas no cambian, no hay request de datos nuevo). 404 ⇒ resync del
+     * detalle (patrón FE-S6); 422 ⇒ `validation` con `message` textual para
+     * el inline del modal.
+     * @param {number|string} idBudget
+     * @param {Object} payload `{ cash: {mode, manual_value}, warehouse: {...} }`
+     * @returns {Promise<{ ok: boolean, kind?: string, message?: string }>}
+     */
+    async saveInitialBalance(idBudget, payload) {
+      if (this.initialBalance.saving) return { ok: false, kind: 'busy' }
+      this.initialBalance.saving = true
+      try {
+        const response = await budgetPlanningService.setInitialBalance(idBudget, payload)
+        const data = response?.data ?? null
+        if (data && typeof data === 'object') {
+          this.currentScenario = data
+          this.currentScenarioId = Number(idBudget)
+        }
+        await this.fetchInitialBalance(idBudget, true)
+        return { ok: true }
+      } catch (err) {
+        const classified = classifyPlanningError(err)
+        this.handleAuth(classified)
+        if (classified.kind === 'notfound') {
+          await this.reloadScenarioDetail()
+        }
+        return { ok: false, ...classified }
+      } finally {
+        this.initialBalance.saving = false
+      }
+    },
+
+    /**
+     * Derivación de saldos por arrastre (RF-FE-04, v1.1). Orquestación ÚNICA
+     * reusada por `BudgetGridEditor` (carga/abre) y `InitialBalanceModal`
+     * (cambio de radio a `carryover` — SD7-FE-1: la disponibilidad derivada
+     * debe ser FRESCA al ofrecer "Continuar con el presupuesto meta").
+     *
+     * Con la config cargada y ALGÚN modo en `carryover` CON fuente
+     * (`unavailable_reason !== "no_source"`, SD7-10: la fuente ya viaja
+     * resuelta aunque ambos modos sean manual), corre el motor
+     * `cashFlowPivot` sobre los datos de la fuente (`deriveInitialBalanceFromSource`)
+     * y publica los valores en `derivedCash`/`derivedWarehouse`; el Flujo y
+     * los previews re-seedean por reactividad. El derivado NUNCA se persiste
+     * (BR-IB-05). Sin fuente ⇒ no-op (la degradación/manual manda — RF-FE-05;
+     * no se gasta ninguna consulta de derivación). Single-flight e intento
+     * ÚNICO por id de fuente (`deriving`/`deriveAttemptedSourceId`); ids
+     * distintos (fuente cambió) re-derivan.
+     * @returns {Promise<{ ok: boolean }>}
+     */
+    async ensureInitialBalanceDerived() {
+      const ib = this.initialBalance
+      const data = ib.loaded ? ib.data : null
+      if (!data) return { ok: false }
+      const anyCarry = data.cash?.mode === 'carryover' || data.warehouse?.mode === 'carryover'
+      const source = data.carryover_source
+      if (!anyCarry || !source || data.unavailable_reason === 'no_source') {
+        return { ok: false }
+      }
+      const sourceId = Number(source.id_budget)
+      if (ib.deriving) return { ok: false }
+      const alreadyDerived =
+        ib.derivedSourceId === sourceId &&
+        (Number.isFinite(ib.derivedCash) || Number.isFinite(ib.derivedWarehouse))
+      if (alreadyDerived || ib.deriveAttemptedSourceId === sourceId) return { ok: false }
+      ib.deriveAttemptedSourceId = sourceId
+      ib.deriving = true
+      try {
+        const derived = await deriveInitialBalanceFromSource(this, source)
+        if (derived) this.setInitialBalanceDerived(sourceId, derived)
+        return { ok: Boolean(derived) }
+      } finally {
+        ib.deriving = false
+      }
+    },
+
+    /**
+     * Refresco de disponibilidad + derivación al cambiar un radio a
+     * `carryover` dentro del modal (SD7-FE-1/1b): GET FORZADO (fuentes
+     * resueltas frescas — v1.1) y derivación inmediata si hay fuente; el
+     * preview "Tomará este valor" recobra su valor reactivo. Fallos ⇒ no-op
+     * (la degradación manual seguirá vigente).
+     * @param {number|string} idBudget
+     * @returns {Promise<void>}
+     */
+    async refreshInitialBalanceAvailability(idBudget) {
+      await this.fetchInitialBalance(idBudget, true)
+      await this.ensureInitialBalanceDerived()
     },
 
     /* ─────────────── Resultados tributarios del escenario ─────────────── */

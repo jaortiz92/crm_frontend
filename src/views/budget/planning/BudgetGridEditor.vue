@@ -67,6 +67,7 @@ import CashFlowPivotTable from '@/components/budget/planning/CashFlowPivotTable.
 import BudgetLineGrid from '@/components/budget/planning/BudgetLineGrid.vue'
 import IvaSettlementPanel from '@/components/budget/planning/IvaSettlementPanel.vue'
 import SetTargetConfirmModal from '@/components/budget/planning/SetTargetConfirmModal.vue'
+import InitialBalanceModal from '@/components/budget/planning/InitialBalanceModal.vue'
 import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 import { useUserStore } from '@/stores/userStore.js'
 import { canSetBudgetTarget } from '@/router/index.js'
@@ -224,12 +225,52 @@ const carryHintText = computed(() => {
  * (con PUT en vuelo bloqueado por `saving`). Cualquier fallo no-auth (404
  * re-sincronizado por el store incluido) muestra el toast literal §5; el
  * `:checked` del input vuelve al estado del store en el re-render.
+ *
+ * SD7-FE-3 (mejora aprobada B, enmienda v1.1): ACTIVAR el arrastre de líneas
+ * SINCRONIZA los saldos iniciales si éstos nunca fueron configurados
+ * (ambos modos `manual` con `manual_value` 0) — se auto-guardan como
+ * `carryover` vía el PUT existente (`saveInitialBalance`) + toast literal.
+ * Config expresa (manual no-cero o carryover) ⇒ NUNCA se toca; DESACTIVAR
+ * el pill no toca los saldos (solo se acopla al activar, RF-FE-08/09).
  */
 async function onCarryoverToggle(event) {
   const next = event.target.checked
   const result = await budgetPlanningStore.setCarryoverFlag(scenario.value.id_budget, next)
   if (!result.ok && result.kind !== 'auth') {
     await alertService.generalError('No se pudo guardar. Reintenta.')
+    return
+  }
+  if (next) await syncInitialBalancesWithCarryover()
+}
+
+/**
+ * SD7-FE-3: detector "nunca configurado" = GET FRESCO (la config del store
+ * pudo cargar antes de que la fuente se resolviera — v1.1: el GET siempre
+ * resuelve la fuente) + ambos `mode: "manual"` con `manual_value === 0`.
+ * @returns {Promise<boolean>}
+ */
+async function initialBalancesNeverConfigured() {
+  if (!scenario.value) return false
+  await budgetPlanningStore.fetchInitialBalance(idBudget.value, true)
+  const data = budgetPlanningStore.initialBalance.loaded
+    ? budgetPlanningStore.initialBalance.data
+    : null
+  if (!data) return false
+  const zeroManual = (side) => side?.mode === 'manual' && Number(side?.manual_value ?? 0) === 0
+  return zeroManual(data.cash) === true && zeroManual(data.warehouse) === true
+}
+
+/** SD7-FE-3: auto-carryover de ambos saldos cuando el pill se enciende con manual/0. */
+async function syncInitialBalancesWithCarryover() {
+  if (!(await initialBalancesNeverConfigured())) return
+  const result = await budgetPlanningStore.saveInitialBalance(idBudget.value, {
+    cash: { mode: 'carryover', manual_value: 0 },
+    warehouse: { mode: 'carryover', manual_value: 0 }
+  })
+  if (result.ok) {
+    await alertService.generalSucces(
+      'Saldos iniciales sincronizados con el presupuesto meta del año anterior.'
+    )
   }
 }
 
@@ -256,6 +297,92 @@ watch(
     }
   }
 )
+
+/* ─────────── Saldos iniciales configurables (FE-S7-INITBAL §5, RF-FE-03..08) ─────────── */
+
+/** Modal de configuración abierto/cerrado. */
+const initialBalanceOpen = ref(false)
+
+/** Config vigente + valor efectivo de la caché del store (única fuente). */
+const initialBalanceState = computed(() => budgetPlanningStore.initialBalance)
+
+/** Literal RF-FE-05 (fire-once por escenario: el flujo sigue operable). */
+const NO_SOURCE_WARNING =
+  'Sin presupuesto meta del año anterior con saldo calculable. Registre el saldo manualmente.'
+let warnedNoSourceForScenario = null
+
+/**
+ * RF-FE-04 (v1.1): la derivación vive en la ACCIÓN del store
+ * (`ensureInitialBalanceDerived` — single-flight, un intento por fuente id),
+ * reusada también por `InitialBalanceModal` al cambiar el radio (SD7-FE-1).
+ * Desde el editor solo se DISPARA: carga del detalle y cada llegada de config
+ * fresca. El aviso RF-FE-05 (warning real) es UI del editor: fire-once por
+ * escenario cuando el GET v1.1 dice `no_source` con algún modo `carryover`
+ * (el modal también lo pinta inline; aquí no se gasta derivación).
+ */
+function ensureInitialBalanceDerivation() {
+  void budgetPlanningStore.ensureInitialBalanceDerived()
+}
+
+/** Fire-once del warning real RF-FE-05 (solo `unavailable_reason`). */
+function warnOnceOnNoSource() {
+  const data = budgetPlanningStore.initialBalance.loaded
+    ? budgetPlanningStore.initialBalance.data
+    : null
+  if (!data) return
+  if (data.unavailable_reason !== 'no_source') return
+  if (!(data.cash?.mode === 'carryover' || data.warehouse?.mode === 'carryover')) return
+  if (warnedNoSourceForScenario === idBudget.value) return
+  warnedNoSourceForScenario = idBudget.value
+  void alertService.generalWarning('Saldo inicial', NO_SOURCE_WARNING)
+}
+
+/**
+ * Precarga FE-S7-INITBAL en el load() del editor (GET config + derivación
+ * si aplica). `_hydrate` operable aunque falle (degradación RF-FE-05).
+ */
+async function loadInitialBalanceSection() {
+  await budgetPlanningStore.fetchInitialBalance(idBudget.value)
+  ensureInitialBalanceDerivation()
+  warnOnceOnNoSource()
+}
+
+/**
+ * RF-FE-08: reaccionar a cambios del escenario abierto — F5 requiere re-fetch
+ * y el PUT del arrastre NO toca esta caché (ortogonal). Si la fuente cambió
+ * mientras volaba, la derivación se re-hace con el GET fresco (ids distintos
+ * re-derivan dentro de la acción).
+ */
+watch(
+  () => budgetPlanningStore.currentScenario?.id_budget,
+  () => {
+    warnedNoSourceForScenario = null
+  }
+)
+
+watch(
+  initialBalanceState,
+  () => {
+    ensureInitialBalanceDerivation()
+    warnOnceOnNoSource()
+  },
+  { deep: true }
+)
+
+/** Texto del chip "Saldo inicial" (§5: indicadores `(manual)` / `(N-1)`). */
+const initialBalanceChipText = computed(() => {
+  const data = initialBalanceState.value.loaded ? initialBalanceState.value.data : null
+  if (!data) return 'Saldo inicial'
+  const tag = (side) => (side?.mode === 'carryover' && data.carryover_source ? 'N−1' : 'manual')
+  return `Saldo inicial (efectivo: ${tag(data.cash)} · bodega: ${tag(data.warehouse)})`
+})
+
+/** Tono del chip: warning si algún saldo `carryover` quedó sin fuente. */
+const initialBalanceChipWarning = computed(() => {
+  const data = initialBalanceState.value.loaded ? initialBalanceState.value.data : null
+  if (!data || data.unavailable_reason !== 'no_source') return false
+  return data.cash?.mode === 'carryover' || data.warehouse?.mode === 'carryover'
+})
 
 /* ============ BE-S11 enmienda (Opcion A): banner de nómina sin proyectar ============
  * Al abrir un escenario ACTIVO se consulta materialization-status (solo
@@ -447,6 +574,9 @@ async function load(force = false) {
     // Resultados tributarios: resumen (P&G) + flujo de pagos (Vista Flujo).
     // Ambos bloques leen esta caché única; no se replican fórmulas tributarias.
     void budgetPlanningStore.fetchTaxData(idBudget.value)
+    // FE-S7-INITBAL: GET de saldos iniciales (precarga del chip/modal) +
+    // derivación carryover si aplica (RF-FE-03/04).
+    void loadInitialBalanceSection()
     void checkPayrollStatus()
     void loadPayrollSimulation()
     void loadFinancingSimulation()
@@ -749,6 +879,19 @@ function backToPlanning() {
               {{ carryHintText }}
             </p>
           </div>
+          <!-- FE-S7-INITBAL RF-FE-03: chip "Saldo inicial" JUNTO al pill de
+               arrastre (RF-FE-08: coexisten sin interferencia). Indicadores
+               §5: `(manual)` / `(N-1)`, tono warning con `no_source`. -->
+          <button
+            type="button"
+            class="ge-ib-chip"
+            :class="{ 'is-warning': initialBalanceChipWarning }"
+            title="Configurar el saldo inicial de efectivo y bodega de este escenario"
+            @click="initialBalanceOpen = true"
+          >
+            <span class="ge-ib-icon" aria-hidden="true">💵</span>
+            <span>{{ initialBalanceChipText }}</span>
+          </button>
           <button
             type="button"
             class="btn btn-secondary btn-sm ge-taxes-action"
@@ -1013,6 +1156,14 @@ function backToPlanning() {
       :demoted-name="demotedName"
       @done="onTargetDone"
       @close="targetOpen = false"
+    />
+
+    <!-- FE-S7-INITBAL RF-FE-03: modal de configuración de saldos iniciales
+         (GET precargada en store, PUT al guardar, toast + re-seed reactive). -->
+    <InitialBalanceModal
+      :open="initialBalanceOpen"
+      :id-budget="idBudget"
+      @close="initialBalanceOpen = false"
     />
   </div>
 </template>
@@ -1578,5 +1729,34 @@ function backToPlanning() {
 .ge-payroll-action:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* FE-S7-INITBAL: chip "Saldo inicial" en la cabecera (junto al pill de
+   arrastre, RF-FE-08). Tono warning cuando hay `no_source` con modo
+   `carryover` (RF-FE-05). */
+.ge-ib-chip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 999px;
+  background: var(--color-surface, #f7f7f7);
+  color: var(--color-text-secondary, #444444);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ge-ib-chip:hover {
+  border-color: var(--color-brand, #03658c);
+  color: var(--color-brand, #03658c);
+}
+.ge-ib-chip.is-warning {
+  border-color: rgba(180, 83, 9, 0.4);
+  background: rgba(180, 83, 9, 0.08);
+  color: #b45309;
+}
+.ge-ib-icon {
+  font-size: 12px;
 }
 </style>

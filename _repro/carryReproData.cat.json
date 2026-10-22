@@ -1,0 +1,502 @@
+﻿[
+    {
+        "cost_center_code":  "000001",
+        "cost_center_name":  "Facturacion Kyly",
+        "id_zone":  100,
+        "id_area":  8,
+        "id_line":  1,
+        "is_active":  true,
+        "description":  "Facturacion Kyly",
+        "id_cost_center":  185
+    },
+    {
+        "cost_center_code":  "000002",
+        "cost_center_name":  "Facturacion Tinta",
+        "id_zone":  100,
+        "id_area":  8,
+        "id_line":  2,
+        "is_active":  true,
+        "description":  "Facturacion Tinta",
+        "id_cost_center":  186
+    },
+    {
+        "cost_center_code":  "000003",
+        "cost_center_name":  "Facturacion Pampili",
+        "id_zone":  100,
+        "id_area":  8,
+        "id_line":  4,
+        "is_active":  true,
+        "description":  "Facturacion Pampili",
+        "id_cost_center":  187
+    },
+    {
+        "cost_center_code":  "000004",
+        "cost_center_name":  "Facturacion Perssam",
+        "id_zone":  100,
+        "id_area":  8,
+        "id_line":  5,
+        "is_active":  true,
+        "description":  "Facturacion Perssam",
+        "id_cost_center":  188
+    },
+    {
+        "cost_center_code":  "000006",
+        "cost_center_name":  "Facturacion Texpa",
+        "id_zone":  100,
+        "id_area":  8,
+        "id_line":  7,
+        "is_active":  true,
+        "description":  "Facturacion Texpa",
+        "id_cost_center":  189
+    },
+    {
+        "cost_center_code":  "000007",
+        "cost_center_name":  "Facturacion Lunelli",
+        "id_zone":  100,
+        "id_area":  8,
+        "id_line":  6,
+        "is_active":  true,
+        "description":  "Facturacion Lunelli",
+        "id_cost_center":  190
+    },
+    {
+        "cost_center_code":  "000100",
+        "cost_center_name":  "Facturacion Costa (Zona 1) ",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Facturacion Costa (Zona 1) ",
+        "id_cost_center":  150
+    },
+    {
+        "cost_center_code":  "000101",
+        "cost_center_name":  "Facturacion Costa (Zona 1) Kyly",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  1,
+        "is_active":  true,
+        "description":  "Facturacion Costa (Zona 1) Kyly",
+        "id_cost_center":  151
+    },
+    {
+        "cost_center_code":  "000102",
+        "cost_center_name":  "Facturacion Costa (Zona 1) Tinta",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  2,
+        "is_active":  true,
+        "description":  "Facturacion Costa (Zona 1) Tinta",
+        "id_cost_center":  152
+    },
+    {
+        "cost_center_code":  "000103",
+        "cost_center_name":  "Facturacion Costa (Zona 1) Pampili",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  4,
+        "is_active":  true,
+        "description":  "Facturacion Costa (Zona 1) Pampili",
+        "id_cost_center":  153
+    },
+    {
+        "cost_center_code":  "000104",
+        "cost_center_name":  "Facturacion Costa (Zona 1) Perssam",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  5,
+        "is_active":  true,
+        "description":  "Facturacion Costa (Zona 1) Perssam",
+        "id_cost_center":  154
+    },
+    {
+        "cost_center_code":  "000106",
+        "cost_center_name":  "Facturacion Costa (Zona 1) Texpa",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Facturacion Costa (Zona 1) Texpa",
+        "id_cost_center":  155
+    },
+    {
+        "cost_center_code":  "000107",
+        "cost_center_name":  "Facturacion Costa (Zona 1) Lunelli",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  6,
+        "is_active":  true,
+        "description":  "Facturacion Costa (Zona 1) Lunelli",
+        "id_cost_center":  156
+    },
+    {
+        "cost_center_code":  "000200",
+        "cost_center_name":  "Facturacion Antioquia ( Zona 2) ",
+        "id_zone":  2,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Facturacion Antioquia ( Zona 2) ",
+        "id_cost_center":  157
+    },
+    {
+        "cost_center_code":  "000201",
+        "cost_center_name":  "Facturacion Antioquia ( Zona 2) Kyly",
+        "id_zone":  2,
+        "id_area":  8,
+        "id_line":  1,
+        "is_active":  true,
+        "description":  "Facturacion Antioquia ( Zona 2) Kyly",
+        "id_cost_center":  158
+    },
+    {
+        "cost_center_code":  "000202",
+        "cost_center_name":  "Facturacion Antioquia ( Zona 2) Tinta",
+        "id_zone":  2,
+        "id_area":  8,
+        "id_line":  2,
+        "is_active":  true,
+        "description":  "Facturacion Antioquia ( Zona 2) Tinta",
+        "id_cost_center":  159
+    },
+    {
+        "cost_center_code":  "000203",
+        "cost_center_name":  "Facturacion Antioquia ( Zona 2) Pampili",
+        "id_zone":  2,
+        "id_area":  8,
+        "id_line":  4,
+        "is_active":  true,
+        "description":  "Facturacion Antioquia ( Zona 2) Pampili",
+        "id_cost_center":  160
+    },
+    {
+        "cost_center_code":  "000204",
+        "cost_center_name":  "Facturacion Antioquia ( Zona 2) Perssam",
+        "id_zone":  2,
+        "id_area":  8,
+        "id_line":  5,
+        "is_active":  true,
+        "description":  "Facturacion Antioquia ( Zona 2) Perssam",
+        "id_cost_center":  161
+    },
+    {
+        "cost_center_code":  "000206",
+        "cost_center_name":  "Facturacion Antioquia ( Zona 2) Texpa",
+        "id_zone":  2,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Facturacion Antioquia ( Zona 2) Texpa",
+        "id_cost_center":  162
+    },
+    {
+        "cost_center_code":  "000207",
+        "cost_center_name":  "Facturacion Antioquia ( Zona 2) Lunelli",
+        "id_zone":  2,
+        "id_area":  8,
+        "id_line":  6,
+        "is_active":  true,
+        "description":  "Facturacion Antioquia ( Zona 2) Lunelli",
+        "id_cost_center":  163
+    },
+    {
+        "cost_center_code":  "000300",
+        "cost_center_name":  "Facturacion Tolima-Amazonas (Zona 3) ",
+        "id_zone":  3,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Facturacion Tolima-Amazonas (Zona 3) ",
+        "id_cost_center":  164
+    },
+    {
+        "cost_center_code":  "000301",
+        "cost_center_name":  "Facturacion Tolima-Amazonas (Zona 3) Kyly",
+        "id_zone":  3,
+        "id_area":  8,
+        "id_line":  1,
+        "is_active":  true,
+        "description":  "Facturacion Tolima-Amazonas (Zona 3) Kyly",
+        "id_cost_center":  165
+    },
+    {
+        "cost_center_code":  "000302",
+        "cost_center_name":  "Facturacion Tolima-Amazonas (Zona 3) Tinta",
+        "id_zone":  3,
+        "id_area":  8,
+        "id_line":  2,
+        "is_active":  true,
+        "description":  "Facturacion Tolima-Amazonas (Zona 3) Tinta",
+        "id_cost_center":  166
+    },
+    {
+        "cost_center_code":  "000303",
+        "cost_center_name":  "Facturacion Tolima-Amazonas (Zona 3) Pampili",
+        "id_zone":  3,
+        "id_area":  8,
+        "id_line":  4,
+        "is_active":  true,
+        "description":  "Facturacion Tolima-Amazonas (Zona 3) Pampili",
+        "id_cost_center":  167
+    },
+    {
+        "cost_center_code":  "000304",
+        "cost_center_name":  "Facturacion Tolima-Amazonas (Zona 3) Perssam",
+        "id_zone":  3,
+        "id_area":  8,
+        "id_line":  5,
+        "is_active":  true,
+        "description":  "Facturacion Tolima-Amazonas (Zona 3) Perssam",
+        "id_cost_center":  168
+    },
+    {
+        "cost_center_code":  "000306",
+        "cost_center_name":  "Facturacion Tolima-Amazonas (Zona 3) Texpa",
+        "id_zone":  3,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Facturacion Tolima-Amazonas (Zona 3) Texpa",
+        "id_cost_center":  169
+    },
+    {
+        "cost_center_code":  "000307",
+        "cost_center_name":  "Facturacion Tolima-Amazonas (Zona 3) Lunelli",
+        "id_zone":  3,
+        "id_area":  8,
+        "id_line":  6,
+        "is_active":  true,
+        "description":  "Facturacion Tolima-Amazonas (Zona 3) Lunelli",
+        "id_cost_center":  170
+    },
+    {
+        "cost_center_code":  "000400",
+        "cost_center_name":  "Facturacion Centro-Llanos (Zona 4) ",
+        "id_zone":  4,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Facturacion Centro-Llanos (Zona 4) ",
+        "id_cost_center":  171
+    },
+    {
+        "cost_center_code":  "000401",
+        "cost_center_name":  "Facturacion Centro-Llanos (Zona 4) Kyly",
+        "id_zone":  4,
+        "id_area":  8,
+        "id_line":  1,
+        "is_active":  true,
+        "description":  "Facturacion Centro-Llanos (Zona 4) Kyly",
+        "id_cost_center":  172
+    },
+    {
+        "cost_center_code":  "000402",
+        "cost_center_name":  "Facturacion Centro-Llanos (Zona 4) Tinta",
+        "id_zone":  4,
+        "id_area":  8,
+        "id_line":  2,
+        "is_active":  true,
+        "description":  "Facturacion Centro-Llanos (Zona 4) Tinta",
+        "id_cost_center":  173
+    },
+    {
+        "cost_center_code":  "000403",
+        "cost_center_name":  "Facturacion Centro-Llanos (Zona 4) Pampili",
+        "id_zone":  4,
+        "id_area":  8,
+        "id_line":  4,
+        "is_active":  true,
+        "description":  "Facturacion Centro-Llanos (Zona 4) Pampili",
+        "id_cost_center":  174
+    },
+    {
+        "cost_center_code":  "000404",
+        "cost_center_name":  "Facturacion Centro-Llanos (Zona 4) Perssam",
+        "id_zone":  4,
+        "id_area":  8,
+        "id_line":  5,
+        "is_active":  true,
+        "description":  "Facturacion Centro-Llanos (Zona 4) Perssam",
+        "id_cost_center":  175
+    },
+    {
+        "cost_center_code":  "000406",
+        "cost_center_name":  "Facturacion Centro-Llanos (Zona 4) Texpa",
+        "id_zone":  4,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Facturacion Centro-Llanos (Zona 4) Texpa",
+        "id_cost_center":  176
+    },
+    {
+        "cost_center_code":  "000407",
+        "cost_center_name":  "Facturacion Centro-Llanos (Zona 4) Lunelli",
+        "id_zone":  4,
+        "id_area":  8,
+        "id_line":  6,
+        "is_active":  true,
+        "description":  "Facturacion Centro-Llanos (Zona 4) Lunelli",
+        "id_cost_center":  177
+    },
+    {
+        "cost_center_code":  "000500",
+        "cost_center_name":  "Facturacion Santanderes ( Zona 5) ",
+        "id_zone":  5,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Facturacion Santanderes ( Zona 5) ",
+        "id_cost_center":  178
+    },
+    {
+        "cost_center_code":  "000501",
+        "cost_center_name":  "Facturacion Santanderes ( Zona 5) Kyly",
+        "id_zone":  5,
+        "id_area":  8,
+        "id_line":  1,
+        "is_active":  true,
+        "description":  "Facturacion Santanderes ( Zona 5) Kyly",
+        "id_cost_center":  179
+    },
+    {
+        "cost_center_code":  "000502",
+        "cost_center_name":  "Facturacion Santanderes ( Zona 5) Tinta",
+        "id_zone":  5,
+        "id_area":  8,
+        "id_line":  2,
+        "is_active":  true,
+        "description":  "Facturacion Santanderes ( Zona 5) Tinta",
+        "id_cost_center":  180
+    },
+    {
+        "cost_center_code":  "000503",
+        "cost_center_name":  "Facturacion Santanderes ( Zona 5) Pampili",
+        "id_zone":  5,
+        "id_area":  8,
+        "id_line":  4,
+        "is_active":  true,
+        "description":  "Facturacion Santanderes ( Zona 5) Pampili",
+        "id_cost_center":  181
+    },
+    {
+        "cost_center_code":  "000504",
+        "cost_center_name":  "Facturacion Santanderes ( Zona 5) Perssam",
+        "id_zone":  5,
+        "id_area":  8,
+        "id_line":  5,
+        "is_active":  true,
+        "description":  "Facturacion Santanderes ( Zona 5) Perssam",
+        "id_cost_center":  182
+    },
+    {
+        "cost_center_code":  "000506",
+        "cost_center_name":  "Facturacion Santanderes ( Zona 5) Texpa",
+        "id_zone":  5,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Facturacion Santanderes ( Zona 5) Texpa",
+        "id_cost_center":  183
+    },
+    {
+        "cost_center_code":  "000507",
+        "cost_center_name":  "Facturacion Santanderes ( Zona 5) Lunelli",
+        "id_zone":  5,
+        "id_area":  8,
+        "id_line":  6,
+        "is_active":  true,
+        "description":  "Facturacion Santanderes ( Zona 5) Lunelli",
+        "id_cost_center":  184
+    },
+    {
+        "cost_center_code":  "100000",
+        "cost_center_name":  "Ecommerce",
+        "id_zone":  100,
+        "id_area":  1,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Ecommerce",
+        "id_cost_center":  1
+    },
+    {
+        "cost_center_code":  "200000",
+        "cost_center_name":  "Comercial y Mercadeo",
+        "id_zone":  100,
+        "id_area":  2,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Comercial y Mercadeo",
+        "id_cost_center":  2
+    },
+    {
+        "cost_center_code":  "210101",
+        "cost_center_name":  "Comisiones Costa (Z1) KYLY",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  1,
+        "is_active":  true,
+        "description":  "Comisiones Costa (Z1) KYLY",
+        "id_cost_center":  8
+    },
+    {
+        "cost_center_code":  "210102",
+        "cost_center_name":  "Comisiones Costa (Z1) TINTA",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  2,
+        "is_active":  true,
+        "description":  "Comisiones Costa (Z1) TINTA",
+        "id_cost_center":  9
+    },
+    {
+        "cost_center_code":  "210103",
+        "cost_center_name":  "Comisiones Costa (Z1) PAMPILI",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  4,
+        "is_active":  true,
+        "description":  "Comisiones Costa (Z1) PAMPILI",
+        "id_cost_center":  10
+    },
+    {
+        "cost_center_code":  "210104",
+        "cost_center_name":  "Comisiones Costa (Z1) GIVEC",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  3,
+        "is_active":  true,
+        "description":  "Comisiones Costa (Z1) GIVEC",
+        "id_cost_center":  11
+    },
+    {
+        "cost_center_code":  "210105",
+        "cost_center_name":  "Comisiones Costa (Z1) PERSSAÂ´M",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  5,
+        "is_active":  true,
+        "description":  "Comisiones Costa (Z1) PERSSAÂ´M",
+        "id_cost_center":  39
+    },
+    {
+        "cost_center_code":  "210106",
+        "cost_center_name":  "Comisiones Costa (Z1) TEXPA - LINZZI",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  100,
+        "is_active":  true,
+        "description":  "Comisiones Costa (Z1) TEXPA - LINZZI",
+        "id_cost_center":  45
+    },
+    {
+        "cost_center_code":  "210107",
+        "cost_center_name":  "Comisiones Costa (Z1) LUNELLI - LEZALEZ",
+        "id_zone":  1,
+        "id_area":  8,
+        "id_line":  6,
+        "is_active":  true,
+        "description":  "Comisiones Costa (Z1) LUNELLI - LEZALEZ",
+        "id_cost_center":  51
+    }
+]

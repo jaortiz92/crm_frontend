@@ -165,6 +165,16 @@ export const budgetPlanningService = {
    * @param {File|null} [fields.fileGastos=null] - .xlsx opcional.
    * @param {File|null} [fields.fileCompras=null] - .xlsx opcional (FE-S9 §2.8:
    *   hoja "Importaciones"; SOLO se anexa `file_compras` si llega un File).
+   * @param {{ mode: string, manual_value: number }} [fields.initialCash=null]
+   *   FE-S7-INITBAL: saldo inicial de efectivo. Con `{ mode, manual_value }`
+   *   válido viaja como `initial_cash_mode` + `initial_cash_manual`
+   *   (STRINGS — el multipart no tiene números, `backend.02_25` §5.3 los
+   *   declara `Optional[str]`); vacío/omitido ⇒ default del BE `manual`/0.
+   * @param {{ mode: string, manual_value: number }} [fields.initialWarehouse=null]
+   *   Saldo inicial de bodega → `initial_warehouse_mode` +
+   *   `initial_warehouse_manual`; idéntico convenio. Efectivo acepta
+   *   negativos; bodega exige >= 0 (el modal lo bloquea antes,
+   *   backend.02_25 BR-IB-08).
    * @returns {Promise<import('axios').AxiosResponse<PlanningUploadResult>>}
    */
   uploadScenario({
@@ -174,7 +184,9 @@ export const budgetPlanningService = {
     idDepartment = null,
     fileIngresos,
     fileGastos = null,
-    fileCompras = null
+    fileCompras = null,
+    initialCash = null,
+    initialWarehouse = null
   }) {
     const formData = new FormData()
     formData.append('scenario_name', String(scenarioName).trim())
@@ -192,7 +204,72 @@ export const budgetPlanningService = {
     if (fileCompras instanceof File) {
       formData.append('file_compras', fileCompras)
     }
+    // FE-S7-INITBAL (RF-FE-02): los 4 multipart de saldos iniciales. Se
+    // anexan SIEMPRE que la sección los definió (strGolden: el BE espera
+    // strings y valida `Literal["carryover","manual"]`); sin sección ⇒ no
+    // viajan y el BE aplica manual/0 (regresión cero BR-IB-02). El valor
+    // manual viaja TAMBIÉN en modo `carryover` (BR-IB-01: es la base de la
+    // degradación sin fuente).
+    if (initialCash && initialCash.mode) {
+      formData.append('initial_cash_mode', String(initialCash.mode))
+      formData.append(
+        'initial_cash_manual',
+        String(
+          Number.isFinite(Number(initialCash.manual_value)) ? Number(initialCash.manual_value) : 0
+        )
+      )
+    }
+    if (initialWarehouse && initialWarehouse.mode) {
+      formData.append('initial_warehouse_mode', String(initialWarehouse.mode))
+      formData.append(
+        'initial_warehouse_manual',
+        String(
+          Number.isFinite(Number(initialWarehouse.manual_value))
+            ? Number(initialWarehouse.manual_value)
+            : 0
+        )
+      )
+    }
     return axiosInstance.post('/budget/planning/upload', formData, MULTIPART_CONFIG)
+  },
+
+  /**
+   * FE-S7-INITBAL (`backend.02_25` §5.1): consulta la configuración de
+   * saldos iniciales del escenario + la resolución de su fuente.
+   * `GET /budget/planning/{idBudget}/initial-balance` →
+   * `PlanningInitialBalanceDetail` `{ cash: {mode, manual_value},
+   * warehouse: {mode, manual_value}, carryover_source|null,
+   * unavailable_reason: "no_source"|null }`. El BE NO deriva el valor por
+   * arrastre (SA-1): esa derivación vive en el FE (motor `cashFlowPivot`).
+   * Ruta unitaria ⇒ SIN slash final. 404 si el escenario no existe.
+   * @param {number|string} idBudget
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  getInitialBalance(idBudget) {
+    return axiosInstance.get(`/budget/planning/${idBudget}/initial-balance`)
+  },
+
+  /**
+   * FE-S7-INITBAL (`backend.02_25` §5.1): persiste la configuración de
+   * saldos iniciales. `PUT /budget/planning/{idBudget}/initial-balance`
+   * con body `PlanningInitialBalanceSet` (snake_case exacto; los DOS saldos
+   * siempre viajan juntos — BR-IB-03): `{ cash: {mode, manual_value},
+   * warehouse: {mode, manual_value} }`. 200 = el DETALLE COMPLETO
+   * (`PlanningDetail`, patrón igual al PUT de `/carryover`) ya actualizado —
+   * el store lo fusiona con la caché con la MISMA asignación de
+   * `fetchScenarioDetail`. Bodega `manual_value < 0` y modos inválidos ⇒
+   * 422 (valida el FE temprano en cliente y suelta el mensaje textual del BE).
+   * @param {number|string} idBudget
+   * @param {Object} payload
+   * @param {{ mode: string, manual_value: number }} payload.cash
+   * @param {{ mode: string, manual_value: number }} payload.warehouse
+   * @returns {Promise<import('axios').AxiosResponse<object>>}
+   */
+  setInitialBalance(idBudget, { cash, warehouse }) {
+    return axiosInstance.put(`/budget/planning/${idBudget}/initial-balance`, {
+      cash: { mode: String(cash.mode), manual_value: Number(cash.manual_value) },
+      warehouse: { mode: String(warehouse.mode), manual_value: Number(warehouse.manual_value) }
+    })
   },
 
   /**

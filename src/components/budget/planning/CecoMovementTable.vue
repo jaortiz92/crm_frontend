@@ -39,6 +39,7 @@ import {
   monthIndexOf
 } from './planningFormat.js'
 import {
+  CARRYOVER_ORIGIN_LABELS,
   SOURCE_KIND_LABELS,
   SOURCE_KINDS,
   isReconciledVariableMovement,
@@ -60,7 +61,14 @@ const props = defineProps({
    * RECONCILIADO de la línea variable de gasto (cuadre 1:1 con la matriz,
    * AC-16). Sin serie ⇒ esas líneas aportan 0 (igual que la matriz).
    */
-  fixedIncomeMonths: { type: Array, required: true }
+  fixedIncomeMonths: { type: Array, required: true },
+  /**
+   * FE-S21-CARRYDRILL (RF-CR-05/06): año fuente del grupo de arrastre
+   * (`Arrastre {N−1}`) para el meta del chip de origen.
+   */
+  carryYear: { type: Number, default: null },
+  /** true ⇒ instancia dedicada al grupo de arrastre (hoy solo cambia meta abrevia). */
+  carryMode: { type: Boolean, default: false }
 })
 
 const budgetPlanningStore = useBudgetPlanningStore()
@@ -83,21 +91,55 @@ const ORIGIN_CHIP_CLASS_BY_KIND = {
   payroll: 'cmt-chip-origin-payroll',
   financing: 'cmt-chip-origin-financing',
   principal: 'cmt-chip-origin-principal',
-  disbursement: 'cmt-chip-origin-disbursement'
+  disbursement: 'cmt-chip-origin-disbursement',
+  // FE-S21 (RF-CR-05): badge propio del grupo de arrastre.
+  carryover: 'cmt-chip-origin-carryover'
 }
 
-/** Etiqueta legible del ORIGEN del movimiento (RF-8.4); fallback base. */
+/** Etiqueta legible del ORIGEN del movimiento (RF-8.4); fallback base.
+ *  FE-S21: en arrastre el badge es el ORIGEN específico del payload
+ *  (Línea de presupuesto / Costo de venta / Pago a proveedor / Internación). */
 function originLabel(line) {
+  if (line?.source_kind === SOURCE_KINDS.CARRYOVER) {
+    return CARRYOVER_ORIGIN_LABELS[line?.carryover_origin] ?? 'Arrastre'
+  }
   return SOURCE_KIND_LABELS[line?.source_kind ?? SOURCE_KINDS.BASE] ?? 'Presupuesto'
 }
 
 /** Tooltip del chip de origen (motor/no materializado + simulación). */
 function originTitle(line) {
+  if (line?.source_kind === SOURCE_KINDS.CARRYOVER) {
+    return (
+      `Arrastre del año ${props.carryYear ?? 'anterior'} · ${originLabel(line)} — ` +
+      'cuota del presupuesto meta del año anterior, no es línea de este escenario.'
+    )
+  }
   const kind = line?.source_kind ?? SOURCE_KINDS.BASE
   const engine = line?.source_engine ? ` (motor: ${line.source_engine})` : ''
   const simulated = line?.is_simulated ? ' · what-if (no materializado)' : ''
   const limit = kind === 'principal' || kind === 'disbursement' ? ' · solo caja, nunca P&G' : ''
   return `${SOURCE_KIND_LABELS[kind] ?? kind}${engine}${simulated}${limit}`
+}
+
+/* ─── FE-S21 RF-CR-06: fecha de pago EFECTIVA con fallback del anclaje ─── */
+
+/**
+ * Fecha de pago PRESENTADA de una fila (B-S15 v1.1: `payment_date` es null
+ * SOLO en filas materializadas `origin:"line"` sin fecha propia): el drill
+ * muestra entonces el ANCLAJE `budget_date` con nota "sin término de pago"
+ * (el pivote de origen la posiciona ahí por su fallback `cfMonth` — mismo
+ * cuadre). Filas derivadas NUNCA llegan null (cuota 100 % al anclaje).
+ * @param {object} line
+ * @returns {{ text: string, fallback: boolean }}
+ */
+function paymentDateCell(line) {
+  if (line?.source_kind === SOURCE_KINDS.CARRYOVER && !line?.payment_date) {
+    return { text: line?.budget_date ? monthLabelOf(line.budget_date) : '—', fallback: true }
+  }
+  return {
+    text: line?.payment_date ? monthLabelOf(line.payment_date) : '—',
+    fallback: false
+  }
 }
 
 /* ─── columnas y ordenamiento (RF-5.3; espejo del patrón sort del grid) ─── */
@@ -280,13 +322,26 @@ function monthLabelOf(value) {
             <span class="cmt-desc-main" :title="line.description || ''">{{
               line.description || '—'
             }}</span>
-            <span v-if="movementMetaText(line)" class="cmt-desc-meta">{{
-              movementMetaText(line)
-            }}</span>
+            <span
+              v-if="movementMetaText(line, { carryYear: props.carryYear })"
+              class="cmt-desc-meta"
+            >
+              {{ movementMetaText(line, { carryYear: props.carryYear }) }}
+            </span>
           </td>
           <td class="cmt-cell-date">{{ monthLabelOf(line.budget_date) }}</td>
-          <td class="cmt-cell-date">
-            {{ line.payment_date ? monthLabelOf(line.payment_date) : '—' }}
+          <td
+            class="cmt-cell-date"
+            :title="
+              paymentDateCell(line).fallback
+                ? 'Anclaje sin término de pago: se estima en el mes de causación'
+                : undefined
+            "
+          >
+            {{ paymentDateCell(line).text }}
+            <span v-if="paymentDateCell(line).fallback" class="cmt-desc-meta cmt-payment-fallback">
+              sin término de pago
+            </span>
           </td>
           <td class="cmt-cell-money" :title="moneyTitle(line)">{{ moneyText(line) }}</td>
         </tr>
@@ -473,6 +528,24 @@ function monthLabelOf(value) {
 
 :root[data-theme='dark'] .cmt-chip-origin-payroll {
   color: #7bd89a;
+}
+
+/* FE-S21 (RF-CR-05): badge de ARRastre — ámbar tenue, "viene del año
+   anterior"; distinto de toda la paleta del año propio. */
+.cmt-chip-origin-carryover {
+  border-color: rgba(180, 83, 9, 0.35);
+  background-color: rgba(180, 83, 9, 0.08);
+  color: #b45309;
+}
+
+:root[data-theme='dark'] .cmt-chip-origin-carryover {
+  color: #e0a45c;
+}
+
+/* FE-S21 RF-CR-06: nota bajo la fecha de pago con fallback al anclaje. */
+.cmt-payment-fallback {
+  display: block;
+  font-size: 0.66rem;
 }
 
 /* Financiación what-if (intereses/seguros): rojo suave (es expense). */

@@ -67,6 +67,39 @@ const form = reactive({
   department: ''
 })
 
+/**
+ * FE-S7-INITBAL (RF-FE-01, SD7-FE-2 mejorA APROBADA — enmienda v1.1): la
+ * sección "Saldos iniciales" arranca por DEFECTO en "Continuar con el
+ * presupuesto meta del año anterior" (`carryover`) para AMBOS saldos; el
+ * input manual queda deshabilitado salvo que el usuario elija manual. La
+ * degradación al manual no es bloqueo: si el año N−1 no tiene fuente, el
+ * usuario podrá ingresarlo manualmente después (desde el editor — RF-FE-05).
+ * Nota visible bajo los radios (literal aprobado).
+ */
+const CARRYOVER_NOTE =
+  'Tomará el saldo de cierre (enero Diciembre) del presupuesto meta del año anterior; si no existe, podrá ingresarlo manualmente después.'
+
+const initialBalances = reactive({
+  cash: { mode: 'carryover', manual: '0' },
+  warehouse: { mode: 'carryover', manual: '0' }
+})
+
+/** RF-FE-07: bodega >= 0 (mirror del BE); efectivo admite negativos. */
+const warehouseManualError = computed(() => {
+  if (initialBalances.warehouse.mode !== 'manual') return ''
+  const value = Number(initialBalances.warehouse.manual)
+  if (!Number.isFinite(value)) return 'Ingrese un valor numérico válido para la bodega.'
+  if (value < 0) return 'El saldo inicial de bodega no puede ser negativo.'
+  return ''
+})
+
+const cashManualError = computed(() => {
+  if (initialBalances.cash.mode !== 'manual') return ''
+  return Number.isFinite(Number(initialBalances.cash.manual))
+    ? ''
+    : 'Ingrese un valor numérico válido para el efectivo.'
+})
+
 const nameError = ref('')
 const filesError = ref('')
 /** @type {null | {kind: string, message?: string, missing_cost_centers?: string[], found_years?: number[]}} */
@@ -170,6 +203,11 @@ function resetForm() {
   form.name = ''
   form.period = 'ANUAL'
   form.department = ''
+  // FE-S7-INITBAL SD7-FE-2 (v1.1): defaults CARRYOVER al reabrir (mejora A).
+  initialBalances.cash.mode = 'carryover'
+  initialBalances.cash.manual = '0'
+  initialBalances.warehouse.mode = 'carryover'
+  initialBalances.warehouse.manual = '0'
   nameError.value = ''
   filesError.value = ''
   serverError.value = null
@@ -190,6 +228,16 @@ async function handleUpload() {
     filesError.value = 'El archivo de Ingresos es obligatorio (Gastos es opcional).'
     return
   }
+  // FE-S7-INITBAL RF-FE-07: espejo del 422 del BE — bodega < 0 bloquea
+  // el submit con error inline; efectivo negativo es válido (BR-IB-08).
+  if (warehouseManualError.value) {
+    serverError.value = { kind: 'validation', message: warehouseManualError.value }
+    return
+  }
+  if (cashManualError.value) {
+    serverError.value = { kind: 'validation', message: cashManualError.value }
+    return
+  }
   if (busy.value) return
 
   const result = await budgetPlanningStore.uploadScenario({
@@ -200,7 +248,17 @@ async function handleUpload() {
     fileIngresos: files.ingresos,
     fileGastos: files.gastos instanceof File ? files.gastos : null,
     // FE-S9 §2.8: el store/servicio anexan `file_compras` SOLO si es File.
-    fileCompras: files.compras instanceof File ? files.compras : null
+    fileCompras: files.compras instanceof File ? files.compras : null,
+    // FE-S7-INITBAL RF-FE-02: los 4 multipart (AC-S7-FE-1). El manual viaja
+    // incluso con modo carryover (BR-IB-01), normalizado numérico backend.
+    initialCash: {
+      mode: initialBalances.cash.mode,
+      manual_value: Number(initialBalances.cash.manual)
+    },
+    initialWarehouse: {
+      mode: initialBalances.warehouse.mode,
+      manual_value: Number(initialBalances.warehouse.manual)
+    }
   })
 
   if (result.ok) {
@@ -372,6 +430,84 @@ onBeforeUnmount(() => {
               </option>
             </select>
           </div>
+        </div>
+
+        <!-- ====================== Saldos iniciales (FE-S7-INITBAL) ====================== -->
+        <p class="bi-zone-note">
+          {{ CARRYOVER_NOTE }}
+        </p>
+        <div class="bi-balances">
+          <fieldset class="bi-balance-block">
+            <legend class="bi-balance-title">Saldo inicial de efectivo</legend>
+            <label class="bi-radio">
+              <input
+                v-model="initialBalances.cash.mode"
+                type="radio"
+                name="ib-cash-mode"
+                value="carryover"
+                :disabled="busy"
+              />
+              <span>Continuar con el presupuesto meta del año anterior</span>
+            </label>
+            <label class="bi-radio">
+              <input
+                v-model="initialBalances.cash.mode"
+                type="radio"
+                name="ib-cash-mode"
+                value="manual"
+                :disabled="busy"
+              />
+              <span>Agregar manualmente</span>
+            </label>
+            <input
+              v-model="initialBalances.cash.manual"
+              class="bi-input bi-manual-input"
+              :class="{ 'is-invalid': attempted && cashManualError }"
+              type="number"
+              step="any"
+              aria-label="Valor manual del saldo inicial de efectivo"
+              :disabled="busy || initialBalances.cash.mode !== 'manual'"
+            />
+          </fieldset>
+
+          <fieldset class="bi-balance-block">
+            <legend class="bi-balance-title">Saldo inicial de bodega</legend>
+            <label class="bi-radio">
+              <input
+                v-model="initialBalances.warehouse.mode"
+                type="radio"
+                name="ib-warehouse-mode"
+                value="carryover"
+                :disabled="busy"
+              />
+              <span>Continuar con el presupuesto meta del año anterior</span>
+            </label>
+            <label class="bi-radio">
+              <input
+                v-model="initialBalances.warehouse.mode"
+                type="radio"
+                name="ib-warehouse-mode"
+                value="manual"
+                :disabled="busy"
+              />
+              <span>Agregar manualmente</span>
+            </label>
+            <template v-if="initialBalances.warehouse.mode === 'manual' || attempted">
+              <input
+                v-model="initialBalances.warehouse.manual"
+                class="bi-input bi-manual-input"
+                :class="{ 'is-invalid': attempted && warehouseManualError }"
+                type="number"
+                step="any"
+                aria-label="Valor manual del saldo inicial de bodega"
+                :disabled="busy || initialBalances.warehouse.mode !== 'manual'"
+              />
+              <p v-if="warehouseManualError" class="bi-field-error" aria-live="polite">
+                {{ warehouseManualError }}
+              </p>
+            </template>
+            <p class="bi-zone-note">El saldo inicial de bodega no puede ser negativo.</p>
+          </fieldset>
         </div>
 
         <!-- ========================= Drop-zones SIIGO ========================= -->
@@ -638,6 +774,45 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 14px;
+}
+
+/* FE-S7-INITBAL: sección "Saldos iniciales" (RF-FE-01), estilo igual a los
+   controles del modal; vive después del bloque "Presupuesto Base" (los
+   campos) y antes de los archivos Excel. */
+.bi-balances {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.bi-balance-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 8px;
+}
+
+.bi-balance-title {
+  padding: 0 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary, #555555);
+}
+
+.bi-radio {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.82rem;
+}
+
+.bi-manual-input {
+  max-width: 240px;
 }
 
 .bi-zone {

@@ -101,6 +101,10 @@ export function movementAmount(line, tab, ivaActive) {
   // IVA — monto CRUDO SIEMPRE (espejo de los pivotes homónimos de
   // `CashFlowPivotTable`, que acumulan el raw del payload).
   if (line.source_kind === 'principal' || line.source_kind === 'disbursement') return net
+  // FE-S21 (RF-CR-07): el bloque de arrastre del Flujo acumula el
+  // `projected_amount` CRUDO del payload (`buildCarryPivot`); el drilldown
+  // muestra LA MISMA cifra — sin gross-up ni transformación.
+  if (line.source_kind === SOURCE_KINDS.CARRYOVER) return net
   if (tab !== TAB_FLOW) return net
   if (!ivaActive) return net
   if (line.line_type === 'purchase') return net
@@ -296,7 +300,9 @@ export const SOURCE_KINDS = {
   PAYROLL: 'payroll',
   FINANCING: 'financing',
   PRINCIPAL: 'principal',
-  DISBURSEMENT: 'disbursement'
+  DISBURSEMENT: 'disbursement',
+  /** FE-S21-CARRYDRILL (RF-CR-08): líneas de arrastre N−1 (`store.carryover.lines`). */
+  CARRYOVER: 'carryover'
 }
 
 /** Etiqueta legible del ORIGEN (columna "Origen" de la tabla, RF-8.4). */
@@ -305,7 +311,9 @@ export const SOURCE_KIND_LABELS = {
   payroll: 'Nómina',
   financing: 'Financiación',
   principal: 'Capital',
-  disbursement: 'Desembolso'
+  disbursement: 'Desembolso',
+  /** FE-S21: chips por origen de arrastre — vocabulario RF-CR-05. */
+  carryover: 'Arrastre'
 }
 
 /** Claves de GRUPO del pivote (RF-8.4): Presupuesto (Ingresos/Gastos/Compras) + Nómina + Financiación + Capital + Desembolsos. */
@@ -316,7 +324,9 @@ export const GROUP_KEYS = {
   payroll: 'nomina',
   financing: 'financiacion',
   principal: 'capital',
-  disbursement: 'desembolsos'
+  disbursement: 'desembolsos',
+  /** FE-S21-CARRYDRILL (RF-CR-05/08): grupo "Arrastre {N−1}" del tab Flujo. */
+  carryover: 'arrastre'
 }
 
 /** Orden normativo de filas del pivote de detalle (RF-8.4). */
@@ -327,7 +337,10 @@ export const GROUP_ROW_ORDER = [
   GROUP_KEYS.payroll,
   GROUP_KEYS.financing,
   GROUP_KEYS.principal,
-  GROUP_KEYS.disbursement
+  GROUP_KEYS.disbursement,
+  // FE-S21: el grupo de arrastre viva SOLO en el tab Flujo (RF-CR-05); al
+  // final para no invadir la lectura de los grupos del año propio.
+  GROUP_KEYS.carryover
 ]
 
 /** Etiqueta legible de cada grupo de fila del pivote (vocabulario del editor). */
@@ -338,7 +351,8 @@ export const MOVEMENT_GROUP_LABELS = {
   [GROUP_KEYS.payroll]: 'Nómina',
   [GROUP_KEYS.financing]: 'Financiación (intereses y seguros)',
   [GROUP_KEYS.principal]: 'Capital de financiación',
-  [GROUP_KEYS.disbursement]: 'Desembolso de financiación'
+  [GROUP_KEYS.disbursement]: 'Desembolso de financiación',
+  [GROUP_KEYS.carryover]: 'Arrastre del año anterior'
 }
 
 /** Opciones del filtro "Tipo de línea" extendidas a origen/tipo (RF-8.7). */
@@ -350,8 +364,26 @@ export const MOVEMENT_GROUP_FILTERS = [
   { value: GROUP_KEYS.payroll, label: 'Nómina' },
   { value: GROUP_KEYS.financing, label: 'Financiación' },
   { value: GROUP_KEYS.principal, label: 'Capital de financiación' },
-  { value: GROUP_KEYS.disbursement, label: 'Desembolsos' }
+  { value: GROUP_KEYS.disbursement, label: 'Desembolsos' },
+  { value: GROUP_KEYS.carryover, label: 'Arrastre N−1' }
 ]
+
+/**
+ * FE-S21 (RF-CR-05): etiquetas del BADGE de origen de las filas de arrastre
+ * (el `origin` del payload `PlanningCarryoverLine` del BE-S15 v1.1: line ∨
+ * cogs/purchase/internment derivadas — siempre expense).
+ */
+export const CARRYOVER_ORIGIN_LABELS = {
+  line: 'Línea de presupuesto',
+  cogs: 'Costo de venta',
+  purchase: 'Pago a proveedor',
+  internment: 'Internación'
+}
+
+/** ¿Valor legal de `route.query.carry` / `carryover_origin`? (RF-CR-05/09). */
+export function isCarryoverOrigin(value) {
+  return typeof value === 'string' && value in CARRYOVER_ORIGIN_LABELS
+}
 
 /**
  * Clave de GRUPO de un movimiento de la forma común (RF-8.4). Los base son
@@ -366,6 +398,8 @@ export function movementGroupOf(movement) {
   if (movement.source_kind === SOURCE_KINDS.FINANCING) return GROUP_KEYS.financing
   if (movement.source_kind === SOURCE_KINDS.PRINCIPAL) return GROUP_KEYS.principal
   if (movement.source_kind === SOURCE_KINDS.DISBURSEMENT) return GROUP_KEYS.disbursement
+  // FE-S21 (RF-CR-05/08): las líneas del arrastre forman SU propio grupo.
+  if (movement.source_kind === SOURCE_KINDS.CARRYOVER) return GROUP_KEYS.carryover
   // Base (implícito: materializadas del motor incluidas — RF-8.2) por tipo.
   if (movement.line_type === 'income') return GROUP_KEYS.baseIncome
   if (movement.line_type === 'expense') return GROUP_KEYS.baseExpense
@@ -503,6 +537,50 @@ export function normalizePrincipalFlowLines(flowLines, kind) {
 }
 
 /**
+ * FE-S21-CARRYDRILL (RF-CR-08): normalizador de las líneas de ARRASTRE
+ * (`store.carryover.lines`, payload `PlanningCarryoverLine` del BE-S15 v1.1)
+ * a la forma común de movimientos. ESPEJO de `buildCarryPivot`
+ * (`cashFlowPivot.js` §6.1) para que el detalle cuadre 1:1 con la fila del
+ * pivote por CECO+origen (RF-CR-07):
+ *  - `source_kind: 'carryover'` + `carryover_origin` original preservado.
+ *  - `projected_amount` RAW (el pivote de arrastre NO aplica gross-up — su
+ *    monto es el crudo del payload).
+ *  - `id_budget_line` presente SOLO en filas `line`; null en derivadas
+ *    (backend.02_26 §2.1, v1.1).
+ *  - `budget_date`: fecha propia en material, ANCLAJE de la fuente en
+ *    derivadas; `payment_date`: siempre fecha en derivadas con términos; en
+ *    material puede ser null (fallback al anclaje — BE v1.1).
+ *  - sin claves de P&L sintética (`has_iva: true`? NO — crudo: el IVA no se
+ *    toca aquí, `movementAmount` devuelve el crudo para este kind).
+ * La ordenación es LA DEL PAYLOAD (fecha efectiva ASC + rank origen + id
+ * null-safe — backend.02_26 §2.1): aqui se conserva el índice estable.
+ * @param {Array<object>|null|undefined} carryLines
+ * @returns {Array<object>}
+ */
+export function normalizeCarryoverLines(carryLines) {
+  if (!Array.isArray(carryLines)) return []
+  return carryLines.map((line, index) => ({
+    id_budget_line: line?.id_budget_line ?? null,
+    id_cost_center: line?.id_cost_center,
+    id_collection: null,
+    line_type: line?.line_type ?? 'expense',
+    behavior_type: null,
+    budget_date: line?.budget_date ?? null,
+    payment_date: line?.payment_date ?? null,
+    projected_amount: Number(line?.projected_amount),
+    has_iva: false,
+    description: line?.description ?? '',
+    cost_component_code: null,
+    variable_rate: null,
+    origin: line?.origin ?? 'line',
+    is_simulated: false,
+    source_kind: SOURCE_KINDS.CARRYOVER,
+    carryover_origin: line?.origin ?? 'line',
+    movementKey: `carry-${line?.origin ?? 'line'}-${index}`
+  }))
+}
+
+/**
  * Mes (0–11) de POSICIONAMIENTO de un movimiento según su origen y el tab
  * (RF-8.5 — la regla del cuadre con los pivotes de origen):
  *  - base ⇒ Causado `budget_date` estricto / Flujo `payment_date` estricto
@@ -524,12 +602,21 @@ export function movementMonthOf(movement, tab) {
   if (kind === SOURCE_KINDS.PRINCIPAL || kind === SOURCE_KINDS.DISBURSEMENT) {
     return monthIndexOf(movement?.payment_date)
   }
+  // FE-S21 (RF-CR-07): espejo EXACTO de `buildCarryPivot` — posicionamiento
+  // por fecha EFECTIVA con fallback `payment_date || budget_date`. SOLO
+  // tiene uso en el tab Flujo (`movementsForTab` lo excluye de Causado).
+  if (kind === SOURCE_KINDS.CARRYOVER) {
+    return monthIndexOf(movement?.payment_date || movement?.budget_date)
+  }
   return tab === TAB_CAUSED ? causedMonthOf(movement) : flowMonthOf(movement)
 }
 
 /**
  * Dataset POR TAB (RF-8.2/RF-3.4): capital/desembolsos SOLO viven en el tab
  * Flujo (caja; jamás P&L); todo lo demás entra a ambos tabs.
+ * FE-S21 (RF-CR-05): el arrastre N−1 es caja igualmente — SOLO el tab Flujo
+ * (el bloque "Saldos de {N−1}" del pivote de origen es de la Vista Flujo y
+ * los meses de Causado del año propio jamás lo incluyen, RF-FE-6 regresión).
  * @param {Array<object>} movements forma común
  * @param {string} tab `TAB_CAUSED` | `TAB_FLOW`
  * @returns {Array<object>}
@@ -539,7 +626,12 @@ export function movementsForTab(movements, tab) {
   if (tab === TAB_FLOW) return [...list]
   return list.filter((movement) => {
     const kind = movement?.source_kind ?? SOURCE_KINDS.BASE
-    return kind !== SOURCE_KINDS.PRINCIPAL && kind !== SOURCE_KINDS.DISBURSEMENT
+    return (
+      kind !== SOURCE_KINDS.PRINCIPAL &&
+      kind !== SOURCE_KINDS.DISBURSEMENT &&
+      // FE-S21: jamás en Causado (caja del año propio intacta — AC-S21-FE-6).
+      kind !== SOURCE_KINDS.CARRYOVER
+    )
   })
 }
 
@@ -547,12 +639,23 @@ export function movementsForTab(movements, tab) {
  * Meta legible de un movimiento de MOTOR para la fila de la tabla
  * (nómina: colaborador · componente; financiación/capital/desembolsos:
  * cuota y crédito). `''` para los base.
+ * FE-S21 (Tarea 1 del spec `frontend.03_23`): los de ARRASTRE llevan el
+ * meta "origen · Arrastre {N−1}" (segunda línea, la descripción propia del
+ * payload ya vive en la primera).
  * @param {object|null|undefined} movement
+ * @param {{ carryYear?: number|string|null }} [context] año fuente del
+ *   arrastre (`source.budget_year` o `scenarioYear − 1`); ignorado fuera
+ *   del kind carryover (parámetro ADITIVO: llamantes viejos intactos).
  * @returns {string}
  */
-export function movementMetaText(movement) {
+export function movementMetaText(movement, { carryYear = null } = {}) {
   if (!movement) return ''
   const kind = movement.source_kind
+  if (kind === SOURCE_KINDS.CARRYOVER) {
+    const originLabel = CARRYOVER_ORIGIN_LABELS[movement.carryover_origin] ?? 'Arrastre'
+    const year = carryYear === null || carryYear === undefined ? 'anterior' : carryYear
+    return `${originLabel} · Arrastre ${year}`
+  }
   if (kind === SOURCE_KINDS.PAYROLL) {
     const parts = [movement.collaborator_name, movement.cost_component_code].filter(Boolean)
     return parts.join(' · ')

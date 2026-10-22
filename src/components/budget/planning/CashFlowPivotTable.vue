@@ -235,6 +235,25 @@ function cecoLink(rowId) {
   }
 }
 
+/**
+ * FE-S21-CARRYDRILL (RF-CR-01/05, AC-S21-FE-1): destino de una FILA DE
+ * ARRASTRE del bloque "Saldos de {N−1}" cuyo CECO resuelve en el catálogo
+ * (`cecoLink` mismo patrón, RF-1) — el año propio ya viaja en `?tab=flow`
+ * (RF-8.10) y `?carry={origin}` PRESELECCIONA el filtro de origen del grupo
+ * "Arrastre {N−1}" del detalle. La naturalWeight del query es el `origin`
+ * del payload (`line|cogs|purchase|internment`), no `1`.
+ * @param {{ id: number|string, origin: string }} row fila de `buildCarryPivot`
+ * @returns {{ to: object, code: string }|null}
+ */
+function carryLink(row) {
+  const base = cecoLink(row.id)
+  if (!base) return null
+  return {
+    ...base,
+    to: { ...base.to, query: { tab: 'flow', carry: row.origin } }
+  }
+}
+
 /* ═══════ FE-S20 (spec `frontend.03_20` §7.2): modelo compartido de cómputo ═══════
  * Lines, ivaMode, pivotes de todos los bloques, derivaciones de pago al
  * proveedor/internación, liquidación IVA, impuestos tributarios, arrastre
@@ -728,6 +747,23 @@ const carryTitlesByOrigin = computed(() => ({
   internment: carryInternmentRowTitle.value
 }))
 
+/**
+ * SD7-FE-4 (bugfix tooltip ceco): el `title` de la CÉLULA DE RÓTULO de las
+ * tablas de arrastre mostraba SOLO la nota de origen ("Cobro arrastrado de
+ * N−1…" / "⌁ Costo…"), y el nombre completo del ceco no se veía — el `row.label`
+ * (resuelto por `costCenterLabel` contra el catálogo A5 del store en
+ * `buildCarryPivot`) estaba en el contenido pero NO en el tooltip. Fix: el
+ * tooltip ahora encabeza SIEMPRE con el nombre completo del ceco y conserva
+ * la nota de origen detrás (idéntico al tooltip de los bloques propios, que
+ * usa `row.label` a secas). No inventa lookups usa el `label` ya resuelto.
+ * @param {{ label: string, origin: string }} row
+ * @returns {string}
+ */
+function carryRowLabelTitle(row) {
+  const originNote = carryTitlesByOrigin.value[row.origin] ?? ''
+  return originNote ? `${row.label} — ${originNote}` : row.label
+}
+
 /* ------------------- Fuera de año: control global (FE-S6 §6.2) ------------------- */
 
 /**
@@ -801,9 +837,12 @@ function blockGeneralColumn(block) {
 /** ¿Algún mes negativo? ⇒ nota literal bajo la tabla del resumen (§2.6). */
 const bodegaNegative = computed(() => bodegaMes.value.some((value) => value < 0))
 
-/** `totalTitle` literal §2.6 (cabecera de la fila en el Resumen). */
+/** `totalTitle` literal §2.6 (cabecera de la fila en el Resumen).
+ *  FE-S7-INITBAL: el mes 0 de bodega arranca en el saldo inicial configurado
+ *  (0 cuando no hay configuración — regresión cero). */
 const BODEGA_TOTAL_TITLE =
-  'Σ compras − Σ costo de ventas causado, acumulado mes a mes (arranca en 0 en enero). ' +
+  'Σ compras − Σ costo de ventas causado, acumulado mes a mes (arranca en el saldo ' +
+  'inicial de bodega configurado, 0 si no hay). ' +
   'Estimación: el costo de lo vendido se valúa a cogs_pct; no es efectivo y no suma al neto.'
 
 /** Nota literal §2.6 (solo si algún mes de bodega < 0). */
@@ -1325,28 +1364,49 @@ const carryBlockNote = computed(() => {
             :aria-label="carryTable.aria"
           >
             <tr v-for="row in carryTable.pivot.rows" :key="row.key">
-              <th
-                class="pt-row-label pt-row-muted"
-                scope="row"
-                :title="carryTitlesByOrigin[row.origin]"
-              >
+              <th class="pt-row-label pt-row-muted" scope="row" :title="carryRowLabelTitle(row)">
                 <!-- FE-S7 §5: la fila MATERIAL se pinta byte-idéntica a
                      FE-S6 (`← label`); la cuota derivada `origin:"cogs"`
                      gana el prefijo "⌁ Costo {N−1}" y su tooltip propio.
                      FE-S9 §2.7: la cuota `origin:"purchase"` (BE-S8)
                      gana "⌁ Compra {N−1}" + tooltip de compra.
                      FE-S10 §2.6: la cuota `origin:"internment"` (BE-S9)
-                     gana "⌁ Internación {N−1}" + tooltip propio. -->
-                <template v-if="row.origin === 'cogs'"
-                  >⌁ Costo {{ carryCogsYear }} · {{ row.label }}</template
+                     gana "⌁ Internación {N−1}" + tooltip propio.
+                     FE-S21 RF-CR-01..03: CECO resoluble ⇒ el rótulo ENTREO
+                     es <RouterLink> a BudgetCecoDetail con
+                     `?tab=flow&carry={origin}` (mismo patrón de los links
+                     del año, tono muted); no resoluble ⇒ texto plano.
+                     El `title` de la celda mantiene "nombre CECO — nota
+                     origen" intacto (AC-S21-FE-7). -->
+                <RouterLink
+                  v-if="carryLink(row)"
+                  class="cf-ceco-link cf-ceco-link-carry"
+                  :to="carryLink(row).to"
+                  :aria-label="`Ver detalle de movimientos de arrastre de CECO ${carryLink(row).code}`"
                 >
-                <template v-else-if="row.origin === 'purchase'"
-                  >⌁ Compra {{ carryCogsYear }} · {{ row.label }}</template
-                >
-                <template v-else-if="row.origin === 'internment'"
-                  >⌁ Internación {{ carryCogsYear }} · {{ row.label }}</template
-                >
-                <template v-else>← {{ row.label }}</template>
+                  <template v-if="row.origin === 'cogs'"
+                    >⌁ Costo {{ carryCogsYear }} · {{ row.label }}</template
+                  >
+                  <template v-else-if="row.origin === 'purchase'"
+                    >⌁ Compra {{ carryCogsYear }} · {{ row.label }}</template
+                  >
+                  <template v-else-if="row.origin === 'internment'"
+                    >⌁ Internación {{ carryCogsYear }} · {{ row.label }}</template
+                  >
+                  <template v-else>← {{ row.label }}</template>
+                </RouterLink>
+                <template v-else>
+                  <template v-if="row.origin === 'cogs'"
+                    >⌁ Costo {{ carryCogsYear }} · {{ row.label }}</template
+                  >
+                  <template v-else-if="row.origin === 'purchase'"
+                    >⌁ Compra {{ carryCogsYear }} · {{ row.label }}</template
+                  >
+                  <template v-else-if="row.origin === 'internment'"
+                    >⌁ Internación {{ carryCogsYear }} · {{ row.label }}</template
+                  >
+                  <template v-else>← {{ row.label }}</template>
+                </template>
               </th>
               <td
                 v-for="(value, index) in row.months"
@@ -1548,6 +1608,16 @@ const carryBlockNote = computed(() => {
 .cf-ceco-link:focus-visible {
   outline: 2px solid var(--color-brand, #03658c);
   outline-offset: 2px;
+}
+
+/* FE-S21 RF-CR-01 (§5): el link de filas de ARRASTRE hereda el mismo look
+   (cursor/hover/focus) con TONO MUTED para distinguirlo del año propio. */
+.cf-ceco-link-carry {
+  color: var(--color-text-muted, #8a8a8a);
+}
+
+.cf-ceco-link-carry:hover {
+  color: var(--color-brand, #03658c);
 }
 
 /* ---------- FE-S9 §2.6: negativos de "Bodega estimada" en ámbar ---------- */

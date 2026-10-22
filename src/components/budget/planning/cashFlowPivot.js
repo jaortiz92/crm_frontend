@@ -685,20 +685,26 @@ export function buildOoyBucketSeries({
  *   liquidation: object|null, taxFlow: object|null,
  *   entradasPivot: object, fijosPivot: object, variablesPivot: object|null
  * }} pivots
+ * @param {number} [initialCash=0] - FE-S7-INITBAL (RF-FE-06): saldo inicial
+ *   de EFECTIVO que siembra el acumulado desde el primer mes de N. Omitido/0
+ *   ⇒ corrida idéntica al comportamiento previo (regresión AC-S7-FE-7).
  */
-export function buildCashFlowResumen({
-  disbursement,
-  cobros,
-  pagos,
-  costes,
-  internment,
-  principal,
-  liquidation,
-  taxFlow,
-  entradasPivot,
-  fijosPivot,
-  variablesPivot
-}) {
+export function buildCashFlowResumen(
+  {
+    disbursement,
+    cobros,
+    pagos,
+    costes,
+    internment,
+    principal,
+    liquidation,
+    taxFlow,
+    entradasPivot,
+    fijosPivot,
+    variablesPivot
+  },
+  initialCash = 0
+) {
   const entradasPropias = entradasPivot.columnTotals
   const fijos = fijosPivot.columnTotals
   const variables = variablesPivot ? variablesPivot.columnTotals : null
@@ -722,7 +728,10 @@ export function buildCashFlowResumen({
   )
   const neto = entradas.map((value, m) => value - salidas[m])
 
-  let acc = 0
+  // FE-S7-INITBAL (RF-FE-06): el saldo inicial de efectivo siembra el
+  // acumulado de N desde enero. `0`/no finito ⇒ corrida idéntica a hoy.
+  const seed = Number(initialCash)
+  let acc = Number.isFinite(seed) ? seed : 0
   const acumulado = neto.map((value) => {
     acc += value
     return acc
@@ -1423,20 +1432,45 @@ export function createCashFlowPivotModel({
 
   /* ------------------- Resumen de liquidez + bodega (§4.5/§2.6) ------------------- */
 
+  /**
+   * FE-S7-INITBAL (RF-FE-06): saldos iniciales EFECTIVOS del escenario para
+   * el seeding. Se leen del getter `initialBalanceEffective` del store (dueño
+   * de la config + derivación carryover RF-FE-04, this). Config no cargada ⇒
+   * `{cash: 0, warehouse: 0}` ⇒ byte-idéntico al comportamiento previo
+   * (AC-S7-FE-7). La EXPORTACIÓN (`buildFlowSheets`) recibe el MISMO store ⇒
+   * sus hojas salen con el mismo seeding que la vista (una sola fuente).
+   * Nota: `equivale a` default {} si el store es sintético (derivación del
+   * escenario fuente, A-K) ⇒ seeds 0.
+   */
+  const initialSeed = computed(() => {
+    const eff = store.initialBalanceEffective
+    if (!eff || !eff.ready) return { cash: 0, warehouse: 0 }
+    const cash = Number(eff.cash)
+    const warehouse = Number(eff.warehouse)
+    return {
+      cash: Number.isFinite(cash) ? cash : 0,
+      warehouse: Number.isFinite(warehouse) ? warehouse : 0
+    }
+  })
+
   const resumen = computed(() =>
-    buildCashFlowResumen({
-      disbursement: financingDisbursementPivot.value,
-      cobros: cobrosArrastre.value,
-      pagos: pagosArrastre.value,
-      costes: costPaymentsPivot.value,
-      internment: internmentPaymentsPivot.value,
-      principal: financingPrincipalPivot.value,
-      liquidation: settlementPaymentsPivot.value,
-      taxFlow: taxPaymentsPivot.value,
-      entradasPivot: entradasPivot.value,
-      fijosPivot: fijosPivot.value,
-      variablesPivot: variablesPivot.value
-    })
+    buildCashFlowResumen(
+      {
+        disbursement: financingDisbursementPivot.value,
+        cobros: cobrosArrastre.value,
+        pagos: pagosArrastre.value,
+        costes: costPaymentsPivot.value,
+        internment: internmentPaymentsPivot.value,
+        principal: financingPrincipalPivot.value,
+        liquidation: settlementPaymentsPivot.value,
+        taxFlow: taxPaymentsPivot.value,
+        entradasPivot: entradasPivot.value,
+        fijosPivot: fijosPivot.value,
+        variablesPivot: variablesPivot.value
+      },
+      // FE-S7-INITBAL: semilla del acumulado de caja con el saldo inicial.
+      initialSeed.value.cash
+    )
   )
 
   /** Compras causadas por mes (`columnTotals` del bloque §2.4). */
@@ -1467,12 +1501,21 @@ export function createCashFlowPivotModel({
     return out
   })
 
-  /** `bodega[m] = bodega[m−1] + compras[m] − costoCausado[m]` (D-FE9-3). */
+  /**
+   * `bodega[m] = bodega[m−1] + compras[m] − costoCausado[m]` (D-FE9-3).
+   * FE-S7-INITBAL (RF-FE-06): `bodega[0]` arranca en el saldo inicial de
+   * BODEGA (con compras/costo de enero encima: `bodega[1] = semilla +
+   * compras[1] − costo[1]`). Semilla 0/no finita ⇒ corrida idéntica a hoy
+   * (AC-S7-FE-7). El valor por arrastre (RF-FE-04) llega ya resuelto en
+   * `initialBalanceEffective`.
+   */
   const bodegaMes = computed(() => {
     const compras = comprasPorMes.value
     const costos = costoCausadoPorMes.value
     const out = []
-    let acc = 0
+    // Semilla RF-FE-06: saldo de bodega ANTES de las compras/costo de enero;
+    // el mes 0 muestra semilla + neto de enero. Semilla 0 ⇒ byte-idéntico a hoy.
+    let acc = initialSeed.value.warehouse
     for (let month = 0; month < 12; month += 1) {
       acc += compras[month] - costos[month]
       out.push(acc)
