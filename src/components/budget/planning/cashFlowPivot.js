@@ -19,13 +19,17 @@
 import { computed } from 'vue'
 import {
   formatDateEs,
+  entradasBucketByVariableCeco,
+  entradasCausacionByVariableCeco,
+  fixedIncomeBucketByVariableCeco,
   fixedIncomeCausationByCeco,
   fixedIncomeCausationByVariableCeco,
-  entradasCausacionByVariableCeco,
   ivaOf,
   lineChargesIva,
+  monthBucketIndexOf,
   monthIndexOf,
   resolveCogsPctByLine,
+  variableCollectionDistribution,
   withIva
 } from './planningFormat.js'
 import { lineIdForCostCenter } from './cecoMovements.js'
@@ -134,9 +138,11 @@ export function addDaysISO(value, days) {
  * Pivote genérico de un bloque del Flujo: filas = CECO (agrupa todas sus
  * líneas, orden `localeCompare(..., 'es')`), columnas Ene–Dic según
  * `monthOf(line)`, celda = Σ del monto presentado; totales por fila/columna/
- * bloque. El total de fila es ANUAL todo-inclusive. Fuera-de-año (FE-S8):
- * los montos con bucket ±1 NUNCA pueblan celdas mensuales ni
- * `columnTotals`; viven en `before`/`after`. (Movida verbatim de
+ * bloque. **ENMIENDA A-05** (spec `frontend.03_21` §14, BR-FE21-16):
+ * `total`/`grandTotal` = SOLO la Σ de los 12 meses; el todo-inclusive
+ * (meses + Antes + Después) vive en `generalTotal`/`grandGeneralTotal`.
+ * Fuera-de-año (FE-S8): los montos con bucket ±1 NUNCA pueblan celdas
+ * mensuales ni `columnTotals`; viven en `before`/`after`. (Movido de
  * `CashFlowPivotTable.buildPivot`, con deps como parámetros.)
  * @param {Array<object>} lines `budget_lines` del escenario
  * @param {{
@@ -153,7 +159,14 @@ export function buildFlowPivot(
 ) {
   const byCeco = new Map()
   const columnTotals = Array.from({ length: 12 }, () => 0)
+  /**
+   * ENMIENDA A-05 (spec `frontend.03_21` §14, 2026-10-21 — BR-FE21-16):
+   * `grandTotal` pasa a ser la Σ de SOLO los 12 meses (antes: todo-inclusive
+   * con Antes/Después); el todo-inclusive vive en `grandGeneralTotal`
+   * (BR-FE21-17) para la columna "Total General".
+   */
   let grandTotal = 0
+  let grandGeneralTotal = 0
   /** Hallazgo 5 (auditoría FE): Σ de montos con fecha efectiva ILEGIBLE. */
   let undatedTotal = 0
 
@@ -169,6 +182,7 @@ export function buildFlowPivot(
         label: costCenterLabel(key),
         months: Array.from({ length: 12 }, () => 0),
         total: 0,
+        generalTotal: 0,
         before: 0,
         after: 0
       })
@@ -178,17 +192,22 @@ export function buildFlowPivot(
     const bucket = outOfYearBucketOf(line.payment_date || line.budget_date, scenarioYear)
     // FE-S8-FLUJO-OY C-1 (FR-1): el fuera-de-año NUNCA puebla la celda
     // mensual ni `columnTotals`; `bucket === 0` cubre fechas indeterminables.
+    // A-05 (BR-FE21-16): el `total` de fila = SOLO los 12 meses; el
+    // todo-inclusive (meses + Antes + Después + ilegible) es `generalTotal`.
     if (month >= 0 && bucket === 0) {
       row.months[month] += amount
       columnTotals[month] += amount
+      row.total += amount
+      grandTotal += amount
     }
     if (bucket === -1) row.before += amount
     else if (bucket === 1) row.after += amount
     // Hallazgo 5 (auditoría FE): fecha efectiva no parseable (month −1 con
-    // bucket 0) no puebla celda ni bucket pero SÍ suma al total anual.
+    // bucket 0) no puebla celda, bucket ni el total de 12 meses; solo el
+    // General (A-05) y el `undatedTotal` del aviso al pie.
     if (month < 0 && bucket === 0) undatedTotal += amount
-    row.total += amount
-    grandTotal += amount
+    row.generalTotal += amount
+    grandGeneralTotal += amount
   }
 
   const rows = [...byCeco.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'))
@@ -204,6 +223,8 @@ export function buildFlowPivot(
     rows,
     columnTotals,
     grandTotal,
+    // A-05: 12 meses + Antes + Después (+ ilegible).
+    grandGeneralTotal,
     beforeTotal,
     afterTotal,
     beforeAfterRowCount,
@@ -221,7 +242,10 @@ export function buildFlowPivot(
 export function buildDerivedPivot(rows, { costCenterLabel, scenarioYear }) {
   const byCeco = new Map()
   const columnTotals = Array.from({ length: 12 }, () => 0)
+  // A-05 (BR-FE21-16/17): `grandTotal` = solo 12 meses; el todo-inclusive
+  // (meses + Antes + Después + ilegible) vive en `grandGeneralTotal`.
   let grandTotal = 0
+  let grandGeneralTotal = 0
   /** Hallazgo 5 (auditoría FE): Σ de cuotas con fecha efectiva ILEGIBLE. */
   let undatedTotal = 0
 
@@ -237,6 +261,7 @@ export function buildDerivedPivot(rows, { costCenterLabel, scenarioYear }) {
         label: item.label ?? costCenterLabel(item.idCostCenter),
         months: Array.from({ length: 12 }, () => 0),
         total: 0,
+        generalTotal: 0,
         before: 0,
         after: 0
       })
@@ -247,12 +272,14 @@ export function buildDerivedPivot(rows, { costCenterLabel, scenarioYear }) {
     if (month >= 0 && bucket === 0) {
       row.months[month] += amount
       columnTotals[month] += amount
+      row.total += amount
+      grandTotal += amount
     }
     if (bucket === -1) row.before += amount
     else if (bucket === 1) row.after += amount
     if (month < 0 && bucket === 0) undatedTotal += amount
-    row.total += amount
-    grandTotal += amount
+    row.generalTotal += amount
+    grandGeneralTotal += amount
   }
 
   const out = [...byCeco.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'))
@@ -268,6 +295,7 @@ export function buildDerivedPivot(rows, { costCenterLabel, scenarioYear }) {
     rows: out,
     columnTotals,
     grandTotal,
+    grandGeneralTotal,
     beforeTotal,
     afterTotal,
     beforeAfterRowCount,
@@ -294,7 +322,7 @@ export function buildDerivedPivot(rows, { costCenterLabel, scenarioYear }) {
  *    (`entradasCausacionByVariableCeco` — ENTRADAS del Flujo por MES DE PAGO
  *    del generador, serie NETA sin gross-up ×1.19: el modo IVA del bloque
  *    Entradas es SOLO presentación, no base de comisiones).
- * CECO sin base resuelta o mes sin base
+ * CECO sin base resuelta o bucket sin base
  * ⇒ aporte 0 (BR-VE-02/BR-FE21-02: sin exclusión, sin NaN). Gross-up × 1.19
  * del monto DERIVADO según el flag efectivo (D-FE14: base neta, monto
  * bruto). `null` si no hay líneas variables o la base es toda cero.
@@ -302,25 +330,81 @@ export function buildDerivedPivot(rows, { costCenterLabel, scenarioYear }) {
  * AR_c(m)`) incluiría también el AR vencido del CECO generador resuelto; el
  * frontend compone la componente de COBRO del flujo (A-02) — el AR vencido
  * por CECO sigue sin data en la caché del planning (gap documentado §10).
+ *
+ * **ENMIENDA A-03 (§12, 2026-10-21)** — los DOS maps de base cambian de
+ * `number[12]` a BUCKETS extendidos `{ before: number, months: number[12],
+ * after: number }` (`fixedIncomeBucketByVariableCeco` /
+ * `entradasBucketByVariableCeco`) y la firma gana el 6º parámetro
+ * `scenarioYear`. El monto derivado (tasa × base — MISMA fórmula, D-FE14 +
+ * A-02 BR-FE21-06) se posiciona en `row.months[bucket]` / `row.before` /
+ * `row.after` con `bucket = monthBucketIndexOf(line.budget_date,
+ * scenarioYear)`: `-1` ⇒ Antes, `12` ⇒ Después, `0..11` ⇒ celda del año;
+ * `-99` (fecha ilegible) ⇒ no posiciona (aporte 0, misma política del
+ * `month < 0` original; el ROW sí existe con montos en 0). `undatedTotal`
+ * queda 0 por construcción (el monto es derivado: sin periodo legible no
+ * hay base ⇒ aporte 0) — la clave se mantiene por shape homogéneo con
+ * `buildFlowPivot`. Las series mensuales contienen SOLO año N ⇒ el P&G de
+ * la Ejecutiva y el resumen 12-meses no cambian (BR-FE21-10).
  * @param {Array<object>} source líneas de gasto variables
- * @param {Map<number|string, number[]>} baseByCecoSales base de FACTURACIÓN
- *   por CECO de gasto variable (`fixedIncomeCausationByVariableCeco` —
- *   A-01/A-02: serie I por budget_date del generador resuelto por (zona, línea)).
- * @param {Map<number|string, number[]>} baseByCecoRecaudo base de RECAUDO por
- *   CECO de gasto variable (`entradasCausacionByVariableCeco` — A-02: serie R
- *   por cfMonth del generador resuelto; neta sin gross-up).
+ * @param {Map<number|string, {before: number, months: number[], after: number}>} baseByCecoSales
+ *   base de FACTURACIÓN por CECO de gasto variable en BUCKETS
+ *   (A-03: `fixedIncomeBucketByVariableCeco` — I por budget_date del
+ *   generador resuelto por (zona, línea), Antes/Después incluidos).
+ * @param {Map<number|string, {before: number, months: number[], after: number}>} baseByCecoRecaudo
+ *   base de RECAUDO por CECO de gasto variable en BUCKETS
+ *   (A-03: `entradasBucketByVariableCeco` — R por cfMonth del generador,
+ *   ahora SIN filtro de año: el bucket filtra; neta sin gross-up).
  * @param {(id: number|string|null|undefined) => string} costCenterLabel
  * @param {boolean} ivaActive modo "Con IVA"
+ * @param {number|null|undefined} scenarioYear año N del escenario (A-03);
+ *   `null`/no entero ⇒ degradación igual que el resto de los pivotes.
+ *
+ * **ENMIENDA A-04 (§13, 2026-10-21)** — las líneas `variable_receivables`
+ * dejan de aportar `tasa × baseC[bucket]` (line-based) y pasan a consumir la
+ * DISTRIBUCIÓN DE COBRO `collectionDistribution`
+ * (`variableCollectionDistribution`, key = `id_budget_line`): la comisión se
+ * posiciona en el bucket donde entra el COBRO que la genera (Antes / Mes /
+ * Después) usando la tasa de la línea concepto del MES DE FACTURACIÓN del
+ * cobro (§13 puntos 1–4). Los 12 meses cambian de composición: mes `b` =
+ * Σ contribuciones de cobros con bucket `b`. Distribución presente sin
+ * entrada para la línea ⇒ aporte 0 (Cobros del generador sin línea concepto
+ * ⇒ sin comisión — sin fallback). Parámetro omitido (callers legacy/tests)
+ * ⇒ se conserva el path line-based A-03 con `baseByCecoRecaudo`. El gross-up
+ * del DERIVADO sigue por línea (D-FE14). `variable_sales`, los totales
+ * (before/after/months/total, `beforeAfterRowCount`, `undatedTotal` = 0 por
+ * construcción) y la degradación con shapes NO cambian.
+ * @param {Map<number, {before: number, months: number[], after: number, unplaced: number}>|null} collectionDistribution
+ *   distribución de cobro por LÍNEA variable (A-04); `null` ⇒ path legacy.
  */
 export function buildVariableFlowPivot(
   source,
   baseByCecoSales,
   baseByCecoRecaudo,
   costCenterLabel,
-  ivaActive
+  ivaActive,
+  scenarioYear,
+  collectionDistribution = null
 ) {
-  const anyBase = (map) => [...map.values()].some((months) => months.some((value) => value !== 0))
-  if (!source.length || (!anyBase(baseByCecoSales) && !anyBase(baseByCecoRecaudo))) {
+  // A-03: cualquier bucket del mapa cuenta como base disponible.
+  const anyBase = (map) =>
+    [...map.values()].some(
+      (buckets) =>
+        buckets &&
+        (buckets.before !== 0 || buckets.after !== 0 || buckets.months.some((value) => value !== 0))
+    )
+  // A-04: la distribución de cobro habilita el pivote igual que las bases.
+  const anyDistribution = (map) =>
+    map instanceof Map &&
+    [...map.values()].some(
+      (buckets) =>
+        buckets &&
+        (buckets.before !== 0 || buckets.after !== 0 || buckets.months.some((value) => value !== 0))
+    )
+  const distribution = collectionDistribution instanceof Map ? collectionDistribution : null
+  if (
+    !source.length ||
+    (!anyBase(baseByCecoSales) && !anyBase(baseByCecoRecaudo) && !anyDistribution(distribution))
+  ) {
     return null
   }
 
@@ -329,7 +413,47 @@ export function buildVariableFlowPivot(
 
   const byCeco = new Map()
   const columnTotals = Array.from({ length: 12 }, () => 0)
+  // A-05 (BR-FE21-16/17): `grandTotal` = solo 12 meses; el todo-inclusive
+  // (meses + Antes + Después) vive en `grandGeneralTotal`.
   let grandTotal = 0
+  let grandGeneralTotal = 0
+  let beforeTotal = 0
+  let afterTotal = 0
+  let beforeAfterRowCount = 0
+
+  /**
+   * A-04: suma los buckets de COBRO de una línea derivada al row/columnTotals
+   * y a los sumatorios Antes/Después, con el gross-up del flag efectivo de la
+   * línea (D-FE14); `unplaced` queda FUERA (contribución omitida, §13).
+   * A-05 (BR-FE21-16): los meses suman SOLO al `total` de fila y al
+   * `grandTotal` de 12 meses; Antes/Después van al lado General.
+   * @returns {number} Σ NETA contribuida (para el bruto del total por línea).
+   */
+  function addCollectionBuckets(row, buckets, charged) {
+    let netSum = 0
+    for (let month = 0; month < 12; month += 1) {
+      const net = Number(buckets.months[month]) || 0
+      if (net === 0) continue
+      row.months[month] += grossDerived(net, charged)
+      columnTotals[month] += grossDerived(net, charged)
+      row.total += grossDerived(net, charged)
+      grandTotal += grossDerived(net, charged)
+      netSum += net
+    }
+    const netBefore = Number(buckets.before) || 0
+    if (netBefore !== 0) {
+      row.before += grossDerived(netBefore, charged)
+      beforeTotal += grossDerived(netBefore, charged)
+      netSum += netBefore
+    }
+    const netAfter = Number(buckets.after) || 0
+    if (netAfter !== 0) {
+      row.after += grossDerived(netAfter, charged)
+      afterTotal += grossDerived(netAfter, charged)
+      netSum += netAfter
+    }
+    return netSum
+  }
 
   for (const line of source) {
     const key = line.id_cost_center
@@ -339,14 +463,36 @@ export function buildVariableFlowPivot(
         label: costCenterLabel(key),
         months: Array.from({ length: 12 }, () => 0),
         total: 0,
+        generalTotal: 0,
         before: 0,
         after: 0
       })
     }
     const row = byCeco.get(key)
 
-    const month = monthIndexOf(line.budget_date)
-    if (month < 0) continue
+    // A-04: variable_receivables consume la DISTRIBUCIÓN DE COBRO (key =
+    // id_budget_line): posiciona la comisión donde entra el cobro que la
+    // genera. Sin entrada ⇒ aporte 0 (cobros sin línea concepto ⇒ sin
+    // comisión, sin fallback). Parámetro ausente ⇒ path legacy A-03.
+    if (line.behavior_type === 'variable_receivables' && distribution) {
+      const buckets = distribution.get(line.id_budget_line)
+      if (buckets) {
+        const charged = lineChargesIva(line)
+        const netSum = addCollectionBuckets(row, buckets, charged)
+        const grossSum = grossDerived(netSum, charged)
+        // A-05: total de fila = SOLO meses (ya sumado en addCollectionBuckets
+        // y `addCollectionBuckets` también suma `grandTotal`); el bruto del
+        // monto contribuido (meses + antes + después) va al lado General.
+        row.generalTotal += grossSum
+        grandGeneralTotal += grossSum
+      }
+      continue
+    }
+
+    // A-03: bucket extendido de la CAUSACIÓN de la comisión (budget_date de
+    // la línea) contra el año N del escenario.
+    const bucket = monthBucketIndexOf(line.budget_date, scenarioYear)
+    if (bucket === -99) continue
     const rate = Number(line.variable_rate) || 0
     // Base por CECO generador (A-01 + A-02, frontend.03_21 §5.2/§10/§11):
     // la serie ya llega resuelta y keyed por el CECO de la línea; la elección
@@ -355,22 +501,53 @@ export function buildVariableFlowPivot(
     const baseByCeco =
       line.behavior_type === 'variable_receivables' ? baseByCecoRecaudo : baseByCecoSales
     const baseC = baseByCeco.get(line.id_cost_center)
-    const amount = grossDerived(rate * (baseC ? baseC[month] || 0 : 0), lineChargesIva(line))
-    row.months[month] += amount
-    row.total += amount
-    columnTotals[month] += amount
-    grandTotal += amount
+    // A-03: base del BUCKET (mensual del año / Antes / Después).
+    const baseValue =
+      bucket === -1
+        ? baseC
+          ? baseC.before || 0
+          : 0
+        : bucket === 12
+          ? baseC
+            ? baseC.after || 0
+            : 0
+          : baseC
+            ? baseC.months[bucket] || 0
+            : 0
+    const amount = grossDerived(rate * baseValue, lineChargesIva(line))
+    if (bucket === -1) {
+      row.before += amount
+      beforeTotal += amount
+    } else if (bucket === 12) {
+      row.after += amount
+      afterTotal += amount
+    } else {
+      // bucket 0..11: dentro del año N (o mes legible con año no entero —
+      // misma degradación de `buildFlowPivot` con yearN null). A-05: único
+      // lugar que suma al `total` de fila y al `grandTotal` de 12 meses.
+      row.months[bucket] += amount
+      columnTotals[bucket] += amount
+      row.total += amount
+      grandTotal += amount
+    }
+    row.generalTotal += amount
+    grandGeneralTotal += amount
   }
 
   const rows = [...byCeco.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'))
+  for (const row of rows) {
+    if (Math.abs(row.before) + Math.abs(row.after) > 0) beforeAfterRowCount += 1
+  }
   // Shape homogéneo con `buildFlowPivot` (hallazgo 5): variables siempre ∈ N.
+  // A-03: beforeTotal/afterTotal/beforeAfterRowCount REALES (antes 0 hardcode).
   return {
     rows,
     columnTotals,
     grandTotal,
-    beforeTotal: 0,
-    afterTotal: 0,
-    beforeAfterRowCount: 0,
+    grandGeneralTotal,
+    beforeTotal,
+    afterTotal,
+    beforeAfterRowCount,
     undatedTotal: 0
   }
 }
@@ -438,7 +615,7 @@ export function buildCarryPivot(carryLines, match, costCenterLabel, carryActive)
  * @param {{
  *   disbursement: object|null, entradas: object, fijos: object,
  *   costes: object|null, internment: object|null, principal: object|null,
- *   liquidation: object|null, taxFlow: object|null
+ *   liquidation: object|null, taxFlow: object|null, variables: object|null
  * }} pivots
  * @returns {{ entradas: number[], salidas: number[], neto: number[], any: boolean }}
  */
@@ -450,25 +627,32 @@ export function buildOoyBucketSeries({
   internment,
   principal,
   liquidation,
-  taxFlow
+  taxFlow,
+  variables = null
 }) {
   const entradasSeries = [
     entradas.beforeTotal + (disbursement ? disbursement.beforeTotal : 0),
     entradas.afterTotal + (disbursement ? disbursement.afterTotal : 0)
   ]
+  // ENMIENDA A-03 (§12): el pivote de variables ya produce buckets reales
+  // (Antes/Después) ⇒ entra a la serie de SALIDAS y a la bandera `any`,
+  // para que las columnas aparezcan cuando SOLO las variables tienen fuera
+  // de año (AC-FE21-14).
   const salidasSeries = [
     fijos.beforeTotal +
       (costes ? costes.beforeTotal : 0) +
       (internment ? internment.beforeTotal : 0) +
       (principal ? principal.beforeTotal : 0) +
       (liquidation ? liquidation.beforeTotal : 0) +
-      (taxFlow ? taxFlow.beforeTotal : 0),
+      (taxFlow ? taxFlow.beforeTotal : 0) +
+      (variables ? variables.beforeTotal : 0),
     fijos.afterTotal +
       (costes ? costes.afterTotal : 0) +
       (internment ? internment.afterTotal : 0) +
       (principal ? principal.afterTotal : 0) +
       (liquidation ? liquidation.afterTotal : 0) +
-      (taxFlow ? taxFlow.afterTotal : 0)
+      (taxFlow ? taxFlow.afterTotal : 0) +
+      (variables ? variables.afterTotal : 0)
   ]
   const any =
     entradas.beforeAfterRowCount +
@@ -478,7 +662,8 @@ export function buildOoyBucketSeries({
       (principal ? principal.beforeAfterRowCount : 0) +
       (disbursement ? disbursement.beforeAfterRowCount : 0) +
       (liquidation ? liquidation.beforeAfterRowCount : 0) +
-      (taxFlow ? taxFlow.beforeAfterRowCount : 0) >
+      (taxFlow ? taxFlow.beforeAfterRowCount : 0) +
+      (variables ? variables.beforeAfterRowCount : 0) >
     0
   return {
     entradas: entradasSeries,
@@ -559,6 +744,26 @@ export function buildCashFlowResumen({
   const netoTotal = entradasTotal - salidasTotal
   const acumuladoTotal = acumulado[11]
 
+  /**
+   * ENMIENDA A-05 (spec `frontend.03_21` §14): lado General del resumen
+   * (BR-FE21-17) — meses + Antes + Después, espejo de `grandGeneralTotal`
+   * de los pivotes. Los `*Total` de arriba quedan SOLO 12 meses.
+   */
+  const entradasGeneralTotal =
+    entradasPivot.grandGeneralTotal +
+    (cobros ? cobros.grandGeneralTotal : 0) +
+    (disbursement ? disbursement.grandGeneralTotal : 0)
+  const salidasGeneralTotal =
+    fijosPivot.grandGeneralTotal +
+    (variablesPivot ? variablesPivot.grandGeneralTotal : 0) +
+    (pagos ? pagos.grandGeneralTotal : 0) +
+    (costes ? costes.grandGeneralTotal : 0) +
+    (internment ? internment.grandGeneralTotal : 0) +
+    (principal ? principal.grandGeneralTotal : 0) +
+    (liquidation ? liquidation.grandGeneralTotal : 0) +
+    (taxFlow ? taxFlow.grandGeneralTotal : 0)
+  const netoGeneralTotal = entradasGeneralTotal - salidasGeneralTotal
+
   return {
     entradas,
     salidas,
@@ -567,7 +772,10 @@ export function buildCashFlowResumen({
     entradasTotal,
     salidasTotal,
     netoTotal,
-    acumuladoTotal
+    acumuladoTotal,
+    entradasGeneralTotal,
+    salidasGeneralTotal,
+    netoGeneralTotal
   }
 }
 
@@ -704,7 +912,10 @@ export function createCashFlowPivotModel({
    * CECO primero; zona+línea sin facturación ⇒ SIN fila ⇒ aporte 0; sin
    * fallback). Una resolución por línea meaningful, 1 lookup O(1) por render
    * en `buildVariableFlowPivot` y cuadre 1:1 con el drill-down de
-   * `CecoDetailView` (AC-FE21-4/AC-FE21-8).
+   * `CecoDetailView` (AC-FE21-4/AC-FE21-8). **A-03 §12**: ya no alimenta el
+   * pivote de flujo directamente (eso lo hacen los bucket-maps
+   * `baseVariableBucketPorCeco`); se conserva exportado por
+   * compatibilidad/referencia (shape 12 meses para la Ejecutiva/drill-down).
    */
   const baseVariablePorCeco = computed(() =>
     fixedIncomeCausationByVariableCeco(lines.value, store.costCenters)
@@ -725,19 +936,64 @@ export function createCashFlowPivotModel({
     entradasCausacionByVariableCeco(lines.value, store.costCenters, scenarioYear.value)
   )
 
+  /**
+   * ENMIENDA A-03 (spec `frontend.03_21` §12, 2026-10-21) — bases por buckets
+   * extendidos `{ before, months[12], after }` del MISMO generador A-01/A-02:
+   *  - FACTURACIÓN: `fixedIncomeBucketByVariableCeco` (I por budget_date del
+   *    generador, Antes/Después incluidos).
+   *  - RECAUDO: `entradasBucketByVariableCeco` (ENTRADAS por MES DE PAGO del
+   *    generador; aquí SIN filtro de año — el bucket ES el filtro; neta
+   *    D-FE14-7). Alimentan EXCLUSIVAMENTE el pivote de flujo
+   *    (`variablesPivot`); los maps de 12 meses de arriba se conservan
+   *    exportados por compatibilidad (la Ejecutiva y el drill-down siguen
+   *    con su shape intacto — A-02 byte-a-byte, BR-FE21-11).
+   */
+  const baseVariableBucketPorCeco = computed(() =>
+    fixedIncomeBucketByVariableCeco(lines.value, store.costCenters, scenarioYear.value)
+  )
+
+  const baseVariableRecaudoBucketPorCeco = computed(() =>
+    entradasBucketByVariableCeco(lines.value, store.costCenters, scenarioYear.value)
+  )
+
   /** Líneas de gasto variables (origen crudo del bloque estimado). */
   const variableSourceLines = computed(() =>
     lines.value.filter((line) => line.line_type === 'expense' && line.behavior_type !== 'fixed')
   )
 
-  /** "Salidas — Gastos variables (calculados)" (D-5, base por CECO A-01/A-02). */
+  /**
+   * ENMIENDA A-04 (spec `frontend.03_21` §13, 2026-10-21) — distribución de
+   * COBRO de las líneas `variable_receivables` del escenario, keyed por
+   * `id_budget_line`: para cada concepto se aplican los cobros del CECO
+   * generador (A-01) facturados en el MES del concepto, y la comisión se
+   * posiciona en el bucket de SU cobro (Antes/Mes/Después — criterio de
+   * caja). NETA (D-FE14-7); el gross-up lo aplica el pivote por línea.
+   * Las otras superficies (Ejecutiva/drill-down) NO lo consumen (devengo —
+   * divergencia por diseño §13).
+   */
+  const variableReceivablesLines = computed(() =>
+    variableSourceLines.value.filter((line) => line.behavior_type === 'variable_receivables')
+  )
+
+  const variableCollectionDistributionByLine = computed(() =>
+    variableCollectionDistribution(
+      variableReceivablesLines.value,
+      lines.value,
+      store.costCenters,
+      scenarioYear.value
+    )
+  )
+
+  /** "Salidas — Gastos variables (calculados)" (D-5, A-01/A-02 + A-03 + A-04). */
   const variablesPivot = computed(() =>
     buildVariableFlowPivot(
       variableSourceLines.value,
-      baseVariablePorCeco.value,
-      baseVariableRecaudoPorCeco.value,
+      baseVariableBucketPorCeco.value,
+      baseVariableRecaudoBucketPorCeco.value,
       costCenterLabel,
-      ivaActive.value
+      ivaActive.value,
+      scenarioYear.value,
+      variableCollectionDistributionByLine.value
     )
   )
 
@@ -997,7 +1253,10 @@ export function createCashFlowPivotModel({
     if (!periods.length) return null
     const rows = []
     const columnTotals = Array.from({ length: 12 }, () => 0)
+    // A-05 (BR-FE21-16/17): `grandTotal` = solo 12 meses; todo-inclusive →
+    // `grandGeneralTotal`.
     let grandTotal = 0
+    let grandGeneralTotal = 0
     let beforeTotal = 0
     let afterTotal = 0
     let beforeAfterRowCount = 0
@@ -1012,9 +1271,11 @@ export function createCashFlowPivotModel({
       const months = Array.from({ length: 12 }, () => 0)
       let before = 0
       let after = 0
+      let total = 0
       if (month >= 0 && bucket === 0) {
         months[month] += payment
         columnTotals[month] += payment
+        total = payment
       }
       if (bucket === -1) before = payment
       else if (bucket === 1) after = payment
@@ -1022,22 +1283,25 @@ export function createCashFlowPivotModel({
       if (before + after !== 0) beforeAfterRowCount += 1
       beforeTotal += before
       afterTotal += after
-      grandTotal += payment
+      grandTotal += total
+      grandGeneralTotal += payment
       const periodNo = Number(period.period_no)
       rows.push({
         id: `iva-liq-${Number.isFinite(periodNo) ? periodNo : rows.length + 1}`,
         label: `Liquidación P${Number.isFinite(periodNo) ? periodNo : '—'} · vence ${formatDateEs(dueDate)}`,
         months,
-        total: payment,
+        total,
+        generalTotal: payment,
         before,
         after
       })
     }
-    if (!rows.length || grandTotal <= 0) return null
+    if (!rows.length || grandGeneralTotal <= 0) return null
     return {
       rows,
       columnTotals,
       grandTotal,
+      grandGeneralTotal,
       beforeTotal,
       afterTotal,
       beforeAfterRowCount,
@@ -1059,7 +1323,10 @@ export function createCashFlowPivotModel({
     if (!buckets.length) return null
     const rows = []
     const columnTotals = Array.from({ length: 12 }, () => 0)
+    // A-05 (BR-FE21-16/17): `grandTotal` = solo 12 meses; todo-inclusive →
+    // `grandGeneralTotal`.
     let grandTotal = 0
+    let grandGeneralTotal = 0
     let beforeTotal = 0
     let afterTotal = 0
     let beforeAfterRowCount = 0
@@ -1078,9 +1345,11 @@ export function createCashFlowPivotModel({
       const months = Array.from({ length: 12 }, () => 0)
       let before = 0
       let after = 0
+      let total = 0
       if (payYear === yearN && payMonth !== null && payMonth >= 1 && payMonth <= 12) {
         months[payMonth - 1] += amount
         columnTotals[payMonth - 1] += amount
+        total = amount
       } else if (payYear < yearN) {
         before = amount
       } else if (payYear > yearN) {
@@ -1089,7 +1358,8 @@ export function createCashFlowPivotModel({
       if (before + after !== 0) beforeAfterRowCount += 1
       beforeTotal += before
       afterTotal += after
-      grandTotal += amount
+      grandTotal += total
+      grandGeneralTotal += amount
       rows.push({
         id: `tax-pass-${payYear}-${payMonth ?? 'x'}-${rows.length + 1}`,
         label:
@@ -1097,7 +1367,8 @@ export function createCashFlowPivotModel({
             ? `Impuestos · vence ${payYear}-${String(payMonth).padStart(2, '0')}`
             : `Impuestos · año ${payYear}`,
         months,
-        total: amount,
+        total,
+        generalTotal: amount,
         before,
         after
       })
@@ -1110,6 +1381,7 @@ export function createCashFlowPivotModel({
       rows,
       columnTotals,
       grandTotal,
+      grandGeneralTotal,
       beforeTotal,
       afterTotal,
       beforeAfterRowCount,
@@ -1218,7 +1490,11 @@ export function createCashFlowPivotModel({
     baseIngresosCausadosPorCeco,
     baseVariablePorCeco,
     baseVariableRecaudoPorCeco,
+    baseVariableBucketPorCeco,
+    baseVariableRecaudoBucketPorCeco,
     variableSourceLines,
+    variableReceivablesLines,
+    variableCollectionDistributionByLine,
     variablesPivot,
     cogsIncomeLines,
     purchaseIndex,

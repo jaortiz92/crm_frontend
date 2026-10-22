@@ -417,7 +417,9 @@ export function createExecutivePivotModel({ scenario, store }) {
    * Flujo; D-FE14-7).
    */
   const entradasRows = computed(() =>
-    [...entradasCausacionByCeco(lines.value, Number(scenarioRef.value?.budget_year))].map(([id, months]) => ({ id, months }))
+    [...entradasCausacionByCeco(lines.value, Number(scenarioRef.value?.budget_year))].map(
+      ([id, months]) => ({ id, months })
+    )
   )
 
   /**

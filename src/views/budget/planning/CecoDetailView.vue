@@ -430,7 +430,9 @@ const fixedIncomeByMonth = computed(() => {
     fixedIncomeCausationByCeco(lines).get(id) ??
     zeroSeries
   const receivablesSeries =
-    entradasCausacionByVariableCeco(lines, costCenters, Number(scenario.value.budget_year)).get(id) ??
+    entradasCausacionByVariableCeco(lines, costCenters, Number(scenario.value.budget_year)).get(
+      id
+    ) ??
     // Fallback de PRESENTACIÓN para CECOs sin resolución de recaudo: la serie
     // de ENTRADAS propia del CECO (espejo `entradasCausacionByCeco`); sin
     // cobros ⇒ 12 ceros (AC-FE21-11, sin fallback a otras zonas/líneas).

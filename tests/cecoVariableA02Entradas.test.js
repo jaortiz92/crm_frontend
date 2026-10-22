@@ -140,7 +140,7 @@ describe('(a) AC-FE21-10: comisión de feb usa el RECAUDO de feb (cobros), no la
     // la comisión cae en el MES DE CAUSACIÓN de la línea (feb = budget_date).
   })
 
-  it('Vista Flujo: mismo montante; la línea misma position feb (causación), cobro mar no desplaza', () => {
+  it('Vista Flujo (A-04 §13): el bill se FACTURA en ene ⇒ sin línea concepto ene ⇒ comisión 0; sin fallback', () => {
     const model = createCashFlowPivotModel({
       scenario,
       financingPrincipalLines: [],
@@ -149,8 +149,46 @@ describe('(a) AC-FE21-10: comisión de feb usa el RECAUDO de feb (cobros), no la
     })
     const row = model.variablesPivot.value.rows.find((r) => r.id === 210)
     expect(row).toBeDefined()
+    // A-04: en el Flujo la comisión de recaudo sigue a los COBROS con la tasa
+    // del MES DE FACTURACIÓN del bill. Este bill se factura en ENE (sin
+    // línea concepto ene) ⇒ NO genera comisión aunque se cobre en feb
+    // (§13 punto 3: rate ausente ⇒ 0, SIN fallback). La celda devengo de la
+    // Ejecutiva sigue en feb (test de arriba) — divergencia por diseño.
+    expect(row.months[1]).toBe(0)
+    expect(row.months[2]).toBe(0)
+    expect(row.total).toBe(0)
+  })
+
+  it('Vista Flujo (A-04 §13, caso regular): bill facturado y COBRADO en su mes ⇒ igual que A-02', () => {
+    const scenarioRegular = {
+      id_budget: 573,
+      budget_year: 2026,
+      budget_lines: [
+        {
+          id_budget_line: 1, id_cost_center: 151, line_type: 'income', behavior_type: 'fixed',
+          budget_date: '2026-02-10', payment_date: '2026-02-25', projected_amount: 1000000,
+          has_iva: true, variable_rate: null
+        },
+        {
+          id_budget_line: 5, id_cost_center: 210, line_type: 'expense',
+          behavior_type: 'variable_receivables', budget_date: '2026-02-15',
+          payment_date: '2026-03-10', projected_amount: 7000, has_iva: true, variable_rate: 0.2
+        }
+      ]
+    }
+    const model = createCashFlowPivotModel({
+      scenario: scenarioRegular,
+      financingPrincipalLines: [],
+      financingDisbursementLines: [],
+      store: makeStore()
+    })
+    const row = model.variablesPivot.value.rows.find((r) => r.id === 210)
+    expect(row).toBeDefined()
+    // Cobro en SU mes (feb) ⇒ bucket 1 con la tasa de la línea feb:
+    // 0.2 × 1.000.000 = 200.000 — idéntico al A-02 (caso regular).
     expect(row.months[1]).toBe(200000)
-    expect(row.months[2]).toBe(0) // celda del mes m = comisión del mes m
+    expect(row.months[2]).toBe(0)
+    expect(row.total).toBe(200000)
   })
 
   it('modo IVA: la base NO se gross-uppea (neta D-FE14-7); solo el monto derivado ×1.19', () => {
@@ -159,8 +197,26 @@ describe('(a) AC-FE21-10: comisión de feb usa el RECAUDO de feb (cobros), no la
     // Ejecutiva es SIEMPRE neta: base neta × tasa sin gross-up.
     expect(pivot.rows.find((r) => r.id === 210).months[1]).toBe(200000)
     // Flujo con modo ON: el DERIVADO lleva ×1.19, la base sigue neta (sin 1.19²).
+    // A-04: bill FACTURADO en feb (mes con línea concepto) cobrado en su
+    // mes ⇒ el aporte de recaudo cae en feb; el gross-up es del flag de la
+    // línea (elige un caso regular — el original A-04-iza a 0, §13 punto 3).
     const flow = createCashFlowPivotModel({
-      scenario,
+      scenario: {
+        id_budget: 573,
+        budget_year: 2026,
+        budget_lines: [
+          {
+            id_budget_line: 1, id_cost_center: 151, line_type: 'income', behavior_type: 'fixed',
+            budget_date: '2026-02-10', payment_date: '2026-02-25', projected_amount: 1000000,
+            has_iva: true, variable_rate: null
+          },
+          {
+            id_budget_line: 5, id_cost_center: 210, line_type: 'expense',
+            behavior_type: 'variable_receivables', budget_date: '2026-02-15',
+            payment_date: '2026-03-10', projected_amount: 7000, has_iva: true, variable_rate: 0.2
+          }
+        ]
+      },
       financingPrincipalLines: [],
       financingDisbursementLines: [],
       store: makeStore({ ivaMode: true })

@@ -114,7 +114,8 @@ const FLOW_TAB_NOTE =
   'causación), por lo que puede diferir de la “Vista Ejecutiva”; el capital se consulta aparte ' +
   'desde el schedule activo y nunca se incorpora al P&L. Los montos con fecha de pago fuera ' +
   'del año del escenario NO aparecen en las columnas Ene–Dic: active “Mostrar fuera de año” ' +
-  'para verlos; Σ meses + fuera de año = total anual.'
+  'para verlos. La col Total cubre solo los 12 meses del año (Σ meses); los montos ' +
+  'Antes/Después del año se suman en la columna “Total General” (Σ meses + fuera de año).'
 
 /** Etiquetas de los pills (FE-S4B §3.1; FE-S14 suma "Liquidación"). */
 const TAB_LABELS = {

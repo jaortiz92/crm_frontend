@@ -78,45 +78,48 @@ function monthLabelOf(value) {
 
 /**
  * Hoja de matriz CECO×meses de un bloque pivote (Ejecutiva y Flujo comparten
- * forma): filas por CECO + fila "Σ Total"; con la bandera `ooy` y montos
- * fuera de año añade las columnas "Antes/Después de {N}" DESPUÉS del Total,
- * igual que el toggle del Flujo (FE-S8 C-4).
+ * forma): filas por CECO + fila "Σ Total". **ENMIENDA A-05 (spec
+ * `frontend.03_21` §14)**: con la bandera `ooy` y montos fuera de año el
+ * orden es `CECO | Ene…Dic | Antes/Después de {N} | Total | Total General`
+ * (mismo gate de las Antes/Después — BR-FE21-17); sin ooy: `CECO | Ene…Dic |
+ * Total`. `Total` = solo los 12 meses (BR-FE21-16); "Total General" =
+ * meses + Antes + Después (`generalTotal`/`grandGeneralTotal`).
  * @param {string} title título del bloque (→ nombre de hoja)
- * @param {{ rows: Array, columnTotals: number[], grandTotal: number, beforeTotal?: number, afterTotal?: number, beforeAfterRowCount?: number }} pivot
+ * @param {{ rows: Array, columnTotals: number[], grandTotal: number, grandGeneralTotal?: number, beforeTotal?: number, afterTotal?: number, beforeAfterRowCount?: number }} pivot
  * @param {{ scenarioYear?: number|null, ooy?: boolean }} [options]
  */
 function matrixSheet(title, pivot, { scenarioYear = null, ooy = false } = {}) {
   const includeOoy = Boolean(ooy) && pivot.beforeAfterRowCount > 0 && scenarioYear !== null
-  const columns = [
-    { key: 'ceco', label: 'CECO' },
-    ...monthColumns(),
-    { key: 'total', label: 'Total' }
-  ]
+  const columns = [{ key: 'ceco', label: 'CECO' }, ...monthColumns()]
   if (includeOoy) {
     columns.push({ key: 'antes', label: `Antes de ${scenarioYear}` })
     columns.push({ key: 'despues', label: `Después de ${scenarioYear}` })
   }
+  columns.push({ key: 'total', label: 'Total' })
+  if (includeOoy) columns.push({ key: 'totalGeneral', label: 'Total General' })
   const rows = pivot.rows.map((row) => {
     const out = { ceco: row.label }
     row.months.forEach((value, index) => {
       out[`m${index}`] = rawNumber(value)
     })
-    out.total = rawNumber(row.total)
     if (includeOoy) {
       out.antes = rawNumber(row.before)
       out.despues = rawNumber(row.after)
     }
+    out.total = rawNumber(row.total)
+    if (includeOoy) out.totalGeneral = rawNumber(row.generalTotal)
     return out
   })
   const footer = { ceco: 'Σ Total' }
   pivot.columnTotals.forEach((value, index) => {
     footer[`m${index}`] = rawNumber(value)
   })
-  footer.total = rawNumber(pivot.grandTotal)
   if (includeOoy) {
     footer.antes = rawNumber(pivot.beforeTotal)
     footer.despues = rawNumber(pivot.afterTotal)
   }
+  footer.total = rawNumber(pivot.grandTotal)
+  if (includeOoy) footer.totalGeneral = rawNumber(pivot.grandGeneralTotal)
   rows.push(footer)
   return { name: title, columns, rows }
 }
@@ -252,39 +255,50 @@ export function buildExecutiveSheets({ scenario, store }) {
 
 /**
  * Hoja "Resumen de liquidez" (§4.5): Σ Entradas / Σ Salidas / Flujo neto /
- * Flujo acumulado / Bodega estimada, Series fuera-de-año de `ooyColumns` con
+ * Flujo acumulado / Bodega estimada. Series fuera-de-año de `ooyColumns` con
  * la MISMA agregación (`buildOoyBucketSeries`); Flujo acumulado y Bodega
- * llevan `null` en Antes/Después (la corrida solo cubre Ene–Dic de N).
+ * llevan `null` en Antes/Después (la corrida solo cubre Ene–Dic de N) y su
+ * General = Total (§14). **ENMIENDA A-05 (§14)**: orden de columnas
+ * `Ene…Dic | Antes | Después de {N} | Total | Total General` con el MISMO
+ * gate ooy; `Total` = solo 12 meses (BR-FE21-16) y General = el `*GeneralTotal`
+ * del resumen (meses + Antes + Después — BR-FE21-17).
  */
 function resumenSheet(resumen, bodegaMes, ooy, scenarioYear) {
   const includeOoy = Boolean(ooy.any) && scenarioYear !== null
-  const columns = [
-    { key: 'concepto', label: 'Concepto' },
-    ...monthColumns(),
-    { key: 'total', label: 'Total' }
-  ]
+  const columns = [{ key: 'concepto', label: 'Concepto' }, ...monthColumns()]
   if (includeOoy) {
     columns.push({ key: 'antes', label: `Antes de ${scenarioYear}` })
     columns.push({ key: 'despues', label: `Después de ${scenarioYear}` })
   }
+  columns.push({ key: 'total', label: 'Total' })
+  if (includeOoy) columns.push({ key: 'totalGeneral', label: 'Total General' })
   const specs = [
     {
       concepto: 'Σ Entradas',
       months: resumen.entradas,
       total: resumen.entradasTotal,
+      general: resumen.entradasGeneralTotal,
       ooyCells: ooy.entradas
     },
     {
       concepto: 'Σ Salidas',
       months: resumen.salidas,
       total: resumen.salidasTotal,
+      general: resumen.salidasGeneralTotal,
       ooyCells: ooy.salidas
     },
-    { concepto: 'Flujo neto', months: resumen.neto, total: resumen.netoTotal, ooyCells: ooy.neto },
+    {
+      concepto: 'Flujo neto',
+      months: resumen.neto,
+      total: resumen.netoTotal,
+      general: resumen.netoGeneralTotal,
+      ooyCells: ooy.neto
+    },
     {
       concepto: 'Flujo acumulado',
       months: resumen.acumulado,
       total: resumen.acumuladoTotal,
+      general: resumen.acumuladoTotal,
       ooyCells: [null, null]
     },
     // FE-S9 §2.6: fila INFORMATIVA (no entra en entradas/salidas/neto).
@@ -292,6 +306,7 @@ function resumenSheet(resumen, bodegaMes, ooy, scenarioYear) {
       concepto: 'Bodega estimada (cierre)',
       months: bodegaMes,
       total: bodegaMes[11],
+      general: bodegaMes[11],
       ooyCells: [null, null]
     }
   ]
@@ -300,11 +315,12 @@ function resumenSheet(resumen, bodegaMes, ooy, scenarioYear) {
     spec.months.forEach((value, index) => {
       row[`m${index}`] = rawNumber(value)
     })
-    row.total = rawNumber(spec.total)
     if (includeOoy) {
       row.antes = rawNumber(spec.ooyCells[0])
       row.despues = rawNumber(spec.ooyCells[1])
     }
+    row.total = rawNumber(spec.total)
+    if (includeOoy) row.totalGeneral = rawNumber(spec.general)
     return row
   })
   return { name: 'Resumen de liquidez', columns, rows }
@@ -368,7 +384,9 @@ export function buildFlowSheets({
     internment: model.internmentPaymentsPivot.value,
     principal: model.financingPrincipalPivot.value,
     liquidation: model.settlementPaymentsPivot.value,
-    taxFlow: model.taxPaymentsPivot.value
+    taxFlow: model.taxPaymentsPivot.value,
+    // ENMIENDA A-03 (frontend.03_21 §12): buckets reales del bloque variable.
+    variables: model.variablesPivot.value
   })
   const hasLines =
     model.lines.value.length > 0 ||
@@ -404,7 +422,9 @@ export function buildFlowSheets({
     {
       title: 'Salidas — Gastos variables (calculados)',
       pivot: model.variablesPivot.value,
-      ooy: false
+      // ENMIENDA A-03 (frontend.03_21 §12): buckets reales ⇒ hereda Antes/
+      // Después en la hoja por `matrixSheet(ooy)` (AC-FE21-16).
+      ooy: true
     },
     { title: 'Pago de liquidación de IVA', pivot: model.settlementPaymentsPivot.value, ooy: true },
     {

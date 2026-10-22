@@ -333,8 +333,11 @@ export function entradasCausacionByCeco(lines, scenarioYear = null) {
     // ene-N+1 alimenta el presupuesto N+1 (el backend filtra
     // year(coalesce) == budget_year).
     const pays = String(line.payment_date || line.budget_date || '')
-    if (scenarioYear != null && Number.isFinite(Number(scenarioYear)) &&
-      Number(pays.slice(0, 4)) !== Number(scenarioYear)) {
+    if (
+      scenarioYear != null &&
+      Number.isFinite(Number(scenarioYear)) &&
+      Number(pays.slice(0, 4)) !== Number(scenarioYear)
+    ) {
       continue
     }
     const key = line.id_cost_center
@@ -379,6 +382,314 @@ export function entradasCausacionByVariableCeco(lines, costCenters, scenarioYear
     const base = resolveVariableBaseCeco(ceco, entradasByCeco.keys(), costCenters)
     if (base === null) continue
     out.set(ceco, entradasByCeco.get(base))
+  }
+  return out
+}
+
+/**
+ * ENMIENDA A-04 (spec `frontend.03_21` §13, 2026-10-21) — NOTA del criterio
+ * "CAJA" del bloque variable en la Vista Flujo: la comisión de
+ * `variable_receivables` se posiciona en el BUCKET donde entra el COBRO que
+ * la genera (Antes / Mes del año / Después), usando la tasa de la línea
+ * concepto del MES DE FACTURACIÓN del cobro. La Ejecutiva sigue devengo
+ * (divergencia por diseño — §13). Solo presentación; no toca cifras del P&G.
+ */
+export const VARIABLE_COLLECTION_DISTRIBUTION_NOTE =
+  'Criterio de caja (A-04): la comisión por recaudo se muestra en el MES en ' +
+  'que entra el COBRO que la genera. Antes = cobros del año anterior a N; ' +
+  'Después = cobros posteriores (p. ej. facturación de nov/dic cobrada en ' +
+  'N+1). Los cobros de un mes facturado SIN línea de tasa no generan ' +
+  'comisión (sin respaldo). La Vista Ejecutiva mantiene el devengo por ' +
+  'línea: sus montos difieren por diseño (frontend.03_21 §13).'
+
+/* ─── ENMIENDA A-03 (spec frontend.03_21 §12): buckets fuera de año extendidos ─── */
+
+/**
+ * ENMIENDA A-03 (2026-10-21) — Bucket extendido de una fecha efectiva:
+ *  -1 = año < N (Antes) · 0..11 = MES del año N · 12 = año > N (Después) ·
+ *  -99 = fecha ILEGIBLE (el llamador decide la degradación).
+ * Réplica del AÑO de `outOfYearBucketOf` (cashFlowPivot.js — NO se importa:
+ * ese módulo importa planningFormat, un import inverso crearía ciclo) y del
+ * MES de `monthIndexOf`: año/mes extraídos del string ISO por regex (NUNCA
+ * comparación de `Date` para el bucket — corrimiento UTC).
+ *
+ * Con `scenarioYear` no entero (p. ej. null): misma degradación del resto de
+ * los pivotes — `outOfYearBucketOf` devuelve 0 y la fecha entra a su mes si
+ * es legible; aquí eso es dev `0..11` directo.
+ * @param {string|null|undefined} dateISO fecha cruda (`budget_date`, `payment_date`, …)
+ * @param {number|null|undefined} scenarioYear año N del escenario
+ * @returns {-1|0|1|2|3|4|5|6|7|8|9|10|11|12|-99}
+ */
+export function monthBucketIndexOf(dateISO, scenarioYear) {
+  if (!dateISO) return -99
+  let year = null
+  let month = null
+  const plain = String(dateISO).match(/^(\d{4})-(\d{2})/)
+  if (plain) {
+    year = Number(plain[1])
+    month = Number(plain[2])
+  } else {
+    const date = new Date(dateISO)
+    if (!Number.isNaN(date.getTime())) {
+      year = date.getFullYear()
+      month = date.getMonth() + 1
+    }
+  }
+  if (year === null || month === null) return -99
+  if (!Number.isFinite(year) || !Number.isInteger(month) || month < 1 || month > 12) return -99
+  // scenarioYear null/no entero ⇒ degradación del resto de los pivotes
+  // (outOfYearBucketOf ⇒ 0: la fecha entra a su mes si es legible).
+  const yearN = Number(scenarioYear)
+  if (scenarioYear === null || !Number.isInteger(yearN)) return month - 1
+  if (year < yearN) return -1
+  if (year > yearN) return 12
+  return month - 1
+}
+
+/** Shape de buckets extendidos (A-03), zeroed. Interno. */
+function emptyBuckets() {
+  return { before: 0, months: Array.from({ length: 12 }, () => 0), after: 0 }
+}
+
+/**
+ * ENMIENDA A-03 — Serie de "Σ ingresos fijos por MES DE CAUSACIÓN"
+ * (`budget_date`) con BUCKETS extendidos: `Map<id_cost_center, { before,
+ * months[12], after }>`. Misma regla de `fixedIncomeCausationByCeco`
+ * (A-01/A-02: importes crudos NETOS, income + fixed) con el bucket de
+ * `monthBucketIndexOf`: facturación/cobro de año < N ⇒ `before`; año > N ⇒
+ * `after`; del año ⇒ índice 0..11; ilegible ⇒ excluida (BR-FE21-02).
+ * @param {Array<object>|null|undefined} lines `budget_lines` crudas
+ * @param {number|null|undefined} scenarioYear año N del escenario
+ * @returns {Map<number|string, { before: number, months: number[], after: number }>}
+ */
+export function fixedIncomeBucketByCeco(lines, scenarioYear) {
+  const byCeco = new Map()
+  if (!Array.isArray(lines)) return byCeco
+  for (const line of lines) {
+    if (line?.line_type !== 'income' || line?.behavior_type !== 'fixed') continue
+    const amount = Number(line.projected_amount)
+    if (!Number.isFinite(amount)) continue
+    const bucket = monthBucketIndexOf(line.budget_date, scenarioYear)
+    if (bucket === -99) continue
+    const key = line.id_cost_center
+    if (!byCeco.has(key)) byCeco.set(key, emptyBuckets())
+    const buckets = byCeco.get(key)
+    if (bucket === -1) buckets.before += amount
+    else if (bucket === 12) buckets.after += amount
+    else buckets.months[bucket] += amount
+  }
+  return byCeco
+}
+
+/**
+ * ENMIENDA A-03 — Serie de ENTRADAS del Flujo por MES DE COBRO
+ * (`cfMonthOf`) con BUCKETS extendidos y SIN el filtro de año de
+ * `entradasCausacionByCeco`: aquí el bucket ES el filtro (cobros de 2025 ⇒
+ * `before`; de 2027 ⇒ `after`; cobros de dic-N vencidos en ene-N+1 ⇒
+ * `after`; el resto al mes del año). Misma lectura NETA (D-FE14-7):
+ * `projected_amount` crudo de `income` + `fixed`. Fecha de cobro ilegible ⇒
+ * excluida.
+ * @param {Array<object>|null|undefined} lines `budget_lines` crudas
+ * @param {number|null|undefined} scenarioYear año N del escenario
+ * @returns {Map<number|string, { before: number, months: number[], after: number }>}
+ */
+export function entradasBucketByCeco(lines, scenarioYear) {
+  const byCeco = new Map()
+  if (!Array.isArray(lines)) return byCeco
+  for (const line of lines) {
+    if (line?.line_type !== 'income' || line?.behavior_type !== 'fixed') continue
+    const amount = Number(line.projected_amount)
+    if (!Number.isFinite(amount)) continue
+    // A-03: la resolución del bucket ES el filtro de año (sin `continue` de
+    // year(payment) !== N — cf. `entradasCausacionByCeco` A-02).
+    const bucket = monthBucketIndexOf(line?.payment_date || line?.budget_date, scenarioYear)
+    if (bucket === -99) continue
+    const key = line.id_cost_center
+    if (!byCeco.has(key)) byCeco.set(key, emptyBuckets())
+    const buckets = byCeco.get(key)
+    if (bucket === -1) buckets.before += amount
+    else if (bucket === 12) buckets.after += amount
+    else buckets.months[bucket] += amount
+  }
+  return byCeco
+}
+
+/**
+ * ENMIENDA A-03 — Base de FACTURACIÓN por buckets KEYED POR EL CECO DE GASTO
+ * VARIABLE: mismo patrón de `fixedIncomeCausationByVariableCeco` (resolución
+ * A-01: propio CECO primero, luego única (id_zone, id_line), sin fallback; 0
+ * o múltiples candidatos ⇒ sin fila ⇒ degradación a 0 en el llamador) sobre
+ * `fixedIncomeBucketByCeco`. Shape `{ before, months[12], after }` copiado.
+ * @param {Array<object>|null|undefined} lines
+ * @param {Array<object>|null|undefined} costCenters catálogo del store
+ * @param {number|null|undefined} scenarioYear año N del escenario
+ * @returns {Map<number|string, { before: number, months: number[], after: number }>}
+ */
+export function fixedIncomeBucketByVariableCeco(lines, costCenters, scenarioYear) {
+  const out = new Map()
+  const allLines = Array.isArray(lines) ? lines : []
+  const bucketsByCeco = fixedIncomeBucketByCeco(allLines, scenarioYear)
+  const variableCecos = new Set()
+  for (const line of allLines) {
+    if (line?.line_type === 'expense' && line?.behavior_type !== 'fixed') {
+      variableCecos.add(line.id_cost_center)
+    }
+  }
+  for (const ceco of variableCecos) {
+    const base = resolveVariableBaseCeco(ceco, bucketsByCeco.keys(), costCenters)
+    if (base === null) continue
+    out.set(ceco, bucketsByCeco.get(base))
+  }
+  return out
+}
+
+/**
+ * ENMIENDA A-03 — Base de RECAUDO por buckets KEYED POR EL CECO DE GASTO
+ * VARIABLE: mismo patrón de `entradasCausacionByVariableCeco` (resolución
+ * A-01 intacta) sobre `entradasBucketByCeco` — buckets extendidos por MES DE
+ * PAGO, NETA sin gross-up (D-FE14-7), SIN filtro de año (el bucket filtra).
+ * @param {Array<object>|null|undefined} lines
+ * @param {Array<object>|null|undefined} costCenters catálogo del store
+ * @param {number|null|undefined} scenarioYear año N del escenario
+ * @returns {Map<number|string, { before: number, months: number[], after: number }>}
+ */
+export function entradasBucketByVariableCeco(lines, costCenters, scenarioYear) {
+  const out = new Map()
+  const allLines = Array.isArray(lines) ? lines : []
+  const bucketsByCeco = entradasBucketByCeco(allLines, scenarioYear)
+  const variableCecos = new Set()
+  for (const line of allLines) {
+    if (line?.line_type === 'expense' && line?.behavior_type !== 'fixed') {
+      variableCecos.add(line.id_cost_center)
+    }
+  }
+  for (const ceco of variableCecos) {
+    const base = resolveVariableBaseCeco(ceco, bucketsByCeco.keys(), costCenters)
+    if (base === null) continue
+    out.set(ceco, bucketsByCeco.get(base))
+  }
+  return out
+}
+
+/* ─── ENMIENDA A-04 (spec frontend.03_21 §13): la comisión de recaudo sigue AL COBRO ─── */
+
+/**
+ * ENMIENDA A-04 (2026-10-21) — Distribución de COBRO de la comisión por
+ * recaudo: para cada LÍNEA `variable_receivables` `v` (key = `id_budget_line`)
+ * devuelve los buckets extendidos `{ before, months[12], after, unplaced }`
+ * donde entra la comisión que sus cobros generan:
+ *
+ *  1. El concepto `v` fija la TASA de las ventas FACTURADAS en el mes `m`
+ *     (`monthIndexOf(v.budget_date)`) del CECO GENERADOR RESUELTO (A-01:
+ *     propio CECO primero, única (id_zone, id_line), SIN fallback).
+ *  2. Para cada LÍNEA DE INGRESO `k` del generador cuya FACTURACIÓN cae en el
+ *     mes `m` — month match por MES (1–12), SIN filtro de año de facturación:
+ *     un bill facturado en dic del año N y cobrado en N+1 usa el rate de la
+ *     línea dic-N y cae en `after` — v aporta `rate_v × projected_amount(k)`
+ *     al bucket `monthBucketIndexOf(cobro de k, scenarioYear)` (-1 Antes,
+ *     0..11, 12 Después).
+ *  3. Mes de FACTURACIÓN sin línea concepto ⇒ la comisión de esos cobros es 0
+ *     (rate ausente ⇒ 0) — SIN fallback (A-04 §13 punto 3).
+ *  4. Cobro con fecha ILEGIBLE (bucket −99) ⇒ su contribución (con el rate de
+ *     SU mes de facturación si lo tiene) se OMITE de las celdas y se contabiliza
+ *     en `unplaced` (telemetría invisible: la hoja nunca lo muestra).
+ *
+ *  - IMPORTES NETOS: `projected_amount` crudo (D-FE14-7 — misma lectura NETA
+ *    de A-02; el gross-up del DERIVADO lo aplica el pivote por línea).
+ *  - Bills con mes de facturación ILEGIBLE ⇒ no pueden casar con ninguna
+ *    línea concepto ⇒ aporte 0 (no entran ni al `unplaced`).
+ *  - Varias líneas concepto del MISMO CECO+mes acumulan (Σ de contribuciones
+ *    por línea — punto 2 de la fórmula).
+ *  - Deuda documentada: facturaciones del año N−1 COBRADAS dentro de N sí
+ *    casan por mes (12) con el rate de la línea dic-N — mismo criterio que
+ *    los cobros "Antes" reales del escenario 573.
+ *
+ * Consumidores: `buildVariableFlowPivot` (cashFlowPivot.js, 7º parámetro) —
+ * las líneas `variable_receivables` del Flujo consumen SU entrada idéntica
+ * (gross-up ×1.19 según flag efectivo, D-FE14). Ejecutiva y drill-down NO
+ * consumen este map (devengo intacto — A-02, divergencia por diseño).
+ * @param {Array<object>|null|undefined} varReceivablesLines líneas
+ *   `expense` + `variable_receivables` del escenario
+ * @param {Array<object>|null|undefined} incomeLines líneas de ingreso fijas
+ *   (`income` + `fixed`: la facturación generadora)
+ * @param {Array<object>|null|undefined} costCenters catálogo del store
+ * @param {number|null|undefined} scenarioYear año N del escenario
+ * @returns {Map<number, { before: number, months: number[], after: number, unplaced: number }>}
+ *   key = `id_budget_line` de la línea variable
+ */
+export function variableCollectionDistribution(
+  varReceivablesLines,
+  incomeLines,
+  costCenters,
+  scenarioYear
+) {
+  const out = new Map()
+  const concepts = (Array.isArray(varReceivablesLines) ? varReceivablesLines : [])
+    .filter(
+      (line) =>
+        line && line.line_type === 'expense' && line.behavior_type === 'variable_receivables'
+    )
+    .sort((a, b) => Number(a?.id_budget_line ?? 0) - Number(b?.id_budget_line ?? 0))
+  const bills = Array.isArray(incomeLines) ? incomeLines : []
+  if (!concepts.length) return out
+
+  // Índice por (CECO, MES de facturación 0..11) de los importes NETOS con su
+  // bucket DE COBRO — una sola pasada sobre la facturación.
+  const billsByCecoMonth = new Map()
+  for (const bill of bills) {
+    if (bill?.line_type !== 'income' || bill?.behavior_type !== 'fixed') continue
+    const amount = Number(bill.projected_amount)
+    if (!Number.isFinite(amount)) continue
+    const key = bill.id_cost_center
+    if (!billsByCecoMonth.has(key)) billsByCecoMonth.set(key, new Map())
+    const cecoBills = billsByCecoMonth.get(key)
+    const billingMonth = monthIndexOf(bill.budget_date)
+    if (billingMonth < 0) continue // facturación ilegible ⇒ nunca casa con un concepto
+    if (!cecoBills.has(billingMonth))
+      cecoBills.set(billingMonth, {
+        before: 0,
+        months: Array.from({ length: 12 }, () => 0),
+        after: 0,
+        unplaced: 0
+      })
+    const buckets = cecoBills.get(billingMonth)
+    // Bucket por el MES DE COBRO efectivo (mismo criterio de
+    // `entradasBucketByCeco`, A-03: sin filtro de año — el bucket ES el filtro).
+    const bucket = monthBucketIndexOf(bill?.payment_date || bill?.budget_date, scenarioYear)
+    if (bucket === -1) buckets.before += amount
+    else if (bucket === 12) buckets.after += amount
+    else if (bucket === 0 || (bucket >= 0 && bucket <= 11)) buckets.months[bucket] += amount
+    else buckets.unplaced += amount // −99: cobro ilegible ⇒ omitido (telemetría)
+  }
+
+  for (const line of concepts) {
+    const resolved = resolveVariableBaseCeco(
+      line.id_cost_center,
+      billsByCecoMonth.keys(),
+      costCenters
+    )
+    if (resolved === null) continue
+    const billingMonth = monthIndexOf(line.budget_date)
+    if (billingMonth < 0) continue // concepto sin mes legible ⇒ no fija rate para ningún mes
+    const rate = Number(line.variable_rate)
+    if (!Number.isFinite(rate) || rate === 0) continue // rate ausente ⇒ 0 (sin fallback)
+    const cecoBills = billsByCecoMonth.get(resolved)
+    const bucketSplit = cecoBills ? cecoBills.get(billingMonth) : null
+    if (!bucketSplit) continue // mes facturado sin cobros … aporte 0 (nada que distribuir)
+    if (!out.has(line.id_budget_line))
+      out.set(line.id_budget_line, {
+        before: 0,
+        months: Array.from({ length: 12 }, () => 0),
+        after: 0,
+        unplaced: 0
+      })
+    const outBuckets = out.get(line.id_budget_line)
+    outBuckets.before += rate * bucketSplit.before
+    for (let month = 0; month < 12; month += 1) {
+      outBuckets.months[month] += rate * bucketSplit.months[month]
+    }
+    outBuckets.after += rate * bucketSplit.after
+    outBuckets.unplaced += rate * bucketSplit.unplaced
   }
   return out
 }

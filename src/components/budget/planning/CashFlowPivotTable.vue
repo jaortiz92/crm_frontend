@@ -66,8 +66,17 @@
  *    extra "Antes/Después de {N}". Con OFF el chip `⊘ {k} filas con montos
  *    fuera de año` es la señal obligatoria de que falta plata en los meses;
  *    con ON el pie "Σ meses + fuera de año = total anual" reconcilia exacto
- *    (Q4=4 — nunca mentirle al banquero). `row.total`/`grandTotal`/buckets
- *    conservan su semántica anual todo-inclusive (FR-3).
+ *    (Q4=4 — nunca mentirle al banquero).
+ *    **ENMIENDA A-05** (spec `frontend.03_21` §14, 2026-10-21):
+ *    `row.total`/`grandTotal` = solo la Σ de los 12 meses (BR-FE21-16); el
+ *    todo-inclusive pasa a `row.generalTotal`/`grandGeneralTotal` y se pinta
+ *    como columna "Total General" DESPUÉS de `Después de {N}` (orden
+ *    `Ene…Dic | Antes | Después | Total | Total General`), con el gate de las
+ *    Antes/Después + `beforeAfterRowCount > 0` (BR-FE21-17/19). Los archivos
+ *    exportables (`planningExportSheets.js`) usan el MISMO gate y orden.
+ *    Las columnas ooy ahora van ANTES del Total (`extrasBeforeTotal`)
+ *    y — cuando la tabla tiene la col General — AMBAS quedan pinned right
+ *    (`pt-cell-total-inner` = offset de la General, §14.7 2026-10-21).
  *    Las columnas van en los dos pivotes propios construidos con
  *    `buildPivot` (Entradas y Salidas fijos); el bloque variable deriva de
  *    causaciones dentro de N (sus fechas `budget_date` son ∈ N por
@@ -598,8 +607,10 @@ const blocks = computed(() => {
       pivot: variablesPivot.value,
       aria: 'Salidas de gastos variables calculados por centro de costo y mes según fecha de causación',
       note: VARIABLE_PIVOT_NOTE,
-      // Estimados por causación ∈ N: before/after ≡ 0 ⇒ sin columnas §6.2.
-      ooy: false
+      // ENMIENDA A-03 (spec frontend.03_21 §12): el pivote ya produce
+      // buckets reales (Antes/Después de la causación de la línea vs año N)
+      // ⇒ mismas columnas ooy que el resto de bloques (AC-FE21-12/13/14).
+      ooy: true
     })
   }
   // FE-S14-IVA D-FE14-4: bloque NUEVO alimentado por `settlementCache` — los
@@ -734,7 +745,9 @@ const ooySeries = computed(() =>
     internment: internmentPaymentsPivot.value,
     principal: financingPrincipalPivot.value,
     liquidation: settlementPaymentsPivot.value,
-    taxFlow: taxPaymentsPivot.value
+    taxFlow: taxPaymentsPivot.value,
+    // ENMIENDA A-03 (frontend.03_21 §12): buckets reales del bloque variable.
+    variables: variablesPivot.value
   })
 )
 
@@ -752,6 +765,33 @@ const ooyColumns = computed(() => ({
   salidas: ooySeries.value.salidas,
   neto: ooySeries.value.neto
 }))
+
+/* ─────────── ENMIENDA A-05 (spec frontend.03_21 §14): "Total General" ───────────
+ * `Total` = SOLO la Σ de los 12 meses (BR-FE21-16, los builders ya separaron
+ * `grandTotal`/`generalTotal`); la col "Total General" (12 meses + Antes +
+ * Después, BR-FE21-17) SOLO se renderiza cuando la tabla EN SERIO tiene
+ * before/after (BR-FE21-19), reordenando las cols a
+ * `Ene…Dic | Antes | Después | Total | Total General`. */
+const GENERAL_COLUMN = Object.freeze({
+  label: 'Total General',
+  title:
+    'Σ de los 12 meses + Antes + Después de {N} (todo-inclusive). La col Total cubre solo los 12 meses del año.'
+})
+
+/** Columna General del Resumen: mismo gate que sus columnas Antes/Después. */
+const resumenGeneralColumn = computed(() => (ooyColumns.value.visible ? GENERAL_COLUMN : null))
+
+/**
+ * Gate por bloque (BR-FE21-17): mismo lenguaje del toggle (`block.ooy &&
+ * showOutOfYear`) + la prueba de que el bloque tiene montos ooy reales.
+ * @param {{ ooy: boolean, pivot: object }} block
+ * @returns {object|null}
+ */
+function blockGeneralColumn(block) {
+  return block.ooy && showOutOfYear.value && block.pivot.beforeAfterRowCount > 0
+    ? GENERAL_COLUMN
+    : null
+}
 
 /* El resumen de liquidez (D-6, §4.5 — agregación de TODOS los bloques con
  * neto/acumulado y totales) y la fila "Bodega estimada" (§2.6: compras por
@@ -847,9 +887,16 @@ const resumenRows = computed(() => {
       months: r.entradas,
       totalText: fitMoney(r.entradasTotal),
       negativeTotal: false,
+      // A-05: lado General (meses + Antes + Después) — mismo gate que las
+      // columnas ooy de esta tabla (`resumenGeneralColumn`).
+      generalText: fitMoney(r.entradasGeneralTotal),
+      generalNegative: false,
       signed: false,
       strong: false,
-      totalTitle: totalTitleText(r.entradasTotal),
+      totalTitle: totalTitleText(
+        r.entradasTotal,
+        'Σ de los 12 meses del año. Los montos Antes/Después del año van en el Total General.'
+      ),
       ooy: unsignedCells(ooy.entradas)
     },
     {
@@ -857,9 +904,14 @@ const resumenRows = computed(() => {
       months: r.salidas,
       totalText: fitMoney(r.salidasTotal),
       negativeTotal: false,
+      generalText: fitMoney(r.salidasGeneralTotal),
+      generalNegative: false,
       signed: false,
       strong: false,
-      totalTitle: totalTitleText(r.salidasTotal),
+      totalTitle: totalTitleText(
+        r.salidasTotal,
+        'Σ de los 12 meses del año. Los montos Antes/Después del año van en el Total General.'
+      ),
       ooy: unsignedCells(ooy.salidas)
     },
     {
@@ -867,11 +919,13 @@ const resumenRows = computed(() => {
       months: r.neto,
       totalText: resumenCell(r.netoTotal),
       negativeTotal: r.netoTotal < 0,
+      generalText: resumenCell(r.netoGeneralTotal),
+      generalNegative: r.netoGeneralTotal < 0,
       signed: true,
       strong: true,
       totalTitle: totalTitleText(
         r.netoTotal,
-        'Flujo neto anual: Σ entradas − Σ salidas. Incluye los montos con fecha de pago fuera del año.'
+        'Flujo neto anual: Σ entradas − Σ salidas del año. Montos fuera de año: ver el Total General.'
       ),
       ooy: signedCells(ooy.neto)
     },
@@ -880,6 +934,9 @@ const resumenRows = computed(() => {
       months: r.acumulado,
       totalText: resumenCell(r.acumuladoTotal),
       negativeTotal: r.acumuladoTotal < 0,
+      // A-05: su cubeta ooy es '—' (corrida solo Ene–Dic) ⇒ General = Total.
+      generalText: resumenCell(r.acumuladoTotal),
+      generalNegative: r.acumuladoTotal < 0,
       signed: true,
       strong: true,
       totalTitle: totalTitleText(
@@ -899,6 +956,9 @@ const resumenRows = computed(() => {
       months: bodegaMes.value,
       totalText: resumenCell(bodegaMes.value[11]),
       negativeTotal: bodegaMes.value[11] < 0,
+      // A-05: cubetas ooy '—' ⇒ General = Total.
+      generalText: resumenCell(bodegaMes.value[11]),
+      generalNegative: bodegaMes.value[11] < 0,
       signed: false,
       strong: false,
       bodega: true,
@@ -1019,6 +1079,8 @@ const carryBlockNote = computed(() => {
           :month-labels="MONTH_LABELS"
           aria-label="Resumen de liquidez mensual del escenario: entradas, salidas, flujo neto y flujo acumulado"
           :extra-columns="ooyColumns.visible ? ooyExtras : []"
+          extras-before-total
+          :general-column="resumenGeneralColumn"
         >
           <tr v-for="row in resumenRows" :key="row.label" :class="{ 'pt-row-strong': row.strong }">
             <th class="pt-row-label" scope="row" :title="row.labelTitle">
@@ -1036,18 +1098,8 @@ const carryBlockNote = computed(() => {
             >
               {{ resumenCell(value) }}
             </td>
-            <td
-              class="pt-cell-money pt-cell-total"
-              :class="{
-                'pt-negative': row.negativeTotal && !row.bodega,
-                'cf-bodega-negative': row.bodega && row.negativeTotal
-              }"
-              :title="row.totalTitle"
-            >
-              {{ row.totalText }}
-            </td>
-            <!-- FE-S8 C-4: buckets [Antes, Después] de cada fila
-                 (acumulado: `—` con `title`, §FR-4). -->
+            <!-- A-05: Antes/Después ANTES de la col Total; cubetas [Antes,
+                 Después] de cada fila (acumulado: `—` con `title`, §FR-4). -->
             <template v-if="ooyColumns.visible">
               <td
                 v-for="(cell, index) in row.ooy"
@@ -1059,6 +1111,32 @@ const carryBlockNote = computed(() => {
                 {{ cell.text }}
               </td>
             </template>
+            <td
+              :class="[
+                'pt-cell-money pt-cell-total',
+                {
+                  'pt-cell-total-inner': Boolean(resumenGeneralColumn),
+                  'pt-negative': row.negativeTotal && !row.bodega,
+                  'cf-bodega-negative': row.bodega && row.negativeTotal
+                }
+              ]"
+              :title="row.totalTitle"
+            >
+              {{ row.totalText }}
+            </td>
+            <!-- A-05: "Total General" (mismas clases sticky que Total — hereda
+                 right 0; la Total interna ancla a su izquierda (14.7 2026-10-21). -->
+            <td
+              v-if="resumenGeneralColumn"
+              class="pt-cell-money pt-cell-total pt-cell-total-general"
+              :class="{
+                'pt-negative': row.generalNegative && !row.bodega,
+                'cf-bodega-negative': row.bodega && row.generalNegative
+              }"
+              :title="resumenGeneralColumn.title"
+            >
+              {{ row.generalText }}
+            </td>
           </tr>
         </PivotMonthTable>
         <!-- FE-S9 §2.6: nota bajo la tabla SOLO si algún mes de bodega < 0
@@ -1118,6 +1196,8 @@ const carryBlockNote = computed(() => {
           :month-labels="MONTH_LABELS"
           :aria-label="block.aria"
           :extra-columns="block.ooy && showOutOfYear ? ooyExtras : []"
+          extras-before-total
+          :general-column="blockGeneralColumn(block)"
         >
           <tr v-for="row in block.pivot.rows" :key="row.id">
             <th class="pt-row-label" scope="row" :title="row.label">
@@ -1143,9 +1223,7 @@ const carryBlockNote = computed(() => {
             >
               {{ value === 0 ? '·' : fitMoney(value) }}
             </td>
-            <td class="pt-cell-money pt-cell-total" :title="cellTitle(row.total)">
-              {{ fitMoney(row.total) }}
-            </td>
+            <!-- A-05: Antes/Después ANTES de la col Total (orden vigente §14). -->
             <template v-if="showOutOfYear && block.ooy">
               <td class="pt-cell-money cf-cell-ooy" :title="cellTitle(row.before)">
                 {{ row.before === 0 ? '·' : fitMoney(row.before) }}
@@ -1154,6 +1232,26 @@ const carryBlockNote = computed(() => {
                 {{ row.after === 0 ? '·' : fitMoney(row.after) }}
               </td>
             </template>
+            <!-- A-05 (BR-FE21-16): Total = solo los 12 meses; con Total
+                 General pinned (§14.7 2026-10-21, pt-cell-total-inner). -->
+            <td
+              :class="[
+                'pt-cell-money pt-cell-total',
+                { 'pt-cell-total-inner': Boolean(blockGeneralColumn(block)) }
+              ]"
+              :title="cellTitle(row.total)"
+            >
+              {{ fitMoney(row.total) }}
+            </td>
+            <!-- A-05 (BR-FE21-17): Total General = row.generalTotal (meses +
+                 Antes + Después); pinned right 0 (14.7 2026-10-21). -->
+            <td
+              v-if="blockGeneralColumn(block)"
+              class="pt-cell-money pt-cell-total"
+              :title="cellTitle(row.generalTotal)"
+            >
+              {{ fitMoney(row.generalTotal) }}
+            </td>
           </tr>
           <template #tfoot>
             <tr>
@@ -1166,9 +1264,6 @@ const carryBlockNote = computed(() => {
               >
                 {{ value === 0 ? '·' : fitMoney(value) }}
               </td>
-              <td class="pt-cell-money pt-cell-total" :title="cellTitle(block.pivot.grandTotal)">
-                {{ fitMoney(block.pivot.grandTotal) }}
-              </td>
               <template v-if="showOutOfYear && block.ooy">
                 <td class="pt-cell-money cf-cell-ooy" :title="cellTitle(block.pivot.beforeTotal)">
                   {{ block.pivot.beforeTotal === 0 ? '·' : fitMoney(block.pivot.beforeTotal) }}
@@ -1177,6 +1272,22 @@ const carryBlockNote = computed(() => {
                   {{ block.pivot.afterTotal === 0 ? '·' : fitMoney(block.pivot.afterTotal) }}
                 </td>
               </template>
+              <td
+                :class="[
+                  'pt-cell-money pt-cell-total',
+                  { 'pt-cell-total-inner': Boolean(blockGeneralColumn(block)) }
+                ]"
+                :title="cellTitle(block.pivot.grandTotal)"
+              >
+                {{ fitMoney(block.pivot.grandTotal) }}
+              </td>
+              <td
+                v-if="blockGeneralColumn(block)"
+                class="pt-cell-money pt-cell-total"
+                :title="cellTitle(block.pivot.grandGeneralTotal)"
+              >
+                {{ fitMoney(block.pivot.grandGeneralTotal) }}
+              </td>
             </tr>
           </template>
         </PivotMonthTable>
@@ -1187,7 +1298,7 @@ const carryBlockNote = computed(() => {
              Antes/Después; solo suman al Total anual del bloque. -->
         <p v-if="block.pivot && block.pivot.undatedTotal > 0" class="cf-warn" role="status">
           El bloque incluye {{ formatMoneyPlain(block.pivot.undatedTotal) }} con fecha ilegible: no
-          aparece en ningún mes ni en las columnas Antes/Después; solo suma al Total anual.
+          aparece en ningún mes ni en las columnas Antes/Después; solo suma al Total General.
         </p>
         <!-- FE-S18 RF-4.3: los pies por bloque — «Σ meses + fuera de año = total
              anual» (ON) y «El total anual incluye N filas fuera de año» (OFF) —

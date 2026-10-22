@@ -13,9 +13,16 @@
  *    cuadrícula AC-1/AC-2: 230 + 12×106 + 116).
  *  - RF-1.4: col Total = 116px.
  *  - RF-1.5 (opcional, Vista Flujo): columnas extra "Antes/Después de {año}"
- *    vía prop `extraColumns` — se renderizan DESPUÉS de la col Total (mismo
- *    orden del thead vigente del Flujo), heredan 106px y engrosan el
- *    `min-width` por defecto (override con prop `min-width`).
+ *    vía prop `extraColumns` — se renderizan DESPUÉS de la col Total
+ *    (comportamiento heredado) y, con `extrasBeforeTotal`, ANTES de ella
+ *    (ENMIENDA A-05 de la Vista Flujo: `Ene…Dic | Antes | Después | Total`).
+ *  - ENMIENDA A-05 (spec `frontend.03_21` §14, prop `generalColumn`): cuando
+ *    la tabla "en serio" tiene Antes/Después, la Vista Flujo pasa
+ *    `{ label, title }` ⇒ se añade una ÚLTIMA col "Total General" (116px,
+ *    pinned right). 2026-10-21 (§14.7): AMBAS columnas de totales quedan
+ *    pinned right — la Total interna ancla en el offset de la General
+ *    (`right: var(--pt-total-general-w)`), así su header/celdas NO se
+ *    desplazan con el scroll (bug reportado: el header Total se iba).
  *  - RF-5/estado actual: thead sticky top, col rótulo sticky left, tfoot
  *    sticky bottom (esquinas z-index 5), sobre el wrapper `overflow: auto`
  *    (max-height: 60vh) que antes vivía por tabla.
@@ -58,6 +65,13 @@ const props = defineProps({
    * ("Antes/Después de {año}"), `[{ label, title }]`; heredan 106px.
    */
   extraColumns: { type: Array, default: () => [] },
+  /** RF-1.5: renderiza las columnas extra ANTES de la col Total (A-05). */
+  extrasBeforeTotal: { type: Boolean, default: false },
+  /**
+   * A-05: `{ label, title }` de la col "Total General" (12 meses + Antes +
+   * Después); `null` ⇒ sin columna (mismo DOM heredado — BR-FE21-19).
+   */
+  generalColumn: { type: Object, default: null },
   /** RF-1.5: override del min-width de la tabla (0 ⇒ derivado del colgroup). */
   minWidth: { type: [Number, String], default: 0 }
 })
@@ -72,36 +86,87 @@ const resolvedMinWidth = computed(() => {
   return (
     COL_LABEL_WIDTH +
     COL_MONTH_WIDTH * (props.monthLabels.length + props.extraColumns.length) +
-    COL_TOTAL_WIDTH
+    COL_TOTAL_WIDTH +
+    (props.generalColumn ? COL_TOTAL_WIDTH : 0)
   )
 })
+const hasGeneral = computed(() => props.generalColumn !== null)
+/**
+ * 2026-10-21 (§14.7): con `generalColumn`, la col Total interna queda
+ * sticky right anclada en `right: var(--pt-total-general-w)` (el ancho de
+ * la col Total General). Sin General la var no se emite ⇒ reglas byte-
+ * idénticas al sticky-right único heredado.
+ */
+const tableStyle = computed(() => {
+  const style = { minWidth: `${resolvedMinWidth.value}px` }
+  if (hasGeneral.value) style['--pt-total-general-w'] = `${COL_TOTAL_WIDTH}px`
+  return style
+})
+const totalHeaderClass = computed(() =>
+  hasGeneral.value ? 'pt-col-total pt-col-total-inner' : 'pt-col-total'
+)
+
+/**
+ * Orden del colgroup/thead según `extrasBeforeTotal` (A-05): ANTES del Total
+ * (`...Dic | Antes | Después | Total`) o después (orden heredado). Con
+ * `generalColumn` la col "Total General" SIEMPRE queda al final.
+ */
 </script>
 
 <template>
   <div class="pt-scroll">
-    <table class="pt-table" :aria-label="ariaLabel" :style="{ minWidth: `${resolvedMinWidth}px` }">
+    <table class="pt-table" :aria-label="ariaLabel" :style="tableStyle">
       <colgroup>
         <col :style="{ width: `${COL_LABEL_WIDTH}px` }" />
         <col v-for="month in monthLabels" :key="month" :style="{ width: `${COL_MONTH_WIDTH}px` }" />
-        <col :style="{ width: `${COL_TOTAL_WIDTH}px` }" />
-        <col
-          v-for="extra in extraColumns"
-          :key="extra.label"
-          :style="{ width: `${COL_MONTH_WIDTH}px` }"
-        />
+        <template v-if="extrasBeforeTotal">
+          <col
+            v-for="extra in extraColumns"
+            :key="extra.label"
+            :style="{ width: `${COL_MONTH_WIDTH}px` }"
+          />
+          <col :style="{ width: `${COL_TOTAL_WIDTH}px` }" />
+        </template>
+        <template v-else>
+          <col :style="{ width: `${COL_TOTAL_WIDTH}px` }" />
+          <col
+            v-for="extra in extraColumns"
+            :key="extra.label"
+            :style="{ width: `${COL_MONTH_WIDTH}px` }"
+          />
+        </template>
+        <col v-if="hasGeneral" :style="{ width: `${COL_TOTAL_WIDTH}px` }" />
       </colgroup>
       <thead>
         <tr>
           <th class="pt-col-label">{{ labelHeader }}</th>
           <th v-for="month in monthLabels" :key="month" class="pt-col-month">{{ month }}</th>
-          <th class="pt-col-total" :title="totalTitle || null">Total</th>
-          <th
-            v-for="extra in extraColumns"
-            :key="extra.label"
-            class="pt-col-month pt-col-extra"
-            :title="extra.title || null"
-          >
-            {{ extra.label }}
+          <template v-if="extrasBeforeTotal">
+            <th
+              v-for="extra in extraColumns"
+              :key="extra.label"
+              class="pt-col-month pt-col-extra"
+              :title="extra.title || null"
+            >
+              {{ extra.label }}
+            </th>
+            <th :class="totalHeaderClass" :title="totalTitle || null">Total</th>
+          </template>
+          <template v-else>
+            <th :class="totalHeaderClass" :title="totalTitle || null">Total</th>
+            <th
+              v-for="extra in extraColumns"
+              :key="extra.label"
+              class="pt-col-month pt-col-extra"
+              :title="extra.title || null"
+            >
+              {{ extra.label }}
+            </th>
+          </template>
+          <!-- A-05: "Total General" (meses + Antes + Después) — última col,
+               hereda el rol sticky right / estilo de la col Total. -->
+          <th v-if="hasGeneral" class="pt-col-total" :title="generalColumn.title || null">
+            {{ generalColumn.label }}
           </th>
         </tr>
       </thead>
@@ -201,11 +266,20 @@ const resolvedMinWidth = computed(() => {
 
 /* Esquina Sigma Total x Total (tfoot): hereda sticky bottom de la regla
  * general del tfoot (sin redeclarar position) y suma el anclaje right con
- * un z superior al resto de las celdas del pie. */
+ * un z superior al resto de las celdas del pie.
+
+ * §14.7 (2026-10-21): la Sigma de la col Total INTERNA (clase
+ * `pt-cell-total-inner`) también queda pinned en el offset de la General;
+ * la General ancla en right 0 via `td.pt-cell-total`. */
 .pt-table :deep(tfoot td.pt-cell-total) {
   right: 0;
   z-index: 3;
   box-shadow: inset 1px 0 0 0 var(--color-border-strong, rgba(97, 97, 97, 0.3));
+}
+
+.pt-table :deep(tfoot td.pt-cell-total-inner) {
+  right: var(--pt-total-general-w, 0px);
+  z-index: 3;
 }
 
 /* Tema oscuro: el tfoot pinta las celdas con un fondo TRANSLUCIDO
@@ -227,9 +301,32 @@ const resolvedMinWidth = computed(() => {
 
 /* Cabeceras de mes/Total (estilo pivote vigente 0.72rem/600). */
 .pt-col-month,
-.pt-col-total {
+.pt-col-total,
+.pt-col-total-inner {
   font-size: 0.72rem;
   font-weight: 600;
+}
+
+/* ENMIENDA A-05 + §14.7 (2026-10-21): con "Total General" presente AMBAS
+ * columnas de totales quedan pinned right. La Total interna ancla en
+ * `right: var(--pt-total-general-w)` (offset = ancho de la General, 116px)
+ * para que su header NO se desplace con el scroll (bug reportado); la
+ * General ancla en right 0 (estado previo, sin cambios). Ganancia por
+ * doble clase sobre `th.pt-col-total` (right 0). */
+.pt-table thead th.pt-col-total-inner {
+  right: var(--pt-total-general-w, 0px);
+  z-index: 4;
+  background-color: var(--dark-color, #1a202c);
+}
+
+.pt-table :deep(tbody td.pt-cell-total-inner) {
+  font-weight: 600;
+  right: var(--pt-total-general-w, 0px);
+  z-index: 2;
+  /* Fondo OPACO (NFR §14.7): ya no estática, transluciría los meses que
+   * deslizan por debajo en el gap entre ambas columnas fijas. */
+  background-color: var(--color-surface-card, #ffffff);
+  box-shadow: inset 1px 0 0 0 var(--color-border-strong, rgba(97, 97, 97, 0.3));
 }
 
 /* ─── RF-1.5: columnas extra "Antes/Después de {año}" (Vista Flujo) ───
@@ -237,14 +334,18 @@ const resolvedMinWidth = computed(() => {
  * visualmente las bucket-columns de los meses — el `th` global dark de
  * main.css las pintaría iguales a los meses. */
 .pt-table thead th.pt-col-extra {
-  background-color: var(--color-surface, #f7f7f7);
+  background-color: var(--color-surface, #f9f9f9);
   border-left: 1px solid var(--color-border, rgba(97, 97, 97, 0.15));
   color: var(--color-text-primary, #070707);
   white-space: nowrap;
 }
 
+/* `--color-surface` es sólido en dark (#0f1d2e, var vigente del tema —
+ * mismo patrón del fix "solid background for pivot totals row in dark
+ * theme", S12-PIVOT-FIX); el rgba translúcido preexistente traslucía
+ * las celdas/meses que deslizan por debajo. */
 :root[data-theme='dark'] .pt-table thead th.pt-col-extra {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--color-surface, #0f1d2e);
 }
 
 /* ─── RF-6.1: filas de total (tfoot Σ) destacadas + sticky bottom ─── */
