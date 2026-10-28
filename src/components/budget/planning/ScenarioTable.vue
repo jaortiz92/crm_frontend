@@ -2,7 +2,7 @@
 /**
  * ScenarioTable — tabla del dashboard de Planeación (FE-S4 §6.1/§6.2).
  *
- * Columnas: Nombre · Año · Tipo · Líneas · Σ Ingresos · Σ Gastos · Estado ·
+ * Columnas: Nombre · Año · Tipo · Líneas · Σ Ingresos · Estado ·
  * Creado · Acciones. El ORDEN es el que entrega el backend (§6.1: no
  * re-ordenar en cliente). "Marcar como Meta Activa" solo si `status !==
  * 'active'` Y `canSetBudgetTarget()` (gate pasado por el padre). "Eliminar"
@@ -35,7 +35,6 @@ const emit = defineEmits(['view', 'set-target', 'clone', 'request-delete'])
             <th>Tipo</th>
             <th>Líneas</th>
             <th class="is-money-col">Σ Ingresos</th>
-            <th class="is-money-col">Σ Gastos</th>
             <th>Estado</th>
             <th>Creado</th>
             <th>Acciones</th>
@@ -57,7 +56,6 @@ const emit = defineEmits(['view', 'set-target', 'clone', 'request-delete'])
             </td>
             <td class="cell-count">{{ formatCount(row.lines_count) }}</td>
             <td class="cell-money">{{ formatMoney(row.total_income) }}</td>
-            <td class="cell-money">{{ formatMoney(row.total_expense) }}</td>
             <td>
               <span class="chip" :class="`chip-${statusChipOf(row.status).tone}`">
                 {{ statusChipOf(row.status).label }}

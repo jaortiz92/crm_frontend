@@ -29,10 +29,9 @@
  *  - BARRA: switch segmentado "Neto / Con IVA" (D-FE14-1, default ON) — la
  *    preferencia se PERSISTE por `idBudget` en localStorage vía
  *    `budgetPlanningStore.setIvaMode` (cero HTTP). El modo SOLO altera la
- *    Vista Flujo: la cabecera (Σ Ingresos/Σ Gastos) y la Vista Ejecutiva son
- *    SIEMPRE NETOS (D-FE14-7: el P&G nunca lleva información de IVA), y con
- *    el modo ON la cabecera muestra el chip "Modo caja con IVA (proyectado)"
- *    que lo aclara (R-FE14-2).
+ *    Vista Flujo: la Vista Ejecutiva es SIEMPRE NETA (D-FE14-7: el P&G
+ *    nunca lleva información de IVA), y con el modo ON la cabecera muestra
+ *    el chip "Modo caja con IVA (proyectado)" que lo aclara (R-FE14-2).
  *  - TAB 4 "Liquidación": monta `IvaSettlementPanel` (fuente
  *    `GET /budget/iva/settlement/{id}` cacheada en el store). El settlement
  *    se pide AL ABRIR el escenario (§4.2), de nuevo con reintento perezoso
@@ -48,10 +47,9 @@
  *    del render visible en Fase 3); la N exacta sigue mostrada por el chip
  *    ⊘ de cada bloque del Flujo (RF-3.3).
  *  - RF-7.4/RF-7.3: «Montos en COP» se declara UNA vez por intro (las celdas
- *    de las vistas no llevan símbolo desde la Fase 2/3) y las cifras de la
- *    CABECERA (Σ Ingresos/Σ Gastos) y de los avisos what-if de
- *    nómina/financiación usan `formatMoneyPlain` — sin `$` (formatMoney con
- *    `$` queda para el resto del CRM, RF-7.6).
+ *    de las vistas no llevan símbolo desde la Fase 2/3) y las cifras de los
+ *    avisos what-if de nómina/financiación usan `formatMoneyPlain` — sin `$`
+ *    (formatMoney con `$` queda para el resto del CRM, RF-7.6).
  *  - RF-5: cabecera sticky POR TABLA (thead top:0 + rótulo left:0 en el
  *    wrapper `max-height: 60vh` de cada bloque, provisto por
  *    `PivotMonthTable`); NO se adopta el wrapper scroll único por pestaña
@@ -145,22 +143,6 @@ const canTarget = computed(() => canSetBudgetTarget())
 const statusChip = computed(() =>
   scenario.value ? statusChipOf(scenario.value.status) : { label: '', tone: 'draft' }
 )
-
-/** Σ informativos de la cabecera, de la MISMA caché de líneas (AC-FE-6).
- *  FE-S14-IVA ENMIENDA D-FE14-7: SIEMPRE NETOS — el modo "Con IVA" no toca
- *  la cabecera ni la Vista Ejecutiva (el IVA solo genera efecto en el Flujo). */
-const headerTotals = computed(() => {
-  const lines = scenario.value?.budget_lines ?? []
-  let income = 0
-  let expense = 0
-  for (const line of lines) {
-    const amount = Number(line.projected_amount)
-    if (!Number.isFinite(amount)) continue
-    if (line.line_type === 'income') income += amount
-    else if (line.line_type === 'expense') expense += amount
-  }
-  return { income, expense }
-})
 
 /* ───────────── FE-S14-IVA §5: switch "Neto / Con IVA" (persistente por escenario) ───────────── */
 
@@ -815,11 +797,6 @@ function backToPlanning() {
               Modo caja con IVA (proyectado)
             </span>
           </p>
-          <p class="ge-totals" aria-live="polite">
-            Σ Ingresos <strong>{{ formatMoneyPlain(headerTotals.income) }}</strong> · Σ Gastos
-            <strong>{{ formatMoneyPlain(headerTotals.expense) }}</strong>
-            <span class="ge-lines">· {{ (scenarioView?.budget_lines || []).length }} líneas</span>
-          </p>
         </div>
         <div class="ge-header-actions">
           <!-- FE-S14-IVA §5: switch segmentado "Neto / Con IVA" (barra de
@@ -1296,25 +1273,6 @@ function backToPlanning() {
 
 .ge-parent {
   font-style: italic;
-  color: var(--color-text-muted, #8a8a8a);
-}
-
-.ge-totals {
-  margin: 8px 0 0;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary, #555555);
-}
-
-.ge-totals strong {
-  font-variant-numeric: tabular-nums;
-  color: var(--color-brand, #03658c);
-}
-
-:root[data-theme='dark'] .ge-totals strong {
-  color: #56c8ee;
-}
-
-.ge-lines {
   color: var(--color-text-muted, #8a8a8a);
 }
 
