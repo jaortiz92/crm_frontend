@@ -33,6 +33,11 @@ import {
   withIva
 } from './planningFormat.js'
 import { lineIdForCostCenter } from './cecoMovements.js'
+// FASE 1: primitivas de fecha consolidadas en `planningDate.js` — import para
+// uso interno y re-export por compatibilidad con `CashFlowPivotTable.vue`,
+// que las importa desde este módulo (consumidor intacto).
+import { addDaysISO, monthEndOf } from './planningDate.js'
+export { monthEndOf, addDaysISO } from './planningDate.js'
 
 /**
  * Año N del escenario (base de los buckets fuera-de-año; `null` si no es
@@ -69,69 +74,6 @@ export function outOfYearBucketOf(value, yearN) {
   if (year < yearN) return -1
   if (year > yearN) return 1
   return 0
-}
-
-/**
- * Último día calendario del mes de una fecha ISO `YYYY-MM-DD` (ancla de
- * referencia de la tasa de costo — FE-S7 §5). (Movida verbatim.)
- * @param {string|null|undefined} value
- * @returns {string|null}
- */
-export function monthEndOf(value) {
-  if (!value) return null
-  let year
-  let month
-  const plain = String(value).match(/^(\d{4})-(\d{2})/)
-  if (plain) {
-    year = Number(plain[1])
-    month = Number(plain[2])
-  } else {
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return null
-    year = date.getFullYear()
-    month = date.getMonth() + 1
-  }
-  if (!Number.isFinite(year) || !Number.isInteger(year) || month < 1 || month > 12) return null
-  const last = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  const mm = String(month).padStart(2, '0')
-  const dd = String(last).padStart(2, '0')
-  return `${String(year).padStart(4, '0')}-${mm}-${dd}`
-}
-
-/**
- * Suma `days` (entero; NEGATIVO = antes de la ancla) a una fecha ISO y
- * re-serializa ISO (aritmética `Date.UTC` — jamás `toISOString`).
- * (Movida verbatim de `CashFlowPivotTable.addDaysISO`.)
- * @param {string|null|undefined} value
- * @param {number} days
- * @returns {string|null}
- */
-export function addDaysISO(value, days) {
-  const offset = Number(days)
-  if (!value || !Number.isInteger(offset)) return null
-  let year
-  let month
-  let day
-  const plain = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (plain) {
-    year = Number(plain[1])
-    month = Number(plain[2])
-    day = Number(plain[3])
-  } else {
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return null
-    year = date.getFullYear()
-    month = date.getMonth() + 1
-    day = date.getDate()
-  }
-  if (!Number.isFinite(year) || !Number.isInteger(year) || month < 1 || month > 12) return null
-  if (day < 1 || day > 31) return null
-  const shifted = new Date(Date.UTC(year, month - 1, day) + offset * 86400000)
-  if (Number.isNaN(shifted.getTime())) return null
-  const yyyy = String(shifted.getUTCFullYear()).padStart(4, '0')
-  const mm = String(shifted.getUTCMonth() + 1).padStart(2, '0')
-  const dd = String(shifted.getUTCDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
 }
 
 /**

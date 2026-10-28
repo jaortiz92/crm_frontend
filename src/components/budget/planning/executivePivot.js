@@ -35,6 +35,8 @@ import {
   resolveVariableBaseCeco
 } from './planningFormat.js'
 import { lineIdForCostCenter } from './cecoMovements.js'
+// FASE 1: primitiva de fecha consolidada en `planningDate.js` (movida verbatim).
+import { monthEndsOfYear } from './planningDate.js'
 import { taxCalculationAvailable, pnlTaxMonthly } from '../taxes/taxPresentation.js'
 
 /**
@@ -62,25 +64,6 @@ export function sumOrNull(values) {
 export function runningSums(values) {
   let acc = 0
   return values.map((value) => (acc += value))
-}
-
-/**
- * Último día calendario de cada mes 0–11 del año en ISO local `YYYY-MM-DD`
- * (D-3; movida verbatim del computed `monthEndISO`). PROHIBIDO
- * `toISOString()` (corrimiento UTC): `new Date(year, m + 1, 0)` + padding
- * manual de componentes locales.
- * @param {number|string|null|undefined} budgetYear
- * @returns {string[]}
- */
-export function monthEndsOfYear(budgetYear) {
-  const parsed = Number(budgetYear)
-  const year = Number.isFinite(parsed) && parsed > 0 ? parsed : new Date().getFullYear()
-  return Array.from({ length: 12 }, (_, month) => {
-    const last = new Date(year, month + 1, 0)
-    const mm = String(last.getMonth() + 1).padStart(2, '0')
-    const dd = String(last.getDate()).padStart(2, '0')
-    return `${last.getFullYear()}-${mm}-${dd}`
-  })
 }
 
 /**
