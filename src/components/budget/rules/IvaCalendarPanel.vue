@@ -25,7 +25,7 @@
  *    seedea; un fallo corta la cadena y muestra el error).
  *
  * Badge de sincronización: tras cada mutación exitosa, la acción del store
- * notifica al `budgetPlanningStore` (AC-FE14-6: la pestaña Liquidación y el
+ * notifica al `budgetIvaStore` (AC-FE14-6: la pestaña Liquidación y el
  * bloque del Flujo de un escenario abierto se refrescan vivas vía su
  * debounce); este panel lo comunica con el chip "Sincronizado".
  *
@@ -506,7 +506,7 @@ onBeforeUnmount(() => {
       </div>
       <!-- Badge de sincronización (AC-FE14-6): el catálogo se propaga vivo a
            la Liquidación de los escenarios abiertos vía el debounce del
-           `budgetPlanningStore` (gestionado por las acciones del store). -->
+           `budgetIvaStore` (gestionado por las acciones del store). -->
       <span
         class="icp-sync-chip"
         title="Los cambios se reflejan en la pestaña “Liquidación” de los escenarios abiertos"

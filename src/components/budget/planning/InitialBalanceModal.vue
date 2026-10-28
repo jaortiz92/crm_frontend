@@ -28,7 +28,7 @@
  * banner inline con el mensaje textual.
  */
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { alertService } from '@/services/alertService.js'
 import { formatMoney } from '@/components/budget/planning/planningFormat.js'
 
@@ -39,7 +39,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close'])
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 
 const attempted = ref(false)
 const serverError = ref(null)
@@ -56,7 +56,7 @@ const form = reactive({
   warehouse: { mode: 'manual', manual: '0' }
 })
 
-const ib = computed(() => budgetPlanningStore.initialBalance)
+const ib = computed(() => scenarioStore.initialBalance)
 
 /** Shaping del GET vigente (solo lectura): fuente y degradación. */
 const config = computed(() => (ib.value.loaded ? ib.value.data : null))
@@ -118,7 +118,7 @@ const cashError = computed(() => {
   return Number.isNaN(parseManual(form.cash)) ? 'Ingrese un valor numérico válido.' : ''
 })
 
-const canSave = computed(() => !budgetPlanningStore.initialBalance.saving && !warehouseError.value)
+const canSave = computed(() => !scenarioStore.initialBalance.saving && !warehouseError.value)
 
 const cashPreview = computed(() => {
   if (form.cash.mode === 'carryover') {
@@ -203,7 +203,7 @@ watch(
   () => {
     if (hydrating.value) return
     if (form.cash.mode !== 'carryover' && form.warehouse.mode !== 'carryover') return
-    void budgetPlanningStore.refreshInitialBalanceAvailability(props.idBudget)
+    void scenarioStore.refreshInitialBalanceAvailability(props.idBudget)
   }
 )
 
@@ -215,13 +215,13 @@ watch(
     serverError.value = null
     hydrateForm()
     if (!ib.value.loaded && !ib.value.loading) {
-      void budgetPlanningStore.fetchInitialBalance(props.idBudget, true)
+      void scenarioStore.fetchInitialBalance(props.idBudget, true)
     }
   }
 )
 
 function tryClose() {
-  if (budgetPlanningStore.initialBalance.saving) return
+  if (scenarioStore.initialBalance.saving) return
   emit('close')
 }
 
@@ -239,7 +239,7 @@ async function handleSave() {
     cash: { mode: form.cash.mode, manual_value: parseManual(form.cash) },
     warehouse: { mode: form.warehouse.mode, manual_value: parseManual(form.warehouse) }
   }
-  const result = await budgetPlanningStore.saveInitialBalance(props.idBudget, payload)
+  const result = await scenarioStore.saveInitialBalance(props.idBudget, payload)
   if (result.ok) {
     await alertService.generalSucces('Saldos iniciales actualizados.')
     emit('close')
@@ -275,7 +275,7 @@ function onOverlayMousedown(event) {
           type="button"
           class="ib-x"
           aria-label="Cerrar"
-          :disabled="budgetPlanningStore.initialBalance.saving"
+          :disabled="scenarioStore.initialBalance.saving"
           @click="tryClose"
         >
           ✕
@@ -289,7 +289,7 @@ function onOverlayMousedown(event) {
           <button
             type="button"
             class="btn btn-secondary btn-sm"
-            @click="budgetPlanningStore.fetchInitialBalance(props.idBudget, true)"
+            @click="scenarioStore.fetchInitialBalance(props.idBudget, true)"
           >
             Reintentar
           </button>
@@ -407,7 +407,7 @@ function onOverlayMousedown(event) {
         <button
           type="button"
           class="btn btn-secondary"
-          :disabled="budgetPlanningStore.initialBalance.saving"
+          :disabled="scenarioStore.initialBalance.saving"
           @click="tryClose"
         >
           Cancelar
@@ -415,12 +415,12 @@ function onOverlayMousedown(event) {
         <button
           type="button"
           class="btn btn-primary"
-          :class="{ 'is-busy': budgetPlanningStore.initialBalance.saving }"
+          :class="{ 'is-busy': scenarioStore.initialBalance.saving }"
           :disabled="!canSave"
           @click="handleSave"
         >
-          <span v-if="budgetPlanningStore.initialBalance.saving" class="ib-spinner"></span>
-          {{ budgetPlanningStore.initialBalance.saving ? 'Guardando…' : 'Guardar' }}
+          <span v-if="scenarioStore.initialBalance.saving" class="ib-spinner"></span>
+          {{ scenarioStore.initialBalance.saving ? 'Guardando…' : 'Guardar' }}
         </button>
       </footer>
     </div>

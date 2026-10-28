@@ -37,6 +37,10 @@
 
 import { createCashFlowPivotModel } from '@/components/budget/planning/cashFlowPivot.js'
 import { budgetPlanningService } from '@/services/budgetPlanningService.js'
+// FASE 2 (split del `budgetPlanningStore`): el modo "Neto / Con IVA" vive en
+// el sub-store `budgetIva` (el `realStore` que llega aquí es el sub-store de
+// ESCENARIO, dueño de los catálogos A5, y ya no expone `ivaMode`).
+import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
 
 /**
  * Mapeo de las filas what-if: réplica EXACTA de `BudgetGridEditor`
@@ -106,7 +110,8 @@ function withSimulatedLines(base, payrollSim, financingSim) {
 /**
  * Corre el motor (`createCashFlowPivotModel`) sobre los datos del escenario
  * fuente con un store SINTÉTICO (solo lectura, sin Pinia nuevo — RF-FE-04).
- * @param {object} realStore `useBudgetPlanningStore()` (catálogos A5 compartidos)
+ * @param {object} realStore sub-store de escenario (`useBudgetScenarioStore()`:
+ *   catálogos A5 compartidos; FASE 2 — antes era `useBudgetPlanningStore()`)
  * @param {object} sourceMetrica `carryover_source` del GET: `{id_budget, budget_name, budget_year, status}`
  * @param {object} fuenteData paquete precargado (ver `deriveInitialBalanceFromSource`)
  * @returns {{ cash: number, warehouse: number }}
@@ -125,7 +130,9 @@ function runEngineOnSource(realStore, sourceMetrica, fuenteData) {
 
   /** "store" sintético para `createCashFlowPivotModel` (solo lo que lee). */
   const syntheticStore = {
-    ivaMode: realStore.ivaMode === true,
+    // FASE 2: el modo vive en el sub-store `budgetIva` (misma fuente que la
+    // vista Flujo de la fuente — ver encabezado).
+    ivaMode: useBudgetIvaStore().ivaMode === true,
     costCenters: realStore.costCenters,
     lineCostRates: realStore.lineCostRates,
     costCenterLabel: (id) => realStore.costCenterLabel(id),
@@ -172,7 +179,7 @@ function runEngineOnSource(realStore, sourceMetrica, fuenteData) {
  * Deriva los saldos de cierre de diciembre (año N−1 = fuente):
  *  - `cash`: acumulado de caja al cierre de dic de la fuente (resumen.acumulado[11]).
  *  - `warehouse`: `bodega[dic]` de la fuente con la fórmula del motor.
- * @param {object} realStore `useBudgetPlanningStore()`
+ * @param {object} realStore sub-store de escenario (`useBudgetScenarioStore()`)
  * @param {object} sourceMetrica `carryover_source` del GET de saldos
  * @returns {Promise<{ cash: number, warehouse: number }|null>} null en fallo
  */

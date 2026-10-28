@@ -19,7 +19,7 @@
  * Cancelar, Escape/backdrop cierran SOLO si no hay petición en vuelo.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { alertService } from '@/services/alertService.js'
 import { formatCount } from './planningFormat.js'
 
@@ -35,14 +35,14 @@ const props = defineProps({
 
 const emit = defineEmits(['deleted', 'close'])
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 
 const cancelButtonRef = ref(null)
 /** @type {null | {kind: string, message?: string}} */
 const serverError = ref(null)
 
 /** Flag propio del borrado (el `busy` global de la tabla no aplica aquí). */
-const busy = computed(() => budgetPlanningStore.deleting)
+const busy = computed(() => scenarioStore.deleting)
 
 const scenarioName = computed(() => props.scenario?.budget_name ?? '—')
 const scenarioYear = computed(() => props.scenario?.budget_year ?? '—')
@@ -62,7 +62,7 @@ const visibleErrorMessage = computed(() => {
 async function confirmDelete() {
   if (!props.scenario || busy.value) return
   serverError.value = null
-  const result = await budgetPlanningStore.deleteScenario(props.scenario.id_budget)
+  const result = await scenarioStore.deleteScenario(props.scenario.id_budget)
 
   if (result.ok) {
     // La fila ya salió de la caché del store (ASM-7): el padre reconcilia.

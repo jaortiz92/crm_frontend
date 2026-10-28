@@ -3,7 +3,7 @@
  * (presupuesto 121, fuente 576; CECO 000001 => 2 purchase; CECO 000401 => 3 line).
  * Archivo TEMPORAL — se elimina tras el diagnóstico.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import fixtureCarry from '../_repro/services/fixture_carry.json'
 
@@ -79,7 +79,6 @@ vi.mock('@/stores/userStore.js', () => ({
 }))
 
 import CecoDetailView from '@/views/budget/planning/CecoDetailView.vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
 
 import { createPinia } from 'pinia'
 

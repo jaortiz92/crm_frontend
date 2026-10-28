@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { budgetTaxService } from '@/services/budgetTaxService.js'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 
 const emptyState = () => ({
   profiles: [],
@@ -34,9 +34,9 @@ function errorKind(error) {
 }
 
 function invalidatePlanningTaxCache(idBudget) {
-  const planningStore = useBudgetPlanningStore()
-  if (planningStore.currentScenario?.id_budget === Number(idBudget)) {
-    planningStore.markTaxStale()
+  const scenarioStore = useBudgetScenarioStore()
+  if (scenarioStore.currentScenario?.id_budget === Number(idBudget)) {
+    scenarioStore.markTaxStale()
   }
 }
 
@@ -134,9 +134,9 @@ export const useBudgetTaxStore = defineStore('budgetTaxStore', {
       return result.ok
     },
     async resolveBudgetYear(idBudget) {
-      const planningStore = useBudgetPlanningStore()
-      const result = await planningStore.fetchScenarioDetail(Number(idBudget))
-      const year = Number(planningStore.currentScenario?.budget_year)
+      const scenarioStore = useBudgetScenarioStore()
+      const result = await scenarioStore.fetchScenarioDetail(Number(idBudget))
+      const year = Number(scenarioStore.currentScenario?.budget_year)
       return result.ok && Number.isInteger(year) ? year : null
     },
     async loadBudget(idBudget) {

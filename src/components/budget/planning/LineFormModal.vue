@@ -72,7 +72,7 @@
  * byte-idénticos cuando no se toca).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { alertService } from '@/services/alertService.js'
 import {
   BEHAVIOR_LABELS,
@@ -99,7 +99,7 @@ const props = defineProps({
 
 const emit = defineEmits(['saved', 'close'])
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 
 const dialogRef = ref(null)
 const attempted = ref(false)
@@ -196,10 +196,10 @@ const purchaseInternmentPct = computed(() => {
   if (!form.idCostCenter) return 0
   const idCostCenter = Number(form.idCostCenter)
   if (!Number.isFinite(idCostCenter)) return 0
-  const found = budgetPlanningStore.costCenters.find((item) => item.id_cost_center === idCostCenter)
+  const found = scenarioStore.costCenters.find((item) => item.id_cost_center === idCostCenter)
   const lineId = typeof found?.id_line === 'number' ? found.id_line : null
   if (lineId === null) return 0
-  const pct = Number(budgetPlanningStore.internmentRateByLine.get(lineId) ?? 0)
+  const pct = Number(scenarioStore.internmentRateByLine.get(lineId) ?? 0)
   return Number.isFinite(pct) && pct > 0 ? pct : 0
 })
 
@@ -259,7 +259,7 @@ function originalIvaFlag() {
 const savingKey = computed(() =>
   isEdit.value && props.line ? props.line.id_budget_line : `new${selectedType.value}`
 )
-const busy = computed(() => Boolean(budgetPlanningStore.lineSaving[savingKey.value]))
+const busy = computed(() => Boolean(scenarioStore.lineSaving[savingKey.value]))
 
 /* --------------------------------- títulos --------------------------------- */
 
@@ -584,11 +584,11 @@ async function handleSave() {
   clearServerErrors()
   if (!canSave.value) return
   const result = isEdit.value
-    ? await budgetPlanningStore.updateScenarioLine(
+    ? await scenarioStore.updateScenarioLine(
         props.line.id_budget_line,
         updatePayload.value ?? {}
       )
-    : await budgetPlanningStore.createScenarioLine(props.scenario.id_budget, createPayload.value)
+    : await scenarioStore.createScenarioLine(props.scenario.id_budget, createPayload.value)
 
   if (result.ok) {
     // FE-S7 §3: `saved` emite SOLO la línea (el 2.º argumento `siblings` de
@@ -653,7 +653,7 @@ watch(
     if (isEdit.value && line) prefillFromLine(line)
     // Catálogos CECO/temporadas: ya cargados por `fetchScenarioDetail` (A5);
     // este no-op defensivo cubre la apertura directa sin esperar el fetch.
-    void budgetPlanningStore.ensureCatalogs()
+    void scenarioStore.ensureCatalogs()
     await nextTick()
     dialogRef.value?.focus()
   },
@@ -784,7 +784,7 @@ onBeforeUnmount(() => {
             >
               <option value="">Seleccione un CECO…</option>
               <option
-                v-for="center in budgetPlanningStore.costCenters"
+                v-for="center in scenarioStore.costCenters"
                 :key="center.id_cost_center"
                 :value="String(center.id_cost_center)"
               >
@@ -861,7 +861,7 @@ onBeforeUnmount(() => {
             >
               <option value="">— ninguna —</option>
               <option
-                v-for="collection in budgetPlanningStore.collections"
+                v-for="collection in scenarioStore.collections"
                 :key="collection.id_collection"
                 :value="String(collection.id_collection)"
               >

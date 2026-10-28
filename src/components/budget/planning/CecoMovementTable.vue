@@ -29,7 +29,7 @@
  * presupuesto). Cero HTTP: presentación pura desde la caché (RF-7.1).
  */
 import { computed, reactive } from 'vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
 import {
   BEHAVIOR_LABELS,
   LINE_TYPE_LABELS,
@@ -71,9 +71,9 @@ const props = defineProps({
   carryMode: { type: Boolean, default: false }
 })
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const ivaStore = useBudgetIvaStore()
 
-const ivaActive = computed(() => budgetPlanningStore.ivaMode === true)
+const ivaActive = computed(() => ivaStore.ivaMode === true)
 
 /* ─── chips de tipo (mismo lenguaje de color de `BudgetLineGrid`) ─── */
 

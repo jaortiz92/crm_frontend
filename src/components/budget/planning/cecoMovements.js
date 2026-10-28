@@ -92,7 +92,7 @@ export function flowMonthOf(line, fallbackToBudget = false) {
  * @param {object} line `BudgetLine` (Crudo; derivaciones cuelgan de la
  *   reactividad del llamador, AC-FE14-2).
  * @param {string} tab `TAB_CAUSED` | `TAB_FLOW`
- * @param {boolean} ivaActive modo "Con IVA" (`budgetPlanningStore.ivaMode`)
+ * @param {boolean} ivaActive modo "Con IVA" (`budgetIvaStore.ivaMode`)
  * @returns {number}
  */
 export function movementAmount(line, tab, ivaActive) {
@@ -170,7 +170,7 @@ export function isReconciledVariableMovement(movement) {
  * (`CecoMovementTable`/`CecoMovementPivot`).
  * @param {object|null|undefined} line movimiento de la forma común
  * @param {string} tab `TAB_CAUSED` | `TAB_FLOW`
- * @param {boolean} ivaActive modo "Con IVA" (`budgetPlanningStore.ivaMode`)
+ * @param {boolean} ivaActive modo "Con IVA" (`budgetIvaStore.ivaMode`)
  * @param {number[]|{sales?: number[], receivables?: number[]}|null|undefined}
  *   [fixedIncomeByMonth] serie(s) compartida(s) de base por mes, resuelta(s)
  *   por comportamiento (A-02). Sin serie para el comportamiento ⇒ la línea

@@ -18,7 +18,7 @@
  * `aria-modal`, foco atrapado, ESC cierra.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { alertService } from '@/services/alertService.js'
 import {
   BEHAVIOR_LABELS,
@@ -35,7 +35,7 @@ const props = defineProps({
 
 const emit = defineEmits(['deleted', 'close'])
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 
 const dialogRef = ref(null)
 const alertMessage = ref('')
@@ -49,13 +49,13 @@ const isVariable = computed(() => Boolean(props.line) && props.line.behavior_typ
 const busy = computed(() => {
   if (!props.line) return false
   const id = props.line.id_budget_line
-  return Boolean(budgetPlanningStore.lineSaving[id]) || Boolean(budgetPlanningStore.cellSaving[id])
+  return Boolean(scenarioStore.lineSaving[id]) || Boolean(scenarioStore.cellSaving[id])
 })
 
 async function confirmDelete() {
   if (!props.line || busy.value) return
   alertMessage.value = ''
-  const result = await budgetPlanningStore.deleteScenarioLine(props.line.id_budget_line)
+  const result = await scenarioStore.deleteScenarioLine(props.line.id_budget_line)
 
   if (result.ok) {
     emit('deleted', props.line.id_budget_line)
@@ -155,7 +155,7 @@ onBeforeUnmount(() => {
           <div class="ld-row">
             <dt>CECO</dt>
             <dd class="ld-dd-strong">
-              {{ budgetPlanningStore.costCenterLabel(line.id_cost_center) }}
+              {{ scenarioStore.costCenterLabel(line.id_cost_center) }}
             </dd>
           </div>
           <div class="ld-row">

@@ -2,7 +2,7 @@
  * planningExportSheets — ensamble de HOJAS de exportación por pestaña del
  * módulo de Planeación (FE-S20 / spec `frontend.03_20` §5/§7.2).
  *
- * Transforma el estado de `budgetPlanningStore` (más las props de la vista)
+ * Transforma el estado de los sub-stores de planeación (`budgetScenarioStore`/`budgetIvaStore`, más las props de la vista)
  * al contrato `sheets: [{ name, columns, rows }]` que consume el plugin
  * `@/plugins/tableExport.js` — SIN duplicar agregación: los pivotes y modelos
  * provienen de los MISMOS builders que alimentan los componentes de pantalla

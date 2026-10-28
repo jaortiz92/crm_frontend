@@ -10,7 +10,7 @@
  * literal §9 + refresco silencioso de roles).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { alertService } from '@/services/alertService.js'
 
 const props = defineProps({
@@ -23,13 +23,13 @@ const props = defineProps({
 
 const emit = defineEmits(['done', 'close'])
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 
 const dialogRef = ref(null)
 /** @type {null | {kind: string, message?: string}} */
 const serverError = ref(null)
 
-const busy = computed(() => budgetPlanningStore.settingTarget)
+const busy = computed(() => scenarioStore.settingTarget)
 
 const targetName = computed(() => props.scenario?.budget_name ?? '—')
 const targetYear = computed(() => props.scenario?.budget_year ?? '—')
@@ -37,7 +37,7 @@ const targetYear = computed(() => props.scenario?.budget_year ?? '—')
 async function confirmTarget() {
   if (!props.scenario || busy.value) return
   serverError.value = null
-  const result = await budgetPlanningStore.setTarget(props.scenario.id_budget)
+  const result = await scenarioStore.setTarget(props.scenario.id_budget)
 
   if (result.ok) {
     const payrollLines = Number(result.data?.payroll_lines_created ?? 0)

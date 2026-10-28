@@ -49,7 +49,7 @@
  *
  * FE-S6-CARRYOVER (aditivo, dos componentes):
  *  - B (arrastre): bloque "Saldos de {N−1} (arrastre)" con pivotes hermanos
- *    construidos SOLO desde `budgetPlanningStore.carryover.lines` (server ya
+ *    construidos SOLO desde `scenarioStore.carryover.lines` (server ya
  *    filtró fijas ∈ N — BR-CO-03; el mes usa la MISMA fecha efectiva que
  *    `cfMonth`). Entra a las SUMAS del resumen (entradas/salidas += cobros/
  *    pagos de arrastre ANTES de neto/acumulado) pero NUNCA a Σ cabecera,
@@ -169,7 +169,9 @@
  * vista de detalle usa la MISMA caché del store). Los bloques de movimientos del Motor (capital y desembolsos de financiación) TAMBIÉN enlazan desde la Revisión 2 del drill-down (RF-8 de la spec 03_19: el detalle reproduce esos movimientos). El resto de DERIVADOS (pago a proveedores, internación, variables, liquidación e impuestos) NO enlaza: el detalle no los reproduce.
  */
 import { computed, ref } from 'vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
+import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
+import { createPlanningStoresView } from '@/stores/planningStoresBridge.js'
 import ScenarioTaxPaymentsBlock from '@/components/budget/taxes/ScenarioTaxPaymentsBlock.vue'
 import PivotMonthTable from './PivotMonthTable.vue'
 import {
@@ -201,12 +203,14 @@ const props = defineProps({
   financingDisbursementLines: { type: Array, default: () => [] }
 })
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
+const ivaStore = useBudgetIvaStore()
+const planningStoresView = createPlanningStoresView()
 
 /* ─────────── FE-S16 (frontend.03_19) RF-1: celda CECO → drill-down ─────────── */
 
 /** Catálogo CECO cacheado (fuente del encaje código de ruta ↔ id). */
-const costCenters = computed(() => budgetPlanningStore.costCenters)
+const costCenters = computed(() => scenarioStore.costCenters)
 
 /**
  * FE-S16 RF-1: destino del drill-down de una fila cuyo rótulo es un CECO.
@@ -227,7 +231,7 @@ function cecoLink(rowId) {
       // directamente (la Vista Ejecutiva no manda query ⇒ default "Causado").
       query: { tab: 'flow' },
       params: {
-        idBudget: props.scenario?.id_budget ?? budgetPlanningStore.currentScenarioId ?? '',
+        idBudget: props.scenario?.id_budget ?? scenarioStore.currentScenarioId ?? '',
         costCenterCode: code
       }
     },
@@ -266,7 +270,7 @@ const model = createCashFlowPivotModel({
   scenario: () => props.scenario,
   financingPrincipalLines: () => props.financingPrincipalLines,
   financingDisbursementLines: () => props.financingDisbursementLines,
-  store: budgetPlanningStore
+  store: planningStoresView
 })
 const {
   lines,
@@ -319,7 +323,7 @@ const carrySourceYear = computed(() =>
  * @returns {number}
  */
 const settlementTaxRate = computed(() => {
-  const raw = Number(budgetPlanningStore.settlement.data?.tax_rate_used)
+  const raw = Number(ivaStore.settlement.data?.tax_rate_used)
   return Number.isFinite(raw) && raw > 0 ? raw : IVA_RATE
 })
 /** P. ej. `19 %` (nunca hardcode: se deriva de `settlementTaxRate`). */
@@ -398,7 +402,7 @@ const COGS_TERMS_UNAVAILABLE_NOTE =
  * @returns {string}
  */
 function sourceKeyForCostCenter(idCostCenter) {
-  const lineId = lineIdForCostCenter(budgetPlanningStore.costCenters, idCostCenter)
+  const lineId = lineIdForCostCenter(scenarioStore.costCenters, idCostCenter)
   return lineId === null ? `cc:${idCostCenter}` : `line:${lineId}`
 }
 
@@ -465,19 +469,19 @@ const costTermsDegraded = computed(() => {
   // FE-S10: catálogo de internación caído ⇒ streams de COMPRAS (proveedor +
   // internación) indegradables: cualquier compra que produciría filas dispara
   // el aviso compartido (`COGS_TERMS_UNAVAILABLE_NOTE`).
-  if (budgetPlanningStore.internmentCatalogError) {
+  if (scenarioStore.internmentCatalogError) {
     for (const line of purchaseLines.value) {
       const amount = Number(line.projected_amount)
       if (Number.isFinite(amount) && amount !== 0) return true
     }
   }
-  if (!budgetPlanningStore.payableTermsError) return false
+  if (!scenarioStore.payableTermsError) return false
   // FE-S9 §2.5-3 (con el matiz A-02 §7.1): "produciría filas" ahora cubre
   // AMBAS fuentes — COMPRAS (ninguna necesita tasa de costo: cualquier compra
   // finita ≠ 0 produce cuota, y sin catálogo tampoco puede derivarse) e
   // INGRESOS NO COMPRADORES POR LÍNEA (regla FE-S7 intacta; los de Línea
   // compradora ya no producirían nada — mismas claves D-4' que arriba).
-  const rates = budgetPlanningStore.lineCostRates
+  const rates = scenarioStore.lineCostRates
   const purchasing = purchasingKeys.value
   for (const line of purchaseLines.value) {
     const amount = Number(line.projected_amount)
@@ -488,7 +492,7 @@ const costTermsDegraded = computed(() => {
     // MISMOS filtros de "produciría filas" que `costPaymentRows` (§5).
     const amount = Number(line.projected_amount)
     if (!Number.isFinite(amount) || amount === 0) return false
-    const lineId = lineIdForCostCenter(budgetPlanningStore.costCenters, line.id_cost_center)
+    const lineId = lineIdForCostCenter(scenarioStore.costCenters, line.id_cost_center)
     const pct = resolveCogsPctByLine(rates, lineId, monthEndOf(line.budget_date))
     return pct !== null && pct !== 0
   })
@@ -1201,7 +1205,7 @@ const carryBlockNote = computed(() => {
             type="button"
             class="btn btn-secondary btn-sm"
             :disabled="settlement.loading"
-            @click="budgetPlanningStore.fetchIvaSettlement(scenario.id_budget, { force: true })"
+            @click="ivaStore.fetchIvaSettlement(scenario.id_budget, { force: true })"
           >
             Reintentar
           </button>

@@ -47,7 +47,9 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CecoMovementPivot from '@/components/budget/planning/CecoMovementPivot.vue'
 import CecoMovementTable from '@/components/budget/planning/CecoMovementTable.vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
+import { useBudgetSimulationStore } from '@/stores/budgetSimulationStore.js'
+import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
 import { useUserStore } from '@/stores/userStore.js'
 import { alertService } from '@/services/alertService.js'
 import {
@@ -100,7 +102,9 @@ const TAB_LABELS = {
 
 const route = useRoute()
 const router = useRouter()
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
+const simulationStore = useBudgetSimulationStore()
+const ivaStore = useBudgetIvaStore()
 const userStore = useUserStore()
 
 /** Tab INICIAL (RF-8.10): `?tab=flow` al llegar desde la Vista Flujo;
@@ -115,7 +119,7 @@ const cecoCodeParam = computed(() =>
   route.params.costCenterCode ? String(route.params.costCenterCode) : ''
 )
 
-const scenario = computed(() => budgetPlanningStore.currentScenario)
+const scenario = computed(() => scenarioStore.currentScenario)
 
 /**
  * Año N del escenario (fix 2026-10-26): activa los buckets fuera de año de
@@ -144,7 +148,7 @@ const currentReady = computed(
  */
 async function load(force = false) {
   detailError.value = false
-  const result = await budgetPlanningStore.fetchScenarioDetail(idBudget.value, force)
+  const result = await scenarioStore.fetchScenarioDetail(idBudget.value, force)
   if (result.ok) {
     // RF-8.2: mecánica de `BudgetGridEditor.load()` tras el detalle ok.
     // Borradores/cerrados ⇒ sims what-if en paralelo (single-flight/caché en
@@ -157,7 +161,7 @@ async function load(force = false) {
     // single-flight (dedupe igual que hoy). Lectura read-only; si falla
     // queda `error` silencioso y el grupo de arrastre simplemente no
     // aparece (degradación honesta — el notice va SOLO para motores).
-    void budgetPlanningStore.fetchCarryover(idBudget.value)
+    void scenarioStore.fetchCarryover(idBudget.value)
     return
   }
   if (result.kind === 'auth') return
@@ -193,10 +197,10 @@ function loadEngineMovements() {
   const base = scenario.value
   if (!base) return
   if (base.status !== 'active') {
-    void budgetPlanningStore.fetchPayrollSimulation(idBudget.value)
-    void budgetPlanningStore.fetchFinancingSimulation(idBudget.value)
+    void simulationStore.fetchPayrollSimulation(idBudget.value)
+    void simulationStore.fetchFinancingSimulation(idBudget.value)
   }
-  void budgetPlanningStore.fetchFinancingPrincipalFlow(idBudget.value)
+  void simulationStore.fetchFinancingPrincipalFlow(idBudget.value)
 }
 
 /* ─── RF-8.9: notices discretos de fallo de un origen (Reintentar force) ─── */
@@ -204,20 +208,20 @@ function loadEngineMovements() {
 /** Reintento de la nómina what-if (con `force`, acción existente del store). */
 function retryPayrollSim() {
   if (scenario.value && scenario.value.status !== 'active') {
-    void budgetPlanningStore.fetchPayrollSimulation(idBudget.value, { force: true })
+    void simulationStore.fetchPayrollSimulation(idBudget.value, { force: true })
   }
 }
 
 /** Reintento de la financiación what-if. */
 function retryFinancingSim() {
   if (scenario.value && scenario.value.status !== 'active') {
-    void budgetPlanningStore.fetchFinancingSimulation(idBudget.value, { force: true })
+    void simulationStore.fetchFinancingSimulation(idBudget.value, { force: true })
   }
 }
 
 /** Reintento del flujo de capital/desembolsos. */
 function retryPrincipalFlow() {
-  void budgetPlanningStore.fetchFinancingPrincipalFlow(idBudget.value, { force: true })
+  void simulationStore.fetchFinancingPrincipalFlow(idBudget.value, { force: true })
 }
 
 /**
@@ -230,27 +234,27 @@ const engineNotices = computed(() => {
   const base = scenario.value
   const showSims = Boolean(base) && base.status !== 'active'
   const list = []
-  if (showSims && budgetPlanningStore.payrollSim.error) {
+  if (showSims && simulationStore.payrollSim.error) {
     list.push({
       key: 'payroll',
       label: 'la simulación de nómina',
-      loading: budgetPlanningStore.payrollSim.loading,
+      loading: simulationStore.payrollSim.loading,
       retry: retryPayrollSim
     })
   }
-  if (showSims && budgetPlanningStore.financingSim.error) {
+  if (showSims && simulationStore.financingSim.error) {
     list.push({
       key: 'financing',
       label: 'la simulación de financiación',
-      loading: budgetPlanningStore.financingSim.loading,
+      loading: simulationStore.financingSim.loading,
       retry: retryFinancingSim
     })
   }
-  if (budgetPlanningStore.financingPrincipalFlow.error) {
+  if (simulationStore.financingPrincipalFlow.error) {
     list.push({
       key: 'principal',
       label: 'el flujo de capital de financiación',
-      loading: budgetPlanningStore.financingPrincipalFlow.loading,
+      loading: simulationStore.financingPrincipalFlow.loading,
       retry: retryPrincipalFlow
     })
   }
@@ -265,13 +269,13 @@ function backToPlanning() {
 
 /** id_cost_center resuelto del parámetro de ruta (catálogo del store). */
 const costCenterId = computed(() =>
-  resolveCostCenterId(budgetPlanningStore.costCenters, cecoCodeParam.value)
+  resolveCostCenterId(scenarioStore.costCenters, cecoCodeParam.value)
 )
 
 const costCenter = computed(() =>
   costCenterId.value === null
     ? null
-    : (budgetPlanningStore.costCenters.find((item) => item.id_cost_center === costCenterId.value) ??
+    : (scenarioStore.costCenters.find((item) => item.id_cost_center === costCenterId.value) ??
       null)
 )
 
@@ -355,17 +359,17 @@ const cecoEngineMovements = computed(() => {
 
   const out = []
   // (2) Nómina what-if (RF-8.2: cacheada solo en escenarios no activos).
-  const payrollSim = budgetPlanningStore.payrollSim
+  const payrollSim = simulationStore.payrollSim
   if (payrollSim.budgetId === budgetId && Array.isArray(payrollSim.data?.lines)) {
     out.push(...withCeco(normalizePayrollSimLines(payrollSim.data.lines, budgetId)))
   }
   // (3) Financiación what-if (intereses/seguros; capital jamás por aquí).
-  const financingSim = budgetPlanningStore.financingSim
+  const financingSim = simulationStore.financingSim
   if (financingSim.budgetId === budgetId && Array.isArray(financingSim.data?.lines)) {
     out.push(...withCeco(normalizeFinancingSimLines(financingSim.data.lines, budgetId)))
   }
   // (4) Capital/desembolsos del schedule de financiación.
-  const principalFlow = budgetPlanningStore.financingPrincipalFlow
+  const principalFlow = simulationStore.financingPrincipalFlow
   if (principalFlow.budgetId === budgetId && principalFlow.data) {
     if (Array.isArray(principalFlow.data.lines)) {
       out.push(
@@ -408,7 +412,7 @@ const hasAnyMovement = computed(() => allCecoMovements.value.length > 0)
  * ya disparan `fetchCarryover` por lazy (query del editor); aquí el
  * `load()` asegura el fetch fresco (dedupe del store — Tarea 6).
  */
-const carryoverState = computed(() => budgetPlanningStore.carryover)
+const carryoverState = computed(() => scenarioStore.carryover)
 
 const carryoverAvailable = computed(
   () =>
@@ -531,7 +535,7 @@ const filteredLines = computed(() => {
 /* ─────────────── Cabecera: modo IVA heredado + total de la tab ─────────────── */
 
 /** Bandera viva del modo (SIN toggle: solo lectura, RF-2.2 / AC-6). */
-const ivaActive = computed(() => budgetPlanningStore.ivaMode === true)
+const ivaActive = computed(() => ivaStore.ivaMode === true)
 
 /**
  * REVISIÓN 5 (RF-11.3/RF-11.6 + spec `frontend.03_21` §5.3): serie de
@@ -569,7 +573,7 @@ const fixedIncomeByMonth = computed(() => {
   const zeroSeries = Array.from({ length: 12 }, () => 0)
   if (!currentReady.value) return { sales: zeroSeries, receivables: zeroSeries }
   const lines = scenario.value.budget_lines
-  const costCenters = budgetPlanningStore.costCenters
+  const costCenters = scenarioStore.costCenters
   const id = costCenterId.value
   // A-01/A-02: serie ya resuelta por el CECO de gasto variable POR
   // COMPORTAMIENTO (facturado ⇒ I causado; recaudo ⇒ R cobro del mes de pago).
@@ -677,12 +681,12 @@ const exportRoot = ref(null)
  * mismo dataset a la tabla) o con el detalle del escenario en vuelo.
  */
 const exportDisabled = computed(
-  () => budgetPlanningStore.detailLoading || !currentReady.value || filteredLines.value.length === 0
+  () => scenarioStore.detailLoading || !currentReady.value || filteredLines.value.length === 0
 )
 
 /** `title` del botón deshabilitado (RF-7: explicativo). */
 const exportDisabledTitle = computed(() => {
-  if (budgetPlanningStore.detailLoading) {
+  if (scenarioStore.detailLoading) {
     return 'Exportación disponible cuando termine de cargar el escenario.'
   }
   return 'No hay movimientos que exportar (¿filtro sin resultados?).'
@@ -739,7 +743,7 @@ function onExportSelect(format) {
 
     <!-- Cargando primer fetch / escenario de la URL no en caché (RF-2.4) -->
     <div
-      v-if="budgetPlanningStore.detailLoading && !currentReady"
+      v-if="scenarioStore.detailLoading && !currentReady"
       class="cd-loading"
       aria-live="polite"
     >

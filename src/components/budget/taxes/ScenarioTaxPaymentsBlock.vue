@@ -1,12 +1,12 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { formatMoney } from '@/components/budget/planning/planningFormat.js'
 import { TAX_TYPES, aggregateTaxPayments, taxCalculationAvailable } from './taxPresentation.js'
 
 const props = defineProps({ scenario: { type: Object, required: true } })
-const store = useBudgetPlanningStore()
+const store = useBudgetScenarioStore()
 const router = useRouter()
 const tax = computed(() => store.tax)
 const rows = computed(() => aggregateTaxPayments(tax.value.cashFlow, props.scenario.budget_year))

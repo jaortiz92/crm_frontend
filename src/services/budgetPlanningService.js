@@ -5,7 +5,7 @@ import axiosInstance from '@/plugins/axios'
  * (FE-S4-BUDGET-PLANNING §5; contrato autoridad = `backend.02_12` §5).
  *
  * Capa PURA de transporte: sin lógica de negocio ni clasificación de errores
- * (eso vive en `budgetPlanningStore`). Componentes y stores NUNCA importan
+ * (eso vive en `budgetScenarioStore`). Componentes y stores NUNCA importan
  * axios directamente; todo paso por aquí (patrón `budgetRulesService`).
  *
  * Rutas exactas (§5 backend):

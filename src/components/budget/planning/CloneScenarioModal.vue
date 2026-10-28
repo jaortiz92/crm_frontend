@@ -10,7 +10,7 @@
  * dashboard); NO navega automáticamente (§6.2).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { alertService } from '@/services/alertService.js'
 import { formatMoney } from '@/components/budget/planning/planningFormat.js'
 
@@ -22,7 +22,7 @@ const props = defineProps({
 
 const emit = defineEmits(['created', 'close'])
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 
 const dialogRef = ref(null)
 const attempted = ref(false)
@@ -32,7 +32,7 @@ const nameError = ref('')
 /** @type {null | {kind: string, message?: string}} */
 const serverError = ref(null)
 
-const busy = computed(() => budgetPlanningStore.cloning)
+const busy = computed(() => scenarioStore.cloning)
 
 const pctNumber = computed(() => {
   const raw = String(modifierPct.value).trim()
@@ -94,7 +94,7 @@ async function handleClone() {
   }
   if (busy.value) return
 
-  const result = await budgetPlanningStore.cloneScenario({
+  const result = await scenarioStore.cloneScenario({
     idBudget: props.scenario.id_budget,
     nuevoNombre: nuevoNombre.value,
     modifierPct: pctNumber.value

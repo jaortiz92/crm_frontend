@@ -32,7 +32,7 @@
  *    montos con fecha efectiva de N±1 van a las columnas "Antes/Después de N"
  *    (condicionales; FE-S8, mismo criterio FE de `CashFlowPivotTable`).
  *  - RF-4.4/AC-6: respeta `ivaMode` igual que el módulo — el modo se lee del
- *    store (`budgetPlanningStore.ivaMode`, misma fuente que
+ *    store (`ivaStore.ivaMode`, misma fuente que
  *    `CashFlowPivotTable`); el tab Causado permanece SIEMPRE neto (D-FE14-7)
  *    y el tab Flujo aplica el gross-up × 1.19 por línea con los helpers de
  *    `planningFormat` (`withIva` + `lineChargesIva`) centralizado en
@@ -54,7 +54,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import PivotMonthTable from './PivotMonthTable.vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
 import { MONTH_LABELS } from './planningFormat.js'
 import {
   GROUP_ROW_ORDER,
@@ -97,10 +97,10 @@ const props = defineProps({
   scenarioYear: { type: Number, default: null }
 })
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const ivaStore = useBudgetIvaStore()
 
 /** Bandera viva del modo "Con IVA" (dueño: store — misma fuente que el Flujo). */
-const ivaActive = computed(() => budgetPlanningStore.ivaMode === true)
+const ivaActive = computed(() => ivaStore.ivaMode === true)
 
 const isFlowTab = computed(() => props.tab === TAB_FLOW)
 

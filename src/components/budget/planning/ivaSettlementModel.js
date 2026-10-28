@@ -50,7 +50,7 @@ export function breakdownTitle(bucket, entries, formatMoney) {
 
 /**
  * Modelo de la tabla de liquidación a partir del payload del BE
- * (`budgetPlanningStore.settlement.data`).
+ * (`budgetIvaStore.settlement.data`).
  *  - `periodRows`: una fila por período del Calendario IVA (con el desglose
  *    descontable por concepto y la meta de tooltips para el panel).
  *  - `totals`: fila Totales con el objeto `totals` del BE (clave

@@ -32,7 +32,7 @@
  *    (`buildCogsRatePool`/`resolveCogsPctByLine`) como fuente única con la
  *    derivación de pago a proveedores de la Vista Flujo — comportamiento
  *    de esta vista idéntico (AC-PYG-1..12).
- *  - D-4 (§3.2): tasas cacheadas por sesión en `budgetPlanningStore`
+ *  - D-4 (§3.2): tasas cacheadas por sesión en `budgetScenarioStore`
  *    (`ensureCatalogs`), fallo silencioso → `lineCostRatesError`.
  *  - D-5 (§4, enmienda 2026-10-15 por solicitud stakeholder): orden
  *    Resultado (P&G) → Acumulado (Ene→Mes) → Ingresos → Costo de ventas →
@@ -107,7 +107,7 @@
  * render: celdas `·`/`—`/compactas, filas %, tooltips y bloques.
  */
 import { computed } from 'vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import ScenarioTaxPnlSection from '@/components/budget/taxes/ScenarioTaxPnlSection.vue'
 import PivotMonthTable from './PivotMonthTable.vue'
 /**
@@ -139,12 +139,12 @@ const props = defineProps({
   scenario: { type: Object, required: true }
 })
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 
 /* ─────────── FE-S16 (frontend.03_19) RF-1: celda CECO → drill-down ─────────── */
 
 /** Catálogo CECO cacheado (fuente del encaje código de ruta ↔ id). */
-const costCenters = computed(() => budgetPlanningStore.costCenters)
+const costCenters = computed(() => scenarioStore.costCenters)
 
 /**
  * FE-S16 (frontend.03_19 RF-1.1): destino del drill-down de una fila cuyo
@@ -163,7 +163,7 @@ function cecoLink(rowId) {
     to: {
       name: 'BudgetCecoDetail',
       params: {
-        idBudget: props.scenario?.id_budget ?? budgetPlanningStore.currentScenarioId ?? '',
+        idBudget: props.scenario?.id_budget ?? scenarioStore.currentScenarioId ?? '',
         costCenterCode: code
       }
     },
@@ -190,7 +190,8 @@ function labelTitleOf(block, row) {
 
 /* ───────── FE-S14-IVA D-FE14-7: sin IVA — la Ejecutiva SIEMPRE NETOS ─────────
  * Decisión de enmienda 2026-09-23: el modo "Con IVA" NO toca esta vista (es el
- * P&G en netos por causación). `budgetPlanningStore.ivaMode` no se lee aquí.
+ * P&G en netos por causación). `ivaMode` (sub-store `budgetIvaStore`) no se
+ * lee aquí.
  *
  * FE-S20 (spec `frontend.03_20` §7.2): líneas y pivotes provienen del modelo
  * compartido `executivePivot.js` (getter ⇒ reactividad con la prop intacta);
@@ -199,7 +200,7 @@ function labelTitleOf(block, row) {
 
 const model = createExecutivePivotModel({
   scenario: () => props.scenario,
-  store: budgetPlanningStore
+  store: scenarioStore
 })
 const {
   variableSourceLines,
@@ -218,7 +219,7 @@ const {
 const variableLines = computed(() => {
   const rows = variableSourceLines.value.map((line) => ({
     id: line.id_budget_line,
-    ceco: budgetPlanningStore.costCenterLabel(line.id_cost_center),
+    ceco: scenarioStore.costCenterLabel(line.id_cost_center),
     fecha: line.budget_date,
     tipoLinea: LINE_TYPE_LABELS[line.line_type] ?? line.line_type,
     comportamiento: BEHAVIOR_LABELS[line.behavior_type] ?? line.behavior_type,

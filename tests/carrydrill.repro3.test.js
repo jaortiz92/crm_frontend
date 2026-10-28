@@ -62,14 +62,14 @@ vi.mock('@/stores/userStore.js', () => ({
 }))
 
 import CecoDetailView from '@/views/budget/planning/CecoDetailView.vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { createPinia } from 'pinia'
 
 describe('REPRO ronda 3 — race single-flight del arrastre (ENMIENDA v1.2)', () => {
   it('el deep-link tras un vuelo de OTRO escenario deja la caché con líneas del 121', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
-    const store = useBudgetPlanningStore(pinia)
+    const store = useBudgetScenarioStore(pinia)
     const { budgetPlanningService } = await import('@/services/budgetPlanningService.js')
     let release576
     const deferred576 = new Promise((resolve) => {

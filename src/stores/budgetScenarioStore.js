@@ -10,47 +10,54 @@ import { alertService } from '@/services/alertService.js'
 // las vistas: la orquestación es de la ACCIÓN, reusada editor y modal).
 import { deriveInitialBalanceFromSource } from '@/components/budget/planning/initialBalanceDerivation.js'
 import router from '@/router/index.js'
+// FASE 2 (split del `budgetPlanningStore`): orquestación cruzada de dominios.
+// Los sub-stores IVA/Simulación se resuelven DENTRO de las acciones (patrón
+// estándar Pinia `useXxxStore()`), nunca a nivel de módulo: el único acople
+// entre stores es el estado (`currentScenario`) y las acciones orquestadoras
+// documentadas abajo. El import es circular entre esta módulo y
+// `budgetIvaStore`/`budgetSimulationStore` (ellos leen `currentScenario` y
+// reusan `classifyPlanningError`/`handleAuth` de aquí) — es seguro porque
+// SOLO se referencian los bindings dentro de cuerpos de función.
+import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
+import { useBudgetSimulationStore } from '@/stores/budgetSimulationStore.js'
 
 /**
- * Estado del Módulo de Planeación y Escenarios (FE-S4-BUDGET-PLANNING §4).
+ * NÚCLEO del Módulo de Planeación y Escenarios (FE-S4-BUDGET-PLANNING §4) —
+ * FASE 2: sub-store `budgetScenario` extraído del `budgetPlanningStore`
+ * (mismo comportamiento byte-a-byte; solo cambió el ownership del estado).
  *
- * Dueño exclusivo de la caché (las vistas/tablas SOLO leen de aquí, patrón
- * `budgetRulesStore`):
- *  - `scenarios`: lista del dashboard (`null` = nunca cargada; `[]` = vacía).
- *    El orden es el del backend (§6.1: no re-ordenar en cliente). `scenariosStale`
- *    invalida la caché tras editar una celda para que el dashboard no muestre
- *    Σ rancios.
- *  - `currentScenario`: detalle (`BudgetFull` + `parent_budget_name`) con sus
- *    `budget_lines`: ÚNICA fuente del pivote Ene–Dic y del editor de celdas
- *    (ambos derivados client-side, ASM-10; jamás dos fuentes divergentes).
- *  - Catálogos CECO/temporadas cacheados una vez por sesión (patrón A5) para
- *    resolver `id_cost_center`/`id_collection` en etiquetas legibles. Las
- *    tasas de costo activas (`lineCostRates`, FE-S4C §3.2), los términos de
- *    pago al proveedor del costo (`payableTerms`, FE-S7 §3) y el dúo de
- *    internación (`internmentRates`/`internmentTerms`, FE-S10 §2.2) comparten
- *    el mismo ciclo de vida en `ensureCatalogs()` para la estimación de la
- *    Ejecutiva y la derivación "Pago a proveedores" + split "Pago de
- *    internación" de la Vista Flujo.
+ * DOMINA:
+ *  - Listado del dashboard (`scenarios` + año/stale/loading) y su CRUD de
+ *    alto nivel: upload, clonar, eliminar borrador, set-target (BR-TGT-01).
+ *  - Detalle del escenario abierto (`currentScenario` + `budget_lines`):
+ *    ÚNICA fuente del pivote Ene–Dic y del editor de celdas (ambos derivados
+ *    client-side, ASM-10).
+ *  - CRUD de líneas (FE-S4D): create/update/delete + PUT puntual de celda,
+ *    con cachés anti-doble-submit (`cellSaving`/`lineSaving`).
+ *  - Catálogos A5 de sesión: CECO, temporadas, tasas de costo (FE-S4C §3.2),
+ *    términos de pago al proveedor del costo (FE-S7 §3) y dúo de internación
+ *    (FE-S10 §2.2) — todos en `ensureCatalogs()`.
+ *  - Arrastre de saldos N−1 (FE-S6-CARRYOVER): caché lazy + toggle con
+ *    rollback; single-flight real a nivel de módulo (`carryoverInflight`).
+ *  - Saldos iniciales configurables (FE-S7-INITBAL): GET/PUT + derivación
+ *    client-side del valor por arrastre (RF-FE-04).
+ *  - Caché tributaria del escenario (`tax`: summary/cashFlow de los endpoints
+ *    de tax planning) con invalidación `stale` tras mutar líneas.
  *
- * Flags anti-doble-submit (NFR-F4/AC-FE-8): `uploading`, `cloning`,
- * `settingTarget`, `deleting` (expuestos como `isSubmitting`), `cellSaving`
- * por `id_budget_line` y `lineSaving` por `id_budget_line` o
- * `'new'+sectionKey` (FE-S4D §4). Un segundo disparo MIENTRAS hay operación
- * en vuelo es no-op (jamás genera request paralelo).
+ * SE ACOPLA CON (acciones orquestadoras):
+ *  - `budgetIvaStore`: `fetchScenarioDetail` re-hidrata el modo IVA y resetea
+ *    la caché de liquidación; `updateCell`/CRUD de líneas/`setCarryoverFlag`
+ *    disparan `scheduleSettlementRefresh()` (AC-FE14-2/6).
+ *  - `budgetSimulationStore`: `fetchScenarioDetail` resetea las cachés what-if
+ *    (nómina, financiación y capital) al cambiar de escenario.
+ *  - `budgetTaxStore` y `budgetRulesStore` escriben/leen esta caché directamente
+ *    (patrón "la caché es LA fuente"); `budgetRulesStore` sincroniza el espejo
+ *    de internación (`syncInternmentMirrorToPlanning`).
  *
- * FE-S14-IVA (frontend.03_14 §5) añade:
- *  - `ivaMode` + `ivaModeBudgetId`: interruptor de presentación "Neto / Con
- *    IVA" PERSISTIDO por `idBudget` en localStorage (D-FE14-1, default ON).
- *    ENMIENDA D-FE14-7 (2026-09-23): el modo SOLO altera la Vista Flujo — la
- *    cabecera y la Vista Ejecutiva (P&G) se calculan SIEMPRE sobre netos.
- *  - `settlement`: caché del `IvaSettlementResult` del BE (D-FE14-4: único
- *    dato IVA server-side) con fetch lazy + invalidación debounced (~400 ms)
- *    tras toda mutación de líneas y todo cambio de calendario IVA puente desde
- *    `budgetRulesStore` (AC-FE14-2/6).
- *  - La fórmula del gross-up vive en `planningFormat.js`
- *    (`IVA_RATE`/`withIva`/`ivaOf`, D-FE14-6: cero hardcodes sueltos) y solo
- *    la consumen `CashFlowPivotTable` (Flujo) y `BudgetLineGrid` (columnas
- *    informativas del editor).
+ * Además EXPORTA los helpers compartidos del split: `classifyPlanningError`
+ * (clasificación §9 de FE-S4/FE-S4D usada por los 3 sub-stores) y las acciones
+ * de sesión `handleAuth`/`refreshRolesSilently` (dueño del patrón de sesión,
+ * reutilizadas por IVA/Simulación vía `useBudgetScenarioStore()`).
  */
 
 const GENERIC_UNEXPECTED_MESSAGE =
@@ -61,56 +68,6 @@ const GENERIC_VALIDATION_MESSAGE =
 
 /** Mensaje §6 (FE-S4D) para 404 de línea en update/delete tras resync de la vista. */
 const LINE_GONE_MESSAGE = 'La línea ya no existe (¿carga nueva?). La vista se actualizó.'
-
-/* ─────────── FE-S14-IVA: persistencia del modo + debounce del settlement ─────────── */
-
-/**
- * Prefijo de la clave de `localStorage` del modo "Neto / Con IVA" POR
- * ESCENARIO (D-FE14-1 / frontend.03_14 §5 `BudgetGridEditor`: persistente por
- * `idBudget`; default ON = "mundo real" cuando no hay preferencia guardada).
- */
-const IVA_MODE_STORAGE_PREFIX = 'budgetPlanning.ivaMode.'
-
-/**
- * Lee la preferencia de modo para un escenario. Cero guardados / valor no
- * binario / `localStorage` inaccesible (modo privado) ⇒ `true` (D-FE14-1:
- * el default es Con IVA activo).
- * @param {number|string} idBudget
- * @returns {boolean}
- */
-function readIvaModePreference(idBudget) {
-  try {
-    const raw = localStorage.getItem(`${IVA_MODE_STORAGE_PREFIX}${idBudget}`)
-    if (raw === '0' || raw === 'false') return false
-    if (raw === '1' || raw === 'true') return true
-  } catch {
-    /* localStorage bloqueado: degradar al default sin romper la vista */
-  }
-  return true
-}
-
-/**
- * Escribe la preferencia (mejor-effort: jamás rompe el toggle si el
- * almacenamiento está indisponible — la sesión sigue en memoria).
- * @param {number|string} idBudget
- * @param {boolean} value
- */
-function writeIvaModePreference(idBudget, value) {
-  try {
-    localStorage.setItem(`${IVA_MODE_STORAGE_PREFIX}${idBudget}`, value ? '1' : '0')
-  } catch {
-    /* ignorar: persistencia opcional */
-  }
-}
-
-/**
- * Debounce del refetch de liquidación tras mutaciones de líneas
- * (frontend.03_14 §4.2 / AC-FE14-2: ≤ 1 request nuevo, ~400 ms, "same
- * pattern del refresh de carryover"). Timer a nivel de módulo: no forma
- * parte del estado reactivo ni se serializa.
- */
-const SETTLEMENT_DEBOUNCE_MS = 400
-let settlementRefreshTimer = null
 
 /**
  * ENMIENDA v1.2 (FE-S21-CARRYDRILL): promesa del GET de arrastre en vuelo (el
@@ -273,7 +230,7 @@ export function classifyPlanningError(err) {
   return { kind: 'string_detail', message: GENERIC_UNEXPECTED_MESSAGE }
 }
 
-export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
+export const useBudgetScenarioStore = defineStore('budgetScenario', {
   state: () => ({
     /** @type {Array<object>|null} listado del dashboard; null = nunca cargada */
     scenarios: null,
@@ -371,43 +328,6 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
     internmentCatalogError: false,
 
     /**
-     * FE-S14-IVA (frontend.03_14 D-FE14-1 + ENMIENDA D-FE14-7): modo de
-     * visualización "Neto / Con IVA" POR ESCENARIO. `ivaMode` es la bandera
-     * viva que leen el Flujo, la cuadrícula (columnas informativas) y el
-     * panel de liquidación — NUNCA la Vista Ejecutiva ni los Σ de cabecera
-     * (el P&G siempre en netos, D-FE14-7); `ivaModeBudgetId` recuerda a qué
-     * escenario pertenece (se re-hydrata desde `localStorage` en cada
-     * `fetchScenarioDetail`). Default ON = mundo real; el toggle existe para
-     * no romper la lectura de quienes prefieran neto (AC-FE14-1: OFF ⇒ las
-     * vistas vuelven a los netos actuales byte-a-byte).
-     */
-    ivaMode: true,
-    ivaModeBudgetId: null,
-
-    /**
-     * FE-S14-IVA (frontend.03_14 §4.2/§5, D-FE14-4): caché de la liquidación
-     * `IvaSettlementResult` del BE (backend.02_20 §4.6) — ÚNICO dato IVA que
-     * viaja del servidor (la recurrencia con arrastre no se recalcula en FE).
-     * La piden: el editor al abrir el escenario, el tab Liquidación (lazy),
-     * el debounce de `scheduleSettlementRefresh()` tras mutaciones de líneas
-     * y el botón "Recalcular" (force). Degradación NFR-FE14-3: `error: true`
-     * ⇒ panel y Flujo muestran "sin dato de liquidación" + reintento; jamás
-     * pantalla rota. Se RESETA al cambiar de escenario (nunca se muestra la
-     * liquidación de otro presupuesto).
-     */
-    settlement: {
-      /** @type {object|null} `IvaSettlementResult` crudo (claves §4.6 del BE) */
-      data: null,
-      /** escenario al que pertenece `data` (descarte defensivo de respuestas tardías) */
-      budgetId: null,
-      /** año pedido (eco local; el de la respuesta manda en el panel) */
-      year: null,
-      loaded: false,
-      loading: false,
-      error: false
-    },
-
-    /**
      * Resultados tributarios del escenario. `summary` y `cashFlow` son
      * respuestas crudas de los endpoints de tax planning: las vistas solo
      * presentan sus filas, nunca reproducen reglas ni calendarios.
@@ -420,34 +340,6 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
       loading: false,
       error: false,
       stale: false
-    },
-
-    /**
-     * BE-S11 what-if: caché del `PayrollSimulationOut` de escenarios NO
-     * activos (la pide el editor al abrir; degrada en silencio con banner +
-     * reintento, patrón NFR-FE14-3). Se RESETA al cambiar de escenario y un
-     * escenario ACTIVO jamás la consume (AC-SIM-2: ni una línea simulada
-     * junto a las reales del motor).
-     */
-    payrollSim: {
-      /** @type {object|null} `PayrollSimulationOut` crudo */
-      data: null,
-      /** escenario al que pertenece `data` (descarte de respuestas tardías) */
-      budgetId: null,
-      loaded: false,
-      loading: false,
-      error: false
-    },
-
-    /** BE-S12 financing what-if: gastos de interés/seguro en escenarios no activos. */
-    financingSim: {
-      /** @type {object|null} resultado crudo de FinancingSimulationOut */
-      data: null,
-      /** escenario al que pertenece `data` (descarte de respuestas tardías) */
-      budgetId: null,
-      loaded: false,
-      loading: false,
-      error: false
     },
 
     /**
@@ -487,17 +379,6 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
       deriving: false,
       /** @type {number|null} última fuente para la que se intentó derivar */
       deriveAttemptedSourceId: null
-    },
-
-    /** Flujo de capital del schedule activo; separado de toda línea P&L. */
-    financingPrincipalFlow: {
-      /** @type {object|null} respuesta cruda del endpoint */
-      data: null,
-      /** presupuesto al que pertenece la respuesta */
-      budgetId: null,
-      loaded: false,
-      loading: false,
-      error: false
     },
 
     /** Flags anti-doble-submit (NFR-F4/AC-FE-8). */
@@ -721,7 +602,9 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
     /**
      * Equivalente localizado del "interceptor global" de sesión (desviación
      * documentada compartida con `budgetUploadStore`/`budgetRulesStore`: el
-     * repo solo tiene interceptor de petición en `plugins/axios.js`).
+     * repo solo tiene interceptor de petición en `plugins/axios.js`). Dueño
+     * del patrón en el split FASE 2: los sub-stores IVA/Simulación lo
+     * reutilizan vía `useBudgetScenarioStore().handleAuth(...)`.
      * @param {{ kind: string }} classified
      */
     handleAuth(classified) {
@@ -891,6 +774,12 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
      * aditivo `include_carryover` de la respuesta y el resto de la caché del
      * arrastre se REINICIA (`lines: []`, `loaded: false`, …): el fetch real es
      * lazy y lo dispara la vista solo con el tab Flujo activo y `enabled`.
+     *
+     * ACCIÓN ORQUESTADORA (FASE 2): además de su dominio propio, resetea las
+     * cachés IVA (`applyIvaModeForBudget` + `resetSettlementCache`) y las
+     * what-if de simulación (`resetPayrollSimCache`/`resetFinancingSimCache`/
+     * `resetFinancingPrincipalFlowCache`) para que nada de OTRO escenario se
+     * asome al cambiar de detalle.
      * @param {number} idBudget
      * @param {boolean} [force=false]
      * @returns {Promise<{ ok: boolean, kind?: string }>}
@@ -924,13 +813,16 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         // RESETEA: la de otro escenario jamás debe asomarse (y el GET fresco
         // lo dispara el editor al abrir, §4.2 — no aquí, para no acoplar el
         // fetch del detalle al de la liquidación).
-        this.applyIvaModeForBudget(idBudget)
-        this.resetSettlementCache()
+        const ivaStore = useBudgetIvaStore()
+        ivaStore.applyIvaModeForBudget(idBudget)
+        ivaStore.resetSettlementCache()
         this.resetTaxCache()
-        // BE-S11 what-if: la simulación de OTRO escenario tampoco se asoma.
-        this.resetPayrollSimCache()
-        this.resetFinancingSimCache()
-        this.resetFinancingPrincipalFlowCache()
+        // BE-S11/BE-S12 what-if: las simulaciones de OTRO escenario tampoco
+        // se asoman (las dispara la vista al abrir).
+        const simulationStore = useBudgetSimulationStore()
+        simulationStore.resetPayrollSimCache()
+        simulationStore.resetFinancingSimCache()
+        simulationStore.resetFinancingPrincipalFlowCache()
         return { ok: true }
       } catch (err) {
         this.currentScenario = null
@@ -1142,7 +1034,7 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         this.markTaxStale()
         // FE-S14-IVA AC-FE14-2: la base de la liquidación cambió ⇒ debounce
         // de refetch (§4.2). NO bloquea ni ensucia el resultado de la celda.
-        this.scheduleSettlementRefresh()
+        useBudgetIvaStore().scheduleSettlementRefresh()
         return { ok: true, data: line }
       } catch (err) {
         const classified = classifyPlanningError(err)
@@ -1241,7 +1133,7 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         this.markTaxStale()
         // FE-S14-IVA AC-FE14-2: línea nueva (con o sin `has_iva` en el
         // payload) ⇒ settlement debounce.
-        this.scheduleSettlementRefresh()
+        useBudgetIvaStore().scheduleSettlementRefresh()
         return { ok: true, line }
       } catch (err) {
         const classified = classifyPlanningError(err)
@@ -1280,7 +1172,7 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         // FE-S14-IVA AC-FE14-2: este PUT cubre TAMBIÉN el toggle parcial
         // `{ has_iva }` de la cuadrícula (frontend.03_14 §5): la liquidación
         // (descuentos E2/E3/E4) cambia ⇒ debounce de refetch.
-        this.scheduleSettlementRefresh()
+        useBudgetIvaStore().scheduleSettlementRefresh()
         return { ok: true, line }
       } catch (err) {
         const classified = classifyPlanningError(err)
@@ -1321,7 +1213,7 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         this.softRefreshScenarioList()
         this.markTaxStale()
         // FE-S14-IVA: borrado de línea ⇒ debounce del settlement (AC-FE14-2).
-        this.scheduleSettlementRefresh()
+        useBudgetIvaStore().scheduleSettlementRefresh()
         return { ok: true }
       } catch (err) {
         const classified = classifyPlanningError(err)
@@ -1463,7 +1355,7 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         // FE-S14-IVA: el PUT de arrastre reemplaza el detalle completo
         // (líneas frescas que pueden haber cambiado la base) ⇒ el
         // settlement se invalida y el próximo lector lo refuerza.
-        this.scheduleSettlementRefresh()
+        useBudgetIvaStore().scheduleSettlementRefresh()
         return { ok: true }
       } catch (err) {
         // 4. Rollback de AMBOS (referencia previa + su campo + enabled).
@@ -1718,290 +1610,6 @@ export const useBudgetPlanningStore = defineStore('budgetPlanningStore', {
         return { ok: false, ...classified }
       } finally {
         this.tax.loading = false
-      }
-    },
-
-    /* ─────────────── FE-S14-IVA: modo Con IVA + liquidación ─────────────── */
-
-    /**
-     * Re-hidrata `ivaMode` desde la preferencia guardada del escenario
-     * (frontend.03_14 D-FE14-1: persistido POR `idBudget` en localStorage,
-     * default ON). Lo llama `fetchScenarioDetail` en el éxito; el editor no
-     * necesita hacer nada extra al cambiar de escenario.
-     * @param {number|string} idBudget
-     * @returns {void}
-     */
-    applyIvaModeForBudget(idBudget) {
-      this.ivaModeBudgetId = Number(idBudget)
-      this.ivaMode = readIvaModePreference(idBudget)
-    },
-
-    /**
-     * Toggle del modo "Neto / Con IVA" (sin HTTP: es preferencia de
-     * VISUALIZACIÓN — las derivaciones cuelgan de la reactividad de la
-     * bandera, AC-FE14-1/2). Persiste en localStorage por escenario y
-     * re-hidrata si el editor apunta a otro (guard defensivo de carrera).
-     * @param {number|string} idBudget
-     * @param {boolean} value
-     * @returns {void}
-     */
-    setIvaMode(idBudget, value) {
-      const flag = Boolean(value)
-      this.ivaModeBudgetId = Number(idBudget)
-      this.ivaMode = flag
-      writeIvaModePreference(idBudget, flag)
-    },
-
-    /**
-     * Limpia la caché de liquidación (escenario nuevo / resync). No cancela
-     * un request en vuelo: la acción lo descarta por `budgetId` al resolver.
-     * @returns {void}
-     */
-    resetSettlementCache() {
-      this.settlement.data = null
-      this.settlement.budgetId = null
-      this.settlement.year = null
-      this.settlement.loaded = false
-      this.settlement.loading = false
-      this.settlement.error = false
-    },
-
-    /**
-     * GET de la liquidación `IvaSettlementResult` (backend.02_20 §4.6/§5.9) —
-     * único dato IVA server-side (D-FE14-4). La piden: el editor al abrir el
-     * escenario, el tab Liquidación (lazy), `scheduleSettlementRefresh()`
-     * tras mutaciones de líneas/calendario (debounce ⇒ ≤ 1 request nuevo,
-     * AC-FE14-2) y el botón "Recalcular" (`force: true`).
-     *
-     * Caché: mismo escenario ya cargado y `!force` ⇒ no-op; dedupe mientras
-     * hay un GET en vuelo. El `year` se envía SOLO si el escenario lo define
-     * (por lo demás defaultea el BE). Errores (NFR-FE14-3): `network`/`5xx`
-     * ⇒ `settlement.error = true` + `loaded = false` (panel y Flujo degradan
-     * con "sin dato de liquidación" + reintento; JAMÁS toast: el dato es de
-     * presentación y la vista no rompe); 404 de escenario deja el estado
-     * limpio (el editor ya murió con el detalle); 401 ⇒ `handleAuth`. Si el
-     * escenario cambió en vuelo, la respuesta se DESCARTA.
-     * @param {number|string} idBudget
-     * @param {{ force?: boolean }} [options]
-     * @returns {Promise<{ ok: boolean, kind?: string, [key: string]: any }>}
-     */
-    async fetchIvaSettlement(idBudget, { force = false } = {}) {
-      const target = Number(idBudget)
-      if (!Number.isFinite(target) || target <= 0) return { ok: false, kind: 'notfound' }
-      // Single-flight SIEMPRE (spam del "Recalcular" ⇒ un solo GET, NFR-FE14-2):
-      if (this.settlement.loading) return { ok: true }
-      if (!force && this.settlement.loaded && this.settlement.budgetId === target) {
-        return { ok: true }
-      }
-      const year = Number(this.currentScenario?.budget_year)
-      const effectiveYear = Number.isInteger(year) ? year : null
-      this.settlement.loading = true
-      try {
-        const response = await budgetPlanningService.getIvaSettlement(target, effectiveYear)
-        // El escenario cambió mientras volaba: se descarta (la próxima lectura
-        // —apertura del tab o mutation debounce— trae la verdad actual).
-        if (this.currentScenario?.id_budget !== target) return { ok: true }
-        const data = response?.data ?? null
-        this.settlement.data = data && typeof data === 'object' ? data : null
-        this.settlement.budgetId = target
-        this.settlement.year = Number.isInteger(this.settlement.data?.year)
-          ? this.settlement.data.year
-          : effectiveYear
-        this.settlement.loaded = true
-        this.settlement.error = false
-        return { ok: true }
-      } catch (err) {
-        const classified = classifyPlanningError(err)
-        this.handleAuth(classified)
-        if (classified.kind !== 'auth') {
-          this.settlement.error = true
-          this.settlement.loaded = false
-          this.settlement.data = null
-          this.settlement.budgetId = target
-          this.settlement.year = effectiveYear
-        }
-        return { ok: false, ...classified }
-      } finally {
-        this.settlement.loading = false
-      }
-    },
-
-    /**
-     * Invalida y re-programa el refetch del settlement con debounce ~400 ms
-     * (frontend.03_14 §4.2: "tras cualquier mutación de líneas (debounce,
-     * same pattern del refresh de carryover)"). RÁPIDO: varias mutaciones en
-     * el mismo tick (edit de celda + toggle de flag) colapsan a UN request.
-     * Lo llaman las mutaciones de línea del propio store y —puente
-     * AC-FE14-6— `budgetRulesStore` tras mutar el calendario IVA (los
-     * `payment_due_date` y la existencia de períodos cambian la recurrencia).
-     * No-op si no hay escenario abierto en `currentScenario`.
-     * @param {number} [delayMs=SETTLEMENT_DEBOUNCE_MS]
-     * @returns {void}
-     */
-    scheduleSettlementRefresh(delayMs = SETTLEMENT_DEBOUNCE_MS) {
-      const idBudget = this.currentScenario?.id_budget
-      if (!idBudget) return
-      if (settlementRefreshTimer) clearTimeout(settlementRefreshTimer)
-      settlementRefreshTimer = setTimeout(() => {
-        settlementRefreshTimer = null
-        if (this.currentScenario?.id_budget !== idBudget) return
-        void this.fetchIvaSettlement(idBudget, { force: true })
-      }, delayMs)
-    },
-
-    /** BE-S11 what-if: deja la caché de simulación limpia. */
-    resetPayrollSimCache() {
-      this.payrollSim.data = null
-      this.payrollSim.budgetId = null
-      this.payrollSim.loaded = false
-      this.payrollSim.loading = false
-      this.payrollSim.error = false
-    },
-
-    /**
-     * GET `/budget/planning/{id}/payroll-simulation` (BE-S11 what-if de
-     * escenarios NO activos). Espejo de `fetchIvaSettlement`: single-flight
-     * (spam del "Reintentar" ⇒ un solo GET), caché por escenario, respuesta
-     * tardía descartada y degradación SILENTE — el editor muestra banner +
-     * reintento; la vista jamás rompe (NFR-FE14-3). El 400 de escenario
-     * activo queda como `error` sin data (el editor no lo pide en ese caso,
-     * defensa en profundidad).
-     * @param {number|string} idBudget
-     * @param {{ force?: boolean }} [options]
-     * @returns {Promise<{ ok: boolean, kind?: string, [key: string]: any }>}
-     */
-    async fetchPayrollSimulation(idBudget, { force = false } = {}) {
-      const target = Number(idBudget)
-      if (!Number.isFinite(target) || target <= 0) return { ok: false, kind: 'notfound' }
-      if (this.payrollSim.loading) return { ok: true }
-      if (!force && this.payrollSim.loaded && this.payrollSim.budgetId === target) {
-        return { ok: true }
-      }
-      this.payrollSim.loading = true
-      try {
-        const response = await budgetPlanningService.fetchPayrollSimulation(target)
-        if (this.currentScenario?.id_budget !== target) return { ok: true }
-        const data = response?.data ?? null
-        this.payrollSim.data = data && typeof data === 'object' ? data : null
-        this.payrollSim.budgetId = target
-        this.payrollSim.loaded = true
-        this.payrollSim.error = false
-        return { ok: true }
-      } catch (err) {
-        const classified = classifyPlanningError(err)
-        this.handleAuth(classified)
-        if (classified.kind !== 'auth') {
-          this.payrollSim.error = true
-          this.payrollSim.loaded = false
-          this.payrollSim.data = null
-          this.payrollSim.budgetId = target
-        }
-        return { ok: false, ...classified }
-      } finally {
-        this.payrollSim.loading = false
-      }
-    },
-
-    /** Limpia la caché what-if de financiación al cambiar de escenario. */
-    resetFinancingSimCache() {
-      this.financingSim.data = null
-      this.financingSim.budgetId = null
-      this.financingSim.loaded = false
-      this.financingSim.loading = false
-      this.financingSim.error = false
-    },
-
-    /**
-     * GET financing-simulation, read-only y cacheado por escenario. La
-     * respuesta tardía se descarta; errores no bloquean la vista y quedan
-     * disponibles para el banner/reintento del editor.
-     * @param {number|string} idBudget
-     * @param {{ force?: boolean }} [options]
-     */
-    async fetchFinancingSimulation(idBudget, { force = false } = {}) {
-      const target = Number(idBudget)
-      if (!Number.isFinite(target) || target <= 0) return { ok: false, kind: 'notfound' }
-      if (this.financingSim.loading) return { ok: true }
-      if (!force && this.financingSim.loaded && this.financingSim.budgetId === target) {
-        return { ok: true }
-      }
-      this.financingSim.loading = true
-      try {
-        const response = await budgetPlanningService.fetchFinancingSimulation(target)
-        if (this.currentScenario?.id_budget !== target) return { ok: true }
-        const data = response?.data ?? null
-        this.financingSim.data = data && typeof data === 'object' ? data : null
-        this.financingSim.budgetId = target
-        this.financingSim.loaded = true
-        this.financingSim.error = false
-        return { ok: true }
-      } catch (err) {
-        const classified = classifyPlanningError(err)
-        this.handleAuth(classified)
-        if (classified.kind !== 'auth') {
-          this.financingSim.error = true
-          this.financingSim.loaded = false
-          this.financingSim.data = null
-          this.financingSim.budgetId = target
-        }
-        return { ok: false, ...classified }
-      } finally {
-        this.financingSim.loading = false
-      }
-    },
-
-    /** Limpia la caché de capital al cambiar de presupuesto. */
-    resetFinancingPrincipalFlowCache() {
-      this.financingPrincipalFlow.data = null
-      this.financingPrincipalFlow.budgetId = null
-      this.financingPrincipalFlow.loaded = false
-      this.financingPrincipalFlow.loading = false
-      this.financingPrincipalFlow.error = false
-    },
-
-    /**
-     * Consulta y cachea el capital del schedule activo por id de presupuesto.
-     * Es una consulta read-only válida para active/draft/closed; errores no
-     * bloquean el flujo presupuestario restante y permiten reintento explícito.
-     * @param {number|string} idBudget
-     * @param {{ force?: boolean }} [options]
-     */
-    async fetchFinancingPrincipalFlow(idBudget, { force = false } = {}) {
-      const target = Number(idBudget)
-      if (!Number.isFinite(target) || target <= 0) return { ok: false, kind: 'notfound' }
-      if (this.financingPrincipalFlow.loading) return { ok: true }
-      if (
-        !force &&
-        this.financingPrincipalFlow.loaded &&
-        this.financingPrincipalFlow.budgetId === target
-      ) {
-        return { ok: true }
-      }
-      this.financingPrincipalFlow.loading = true
-      try {
-        const response = await budgetPlanningService.fetchFinancingPrincipalFlow(target)
-        if (this.currentScenario?.id_budget !== target) return { ok: true }
-        const data = response?.data ?? null
-        this.financingPrincipalFlow.data =
-          data && typeof data === 'object'
-            ? { ...data, lines: Array.isArray(data.lines) ? data.lines : [] }
-            : null
-        this.financingPrincipalFlow.budgetId = target
-        this.financingPrincipalFlow.loaded = true
-        this.financingPrincipalFlow.error = false
-        return { ok: true }
-      } catch (err) {
-        const classified = classifyPlanningError(err)
-        this.handleAuth(classified)
-        if (classified.kind !== 'auth') {
-          this.financingPrincipalFlow.error = true
-          this.financingPrincipalFlow.loaded = false
-          this.financingPrincipalFlow.data = null
-          this.financingPrincipalFlow.budgetId = target
-        }
-        return { ok: false, ...classified }
-      } finally {
-        this.financingPrincipalFlow.loading = false
       }
     }
   }

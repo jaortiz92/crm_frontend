@@ -36,7 +36,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import FileDropZone from '@/components/budget/upload/FileDropZone.vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { departmentService } from '@/services/departmentService.js'
 import { alertService } from '@/services/alertService.js'
 import { buildYearOptions, formatMoney } from '@/components/budget/planning/planningFormat.js'
@@ -47,7 +47,7 @@ const props = defineProps({
 
 const emit = defineEmits(['created', 'close'])
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 
 const dialogRef = ref(null)
 const attempted = ref(false)
@@ -105,7 +105,7 @@ const filesError = ref('')
 /** @type {null | {kind: string, message?: string, missing_cost_centers?: string[], found_years?: number[]}} */
 const serverError = ref(null)
 
-const busy = computed(() => budgetPlanningStore.uploading)
+const busy = computed(() => scenarioStore.uploading)
 
 /** Opciones de año §7: default año siguiente, rango año−2..año+5. */
 const yearOptions = buildYearOptions()
@@ -240,7 +240,7 @@ async function handleUpload() {
   }
   if (busy.value) return
 
-  const result = await budgetPlanningStore.uploadScenario({
+  const result = await scenarioStore.uploadScenario({
     scenarioName: form.name,
     budgetYear: Number(form.year),
     budgetPeriod: form.period,

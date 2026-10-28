@@ -24,8 +24,8 @@ vi.mock('@/services/budgetTaxService.js', () => ({
   }
 }))
 
-vi.mock('@/stores/budgetPlanningStore.js', () => ({
-  useBudgetPlanningStore: () => ({
+vi.mock('@/stores/budgetScenarioStore.js', () => ({
+  useBudgetScenarioStore: () => ({
     currentScenarioId: 571,
     currentScenario: { id_budget: 571, budget_year: 2026, budget_lines: [] },
     fetchScenarioDetail: vi.fn(async () => ({ ok: true })),

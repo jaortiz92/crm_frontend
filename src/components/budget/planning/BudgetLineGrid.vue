@@ -51,7 +51,7 @@
  * regresión visual) — las columnas nuevas ni se montan.
  */
 import { computed, nextTick, onBeforeUnmount, reactive, ref } from 'vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { alertService } from '@/services/alertService.js'
 import LineFormModal from './LineFormModal.vue'
 import LineDeleteModal from './LineDeleteModal.vue'
@@ -70,13 +70,13 @@ const props = defineProps({
   scenario: { type: Object, required: true },
   /**
    * FE-S14-IVA: interruptor de modo "Neto / Con IVA" del escenario (dueño:
-   * `BudgetGridEditor` vía `budgetPlanningStore.ivaMode`; aquí SOLO se lee —
+   * `BudgetGridEditor` vía el sub-store IVA (`ivaStore.ivaMode`); aquí SOLO se lee —
    * columnas y checkbox existen únicamente con el modo ON).
    */
   ivaMode: { type: Boolean, default: false }
 })
 
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 
 /** Paso de paginación manual por slice (PQ-F5), independiente por sección. */
 const PAGE_SLICE = 500
@@ -140,12 +140,12 @@ const SORT_COLUMNS = [
  * contra los catálogos cacheados, igual que el render).
  */
 const SORT_ACCESSORS = {
-  ceco: (line) => budgetPlanningStore.costCenterLabel(line.id_cost_center),
+  ceco: (line) => scenarioStore.costCenterLabel(line.id_cost_center),
   budget_date: (line) => line.budget_date || '',
   payment_date: (line) => line.payment_date || '',
   description: (line) => line.description || '',
   line_type: (line) => LINE_TYPE_LABELS[line.line_type] || line.line_type || '',
-  collection: (line) => budgetPlanningStore.collectionLabel(line.id_collection),
+  collection: (line) => scenarioStore.collectionLabel(line.id_collection),
   projected_amount: (line) => Number(line.projected_amount) || 0
 }
 
@@ -250,20 +250,20 @@ function isAsumidoFlag(line) {
  */
 function purchaseIvaHint(line) {
   if (!props.ivaMode || line.line_type !== 'purchase') return null
-  if (!budgetPlanningStore.internmentCatalogLoaded || budgetPlanningStore.internmentCatalogError) {
+  if (!scenarioStore.internmentCatalogLoaded || scenarioStore.internmentCatalogError) {
     return null
   }
   const amount = Number(line.projected_amount)
   if (!Number.isFinite(amount) || amount === 0) return null
-  const ceco = budgetPlanningStore.costCenters.find(
+  const ceco = scenarioStore.costCenters.find(
     (item) => item.id_cost_center === line.id_cost_center
   )
   const lineId = typeof ceco?.id_line === 'number' ? ceco.id_line : null
-  const pctIntRaw = Number(budgetPlanningStore.internmentRateByLine.get(lineId) ?? 0)
+  const pctIntRaw = Number(scenarioStore.internmentRateByLine.get(lineId) ?? 0)
   const pctInt = !Number.isFinite(pctIntRaw) || pctIntRaw < 0 ? 0 : pctIntRaw
   const provBase = amount / (1 + pctInt)
   const intBase = amount - provBase
-  const terms = lineId === null ? undefined : budgetPlanningStore.internmentTermsByLine.get(lineId)
+  const terms = lineId === null ? undefined : scenarioStore.internmentTermsByLine.get(lineId)
   let coveredPct = 0
   if (terms && terms.length) {
     for (const term of terms) {
@@ -336,7 +336,7 @@ function buildSection(type) {
     return all.value.filter((line) => {
       if (collectionId !== null && (line.id_collection ?? null) !== collectionId) return false
       if (!query) return true
-      const haystack = `${budgetPlanningStore.costCenterLabel(line.id_cost_center)} ${
+      const haystack = `${scenarioStore.costCenterLabel(line.id_cost_center)} ${
         line.description ?? ''
       }`.toLowerCase()
       return haystack.includes(query)
@@ -480,8 +480,8 @@ function onLineDeleted() {
  */
 function lineBusy(idBudgetLine) {
   return (
-    Boolean(budgetPlanningStore.cellSaving[idBudgetLine]) ||
-    Boolean(budgetPlanningStore.lineSaving[idBudgetLine])
+    Boolean(scenarioStore.cellSaving[idBudgetLine]) ||
+    Boolean(scenarioStore.lineSaving[idBudgetLine])
   )
 }
 
@@ -500,7 +500,7 @@ function lineBusy(idBudgetLine) {
 async function onIvaFlagChange(line, event) {
   if (isSimulated(line)) return
   const next = event.target.checked
-  const result = await budgetPlanningStore.updateScenarioLine(line.id_budget_line, {
+  const result = await scenarioStore.updateScenarioLine(line.id_budget_line, {
     has_iva: next
   })
   if (result.ok || result.kind === 'auth' || result.kind === 'busy') return
@@ -511,7 +511,7 @@ async function onIvaFlagChange(line, event) {
 
 /** Celda bloqueada mientras su PUT está en vuelo (guard por línea, AC-FE-8). */
 function cellBusy(idBudgetLine) {
-  return Boolean(budgetPlanningStore.cellSaving[idBudgetLine])
+  return Boolean(scenarioStore.cellSaving[idBudgetLine])
 }
 
 /** §8.2: solo líneas `fixed` editables por celda (las variables llevan tasa). */
@@ -525,7 +525,7 @@ function displayAmount(line) {
 }
 
 function cellLabel(line) {
-  return `Monto ${budgetPlanningStore.costCenterLabel(line.id_cost_center)} — ${line.budget_date}`
+  return `Monto ${scenarioStore.costCenterLabel(line.id_cost_center)} — ${line.budget_date}`
 }
 
 function cellTitle(line) {
@@ -627,7 +627,7 @@ async function commitEdit(line) {
   cellStatus[id] = 'saving'
   delete cellMessages[id]
 
-  const result = await budgetPlanningStore.updateCell(id, parsed.value)
+  const result = await scenarioStore.updateCell(id, parsed.value)
   delete cellOverrides[id]
 
   if (result.ok) {
@@ -691,7 +691,7 @@ onBeforeUnmount(clearTimers)
         >
           <option value="">Todas las temporadas</option>
           <option
-            v-for="collection in budgetPlanningStore.collections"
+            v-for="collection in scenarioStore.collections"
             :key="collection.id_collection"
             :value="String(collection.id_collection)"
           >
@@ -750,9 +750,9 @@ onBeforeUnmount(clearTimers)
             <tr v-for="line in section.vm.visible" :key="rowKey(line)">
               <td
                 class="gl-cell-ceco"
-                :title="budgetPlanningStore.costCenterLabel(line.id_cost_center)"
+                :title="scenarioStore.costCenterLabel(line.id_cost_center)"
               >
-                {{ budgetPlanningStore.costCenterLabel(line.id_cost_center) }}
+                {{ scenarioStore.costCenterLabel(line.id_cost_center) }}
               </td>
               <td class="gl-cell-date">{{ line.budget_date }}</td>
               <td class="gl-cell-date">{{ line.payment_date || '—' }}</td>
@@ -785,7 +785,7 @@ onBeforeUnmount(clearTimers)
                   }}</span
                 >
               </td>
-              <td>{{ budgetPlanningStore.collectionLabel(line.id_collection) }}</td>
+              <td>{{ scenarioStore.collectionLabel(line.id_collection) }}</td>
               <td
                 class="gl-cell-money"
                 :class="{
@@ -899,7 +899,7 @@ onBeforeUnmount(clearTimers)
                   class="btn-icon-sm"
                   :title="isSimulated(line) ? 'Línea simulada: no editable' : 'Editar línea'"
                   :disabled="isSimulated(line) || lineBusy(line.id_budget_line)"
-                  :aria-label="`Editar línea ${budgetPlanningStore.costCenterLabel(line.id_cost_center)} ${line.budget_date}`"
+                  :aria-label="`Editar línea ${scenarioStore.costCenterLabel(line.id_cost_center)} ${line.budget_date}`"
                   @click="openEdit(line)"
                 >
                   ✏️
@@ -913,7 +913,7 @@ onBeforeUnmount(clearTimers)
                       : 'Eliminar línea'
                   "
                   :disabled="isSimulated(line) || lineBusy(line.id_budget_line)"
-                  :aria-label="`Eliminar línea ${budgetPlanningStore.costCenterLabel(line.id_cost_center)} ${line.budget_date}`"
+                  :aria-label="`Eliminar línea ${scenarioStore.costCenterLabel(line.id_cost_center)} ${line.budget_date}`"
                   @click="openDelete(line)"
                 >
                   🗑

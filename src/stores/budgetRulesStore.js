@@ -2,7 +2,8 @@ import { defineStore } from 'pinia'
 import { budgetRulesService } from '@/services/budgetRulesService.js'
 import { RATE_KINDS } from '@/components/budget/rates/ratesConfig.js'
 import { useUserStore } from '@/stores/userStore.js'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
+import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
 import router from '@/router/index.js'
 
 /**
@@ -20,7 +21,7 @@ import router from '@/router/index.js'
  *  - `ivaPeriods` (FE-S14-IVA, frontend.03_14 §5): calendario de liquidación
  *    de IVA POR AÑO con la misma excepción de caché-fuente; la caché vale
  *    solo para `ivaPeriodsYear` y cada mutación exitosa notifica al
- *    `budgetPlanningStore` (AC-FE14-6: la Liquidación abierta se refresca
+ *    `budgetIvaStore` (AC-FE14-6: la Liquidación abierta se refresca
  *    viva vía su debounce, sin request síncrono desde aquí).
  * Tras cada mutación exitosa de tasas (POST/PUT) se hace refetch del `kind`
  * afectado: la fuente de verdad es el servidor; se ignoran respuestas
@@ -106,7 +107,7 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
     payableTermsLoaded: false,
     /**
      * Guard doble-submit de las mutaciones de términos (FE-S5, espejo del
-     * `lineSaving` de `budgetPlanningStore`): claves `id_line_payable_term`
+     * `lineSaving` de `budgetScenarioStore`): claves `id_line_payable_term`
      * para PUT/DELETE y `'new'` para POST. Dueño: las acciones del store.
      * @type {Record<number|string, boolean>}
      */
@@ -143,7 +144,7 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
      * refetch). La caché vale SOLO para `ivaPeriodsYear` — cambiar de año en
      * el panel fuerza `fetchIvaPeriods(year)` (no-op si ya es el año
      * cargado). Tras CADA mutación exitosa se notifica al
-     * `budgetPlanningStore` (`scheduleSettlementRefresh`): la recurrencia de
+     * `budgetIvaStore` (`scheduleSettlementRefresh`): la recurrencia de
      * la liquidación y el bloque del Flujo dependen de este catálogo y el
      * escenario puede estar abierto (AC-FE14-6: "edición en vivo visible en
      * Liquidación al refetch"; borrado total ⇒ estado "sin calendario").
@@ -517,7 +518,7 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
 
     /**
      * PUENTE AC-FE10-6 / NFR-FE10-2: tras cargar o mutar con éxito el catálogo
-     * de internación, refresca la COPIA-espejo que el `budgetPlanningStore`
+     * de internación, refresca la COPIA-espejo que el `budgetScenarioStore`
      * cachea en su `ensureCatalogs` (`internmentRates`/`internmentTerms`). La
      * Vista Flujo deriva `internmentRateByLine`/`internmentTermsByLine` de ESA
      * caché (§2.2 "state espejo"), y el CRUD del panel jamás dispara HTTP
@@ -534,10 +535,10 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
      */
     syncInternmentMirrorToPlanning() {
       if (!this.internmentCatalogsLoaded) return
-      const planning = useBudgetPlanningStore()
-      if (!planning.internmentCatalogLoaded) return
-      planning.internmentRates = [...this.internmentRates]
-      planning.internmentTerms = [...this.internmentTerms]
+      const scenarioStore = useBudgetScenarioStore()
+      if (!scenarioStore.internmentCatalogLoaded) return
+      scenarioStore.internmentRates = [...this.internmentRates]
+      scenarioStore.internmentTerms = [...this.internmentTerms]
     },
 
     /**
@@ -745,7 +746,7 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
     /**
      * PUENTE AC-FE14-6: tras Crear/Editar/Borrar un período del calendario,
      * la recurrencia de la liquidación (y el bloque "Pago de liquidación de
-     * IVA" del Flujo, D-FE14-4) cambió. Si el `budgetPlanningStore` tiene un
+     * IVA" del Flujo, D-FE14-4) cambió. Si el `budgetScenarioStore` tiene un
      * escenario abierto y su liquidación YA fue leída (cargada o en estado de
      * error), se programa el refetch debounced del store —nunca un request
      * síncrono extra desde este store—. Si jamás se cargó, la deja perezosa:
@@ -753,11 +754,12 @@ export const useBudgetRulesStore = defineStore('budgetRulesStore', {
      * @returns {void}
      */
     notifyIvaCalendarChanged() {
-      const planning = useBudgetPlanningStore()
-      if (!planning.currentScenario) return
-      if (!planning.settlement.loaded && !planning.settlement.error) return
-      planning.settlement.loaded = false
-      planning.scheduleSettlementRefresh()
+      const scenarioStore = useBudgetScenarioStore()
+      if (!scenarioStore.currentScenario) return
+      const ivaStore = useBudgetIvaStore()
+      if (!ivaStore.settlement.loaded && !ivaStore.settlement.error) return
+      ivaStore.settlement.loaded = false
+      ivaStore.scheduleSettlementRefresh()
     },
 
     /**

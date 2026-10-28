@@ -6,7 +6,7 @@
  * Vista de orquestación: filtro por año + refresco + "Nuevo Escenario (Carga
  * Anual)" + tabla (`ScenarioTable`) + los modales auxiliares (ingestión,
  * clonado, meta-activa y confirmación de borrado de borradores —
- * frontend.03_07). El estado vive en `budgetPlanningStore` (orden del
+ * frontend.03_07). El estado vive en `budgetScenarioStore` (orden del
  * backend, sin re-ordenar — §6.1); el gate de "Marcar como Meta Activa" usa
  * `canSetBudgetTarget()` (§3.3, exportado desde `router/index.js` junto a
  * `BUDGET_TARGET_ROLES`). Tras crear/clonar/meta-activa/eliminar borrador:
@@ -19,13 +19,13 @@ import BudgetIngestionModal from '@/components/budget/planning/BudgetIngestionMo
 import CloneScenarioModal from '@/components/budget/planning/CloneScenarioModal.vue'
 import SetTargetConfirmModal from '@/components/budget/planning/SetTargetConfirmModal.vue'
 import DeleteScenarioConfirmModal from '@/components/budget/planning/DeleteScenarioConfirmModal.vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { useUserStore } from '@/stores/userStore.js'
 import { canSetBudgetTarget } from '@/router/index.js'
 import { buildYearOptions } from '@/components/budget/planning/planningFormat.js'
 
 const router = useRouter()
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 const userStore = useUserStore()
 
 /** Filtro por año: 'all' = todos (§6.1); default todos, rango año−2..año+5. */
@@ -36,17 +36,17 @@ const canTarget = computed(() => canSetBudgetTarget())
 
 /** Filas cacheadas: `null` = primera carga (spinner), `[]` = vacío real. */
 const scenarioRows = computed(() =>
-  Array.isArray(budgetPlanningStore.scenarios) ? budgetPlanningStore.scenarios : []
+  Array.isArray(scenarioStore.scenarios) ? scenarioStore.scenarios : []
 )
 
 const showLoading = computed(
-  () => budgetPlanningStore.scenariosLoading && !Array.isArray(budgetPlanningStore.scenarios)
+  () => scenarioStore.scenariosLoading && !Array.isArray(scenarioStore.scenarios)
 )
 
 const isEmpty = computed(
   () =>
-    Array.isArray(budgetPlanningStore.scenarios) &&
-    !budgetPlanningStore.scenariosLoading &&
+    Array.isArray(scenarioStore.scenarios) &&
+    !scenarioStore.scenariosLoading &&
     scenarioRows.value.length === 0
 )
 
@@ -63,12 +63,12 @@ const actionRow = ref(null)
 const demotedName = computed(() => {
   const row = actionRow.value
   if (!row) return null
-  const active = budgetPlanningStore.findActiveForYear(row.budget_year, row.id_budget)
+  const active = scenarioStore.findActiveForYear(row.budget_year, row.id_budget)
   return active ? active.budget_name : null
 })
 
 function loadScenarios(force = false) {
-  budgetPlanningStore.fetchScenarios({ year: yearFilter.value, force })
+  scenarioStore.fetchScenarios({ year: yearFilter.value, force })
 }
 
 onMounted(() => {
@@ -140,7 +140,7 @@ function onTargetDone() {
         <button
           type="button"
           class="btn btn-secondary btn-sm"
-          :disabled="budgetPlanningStore.scenariosLoading"
+          :disabled="scenarioStore.scenariosLoading"
           @click="loadScenarios(true)"
         >
           Actualizar
@@ -148,7 +148,7 @@ function onTargetDone() {
         <button
           type="button"
           class="btn btn-primary btn-sm"
-          :disabled="budgetPlanningStore.isSubmitting"
+          :disabled="scenarioStore.isSubmitting"
           @click="ingestionOpen = true"
         >
           Nuevo Escenario (Carga Anual)
@@ -158,7 +158,7 @@ function onTargetDone() {
 
     <!-- Error de red: banner + Reintentar (§6.3) -->
     <div
-      v-if="budgetPlanningStore.scenariosError"
+      v-if="scenarioStore.scenariosError"
       class="pd-load-error"
       role="alert"
       aria-live="polite"
@@ -191,14 +191,14 @@ function onTargetDone() {
       v-else
       :rows="scenarioRows"
       :can-target="canTarget"
-      :busy="budgetPlanningStore.isSubmitting"
+      :busy="scenarioStore.isSubmitting"
       @view="onView"
       @set-target="onSetTarget"
       @clone="onClone"
       @request-delete="onRequestDelete"
     />
 
-    <p v-if="budgetPlanningStore.scenariosLoading" class="pd-refresh-note" aria-live="polite">
+    <p v-if="scenarioStore.scenariosLoading" class="pd-refresh-note" aria-live="polite">
       <span class="pd-spinner" aria-hidden="true"></span>
       Actualizando…
     </p>

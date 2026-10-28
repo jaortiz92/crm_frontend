@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useBudgetTaxStore } from '@/stores/budgetTaxStore.js'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { useUserStore } from '@/stores/userStore.js'
 
 const props = defineProps({
@@ -18,7 +18,7 @@ const BIMONTHLY_PERIODS = [
 ]
 
 const store = useBudgetTaxStore()
-const planningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
 const userStore = useUserStore()
 // The fiscal year is the budget's year (set by BudgetTaxesView before mounting).
 const taxYear = computed(() => Number(store.taxYear))
@@ -70,7 +70,7 @@ const selectedProfile = computed(
     ) || null
 )
 const budgetIncomeTotal = computed(() => {
-  const lines = planningStore.currentScenario?.budget_lines
+  const lines = scenarioStore.currentScenario?.budget_lines
   if (!Array.isArray(lines)) return null
   return lines.reduce(
     (total, line) =>
@@ -190,9 +190,9 @@ function onManualProfileChange() {
 }
 
 async function ensureBudgetLoaded() {
-  if (!props.idBudget || planningStore.currentScenarioId === Number(props.idBudget)) return
+  if (!props.idBudget || scenarioStore.currentScenarioId === Number(props.idBudget)) return
   loadingBudget.value = true
-  await planningStore.fetchScenarioDetail(Number(props.idBudget))
+  await scenarioStore.fetchScenarioDetail(Number(props.idBudget))
   loadingBudget.value = false
 }
 
@@ -295,7 +295,7 @@ async function save() {
   userOverride = false // guardado exitoso: volver a sincronizar desde lo persistido
   await Promise.all([
     store.loadBudget(props.idBudget),
-    planningStore.fetchScenarioDetail(Number(props.idBudget), true)
+    scenarioStore.fetchScenarioDetail(Number(props.idBudget), true)
   ])
   feedbackKind.value = 'success'
   feedback.value = 'Supuestos guardados y presupuesto recargado. Ya puedes ejecutar el cálculo.'

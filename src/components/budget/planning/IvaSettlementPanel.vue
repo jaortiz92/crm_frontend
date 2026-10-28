@@ -23,7 +23,7 @@
  *    leída de `tax_rate_used` cuando existe (D-FE14-6 — única fuente del BE;
  *    sin respuesta se degrada a `IVA_RATE` de `planningFormat`).
  *
- * Reactividad (frontend.03_14 §4.2): la fuente es `budgetPlanningStore
+ * Reactividad (frontend.03_14 §4.2): la fuente es `budgetIvaStore
  * .settlement` — el editor la pide al abrir, `scheduleSettlementRefresh()`
  * la invalida debounced tras mutaciones de líneas/calendario y "Recalcular"
  * la fuerza (`fetchIvaSettlement(id, { force: true })`). CERO requests desde
@@ -35,7 +35,7 @@
  */
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
 import { formatMoney, formatDateEs, IVA_RATE } from './planningFormat.js'
 /**
  * FE-S20 (spec `frontend.03_20` §7.2): las derivaciones de la tabla
@@ -56,10 +56,10 @@ const props = defineProps({
 })
 
 const router = useRouter()
-const budgetPlanningStore = useBudgetPlanningStore()
+const ivaStore = useBudgetIvaStore()
 
 /** Caché viva del store (patrón `carryover`: SOLO lee; mutar = acciones). */
-const settlement = computed(() => budgetPlanningStore.settlement)
+const settlement = computed(() => ivaStore.settlement)
 const data = computed(() => settlement.value.data)
 
 /** Modelo compartido FE-S20: filas/totales/unassigned/warnings del payload. */
@@ -132,7 +132,7 @@ function goIvaCalendar() {
 
 /** "Recalcular" (frontend.03_14 §4.2) ⇒ refetch forzado del settlement. */
 function recalculate() {
-  void budgetPlanningStore.fetchIvaSettlement(props.idBudget, { force: true })
+  void ivaStore.fetchIvaSettlement(props.idBudget, { force: true })
 }
 
 /** ¿Algún período con desembolso? (destacado del pago, §5). */

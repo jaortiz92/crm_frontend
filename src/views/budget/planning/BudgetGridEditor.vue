@@ -28,7 +28,7 @@
  * FE-S14-IVA (frontend.03_14 §5) + ENMIENDA D-FE14-7 (2026-09-23):
  *  - BARRA: switch segmentado "Neto / Con IVA" (D-FE14-1, default ON) — la
  *    preferencia se PERSISTE por `idBudget` en localStorage vía
- *    `budgetPlanningStore.setIvaMode` (cero HTTP). El modo SOLO altera la
+ *    `ivaStore.setIvaMode` (cero HTTP). El modo SOLO altera la
  *    Vista Flujo: la Vista Ejecutiva es SIEMPRE NETA (D-FE14-7: el P&G
  *    nunca lleva información de IVA), y con el modo ON la cabecera muestra
  *    el chip "Modo caja con IVA (proyectado)" que lo aclara (R-FE14-2).
@@ -66,7 +66,10 @@ import BudgetLineGrid from '@/components/budget/planning/BudgetLineGrid.vue'
 import IvaSettlementPanel from '@/components/budget/planning/IvaSettlementPanel.vue'
 import SetTargetConfirmModal from '@/components/budget/planning/SetTargetConfirmModal.vue'
 import InitialBalanceModal from '@/components/budget/planning/InitialBalanceModal.vue'
-import { useBudgetPlanningStore } from '@/stores/budgetPlanningStore.js'
+import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
+import { useBudgetSimulationStore } from '@/stores/budgetSimulationStore.js'
+import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
+import { createPlanningStoresView } from '@/stores/planningStoresBridge.js'
 import { useUserStore } from '@/stores/userStore.js'
 import { canSetBudgetTarget } from '@/router/index.js'
 import { alertService } from '@/services/alertService.js'
@@ -126,7 +129,10 @@ const TAB_LABELS = {
 
 const route = useRoute()
 const router = useRouter()
-const budgetPlanningStore = useBudgetPlanningStore()
+const scenarioStore = useBudgetScenarioStore()
+const simulationStore = useBudgetSimulationStore()
+const ivaStore = useBudgetIvaStore()
+const planningStoresView = createPlanningStoresView()
 const userStore = useUserStore()
 
 // Default D-1 (FE-S4B): "Vista Ejecutiva" (antes 'editor').
@@ -136,7 +142,7 @@ const targetOpen = ref(false)
 
 const idBudget = computed(() => Number(route.params.idBudget))
 
-const scenario = computed(() => budgetPlanningStore.currentScenario)
+const scenario = computed(() => scenarioStore.currentScenario)
 
 const canTarget = computed(() => canSetBudgetTarget())
 
@@ -147,7 +153,7 @@ const statusChip = computed(() =>
 /* ───────────── FE-S14-IVA §5: switch "Neto / Con IVA" (persistente por escenario) ───────────── */
 
 /** Bandera viva del modo (dueño: store; localStorage por `idBudget`). */
-const ivaMode = computed(() => budgetPlanningStore.ivaMode === true)
+const ivaMode = computed(() => ivaStore.ivaMode === true)
 
 /**
  * Toggle del switch: SIN HTTP (preferencia de visualización; las derivaciones
@@ -159,14 +165,14 @@ const ivaMode = computed(() => budgetPlanningStore.ivaMode === true)
 function onIvaModeSelect(value) {
   const flag = Boolean(value)
   if (flag === ivaMode.value) return
-  budgetPlanningStore.setIvaMode(idBudget.value, flag)
-  if (flag) void budgetPlanningStore.fetchIvaSettlement(idBudget.value)
+  ivaStore.setIvaMode(idBudget.value, flag)
+  if (flag) void ivaStore.fetchIvaSettlement(idBudget.value)
 }
 
 /** Meta activa a desactivar: de la caché del listado (se refresca blando). */
 const demotedName = computed(() => {
   if (!scenario.value) return null
-  const active = budgetPlanningStore.findActiveForYear(
+  const active = scenarioStore.findActiveForYear(
     scenario.value.budget_year,
     scenario.value.id_budget
   )
@@ -176,7 +182,7 @@ const demotedName = computed(() => {
 /* ----------------- Arrastre de saldos N−1 (FE-S6-CARRYOVER §5) ----------------- */
 
 /** Caché del arrastre (store): `enabled/source/lines/loading/error/saving…`. */
-const carryover = computed(() => budgetPlanningStore.carryover)
+const carryover = computed(() => scenarioStore.carryover)
 
 /** N−1: año de la fuente (etiqueta del pill y avisos §5). */
 const carrySourceYear = computed(() => {
@@ -192,7 +198,7 @@ const carrySourceYear = computed(() => {
  */
 const carryHintText = computed(() => {
   if (activeTab.value !== 'flow') return ''
-  const state = budgetPlanningStore.carryover
+  const state = scenarioStore.carryover
   if (!state.enabled) return ''
   if (state.source) return `← ${state.source.budget_name} · ${state.source.status}`
   if (state.unavailableReason === 'no_source') {
@@ -217,7 +223,7 @@ const carryHintText = computed(() => {
  */
 async function onCarryoverToggle(event) {
   const next = event.target.checked
-  const result = await budgetPlanningStore.setCarryoverFlag(scenario.value.id_budget, next)
+  const result = await scenarioStore.setCarryoverFlag(scenario.value.id_budget, next)
   if (!result.ok && result.kind !== 'auth') {
     await alertService.generalError('No se pudo guardar. Reintenta.')
     return
@@ -233,9 +239,9 @@ async function onCarryoverToggle(event) {
  */
 async function initialBalancesNeverConfigured() {
   if (!scenario.value) return false
-  await budgetPlanningStore.fetchInitialBalance(idBudget.value, true)
-  const data = budgetPlanningStore.initialBalance.loaded
-    ? budgetPlanningStore.initialBalance.data
+  await scenarioStore.fetchInitialBalance(idBudget.value, true)
+  const data = scenarioStore.initialBalance.loaded
+    ? scenarioStore.initialBalance.data
     : null
   if (!data) return false
   const zeroManual = (side) => side?.mode === 'manual' && Number(side?.manual_value ?? 0) === 0
@@ -245,7 +251,7 @@ async function initialBalancesNeverConfigured() {
 /** SD7-FE-3: auto-carryover de ambos saldos cuando el pill se enciende con manual/0. */
 async function syncInitialBalancesWithCarryover() {
   if (!(await initialBalancesNeverConfigured())) return
-  const result = await budgetPlanningStore.saveInitialBalance(idBudget.value, {
+  const result = await scenarioStore.saveInitialBalance(idBudget.value, {
     cash: { mode: 'carryover', manual_value: 0 },
     warehouse: { mode: 'carryover', manual_value: 0 }
   })
@@ -269,13 +275,13 @@ async function syncInitialBalancesWithCarryover() {
 watch(
   [
     activeTab,
-    () => budgetPlanningStore.carryover.enabled,
-    () => budgetPlanningStore.currentScenario?.id_budget
+    () => scenarioStore.carryover.enabled,
+    () => scenarioStore.currentScenario?.id_budget
   ],
   () => {
-    const state = budgetPlanningStore.carryover
+    const state = scenarioStore.carryover
     if (activeTab.value === 'flow' && state.enabled && !state.loading && !state.saving) {
-      void budgetPlanningStore.fetchCarryover(idBudget.value)
+      void scenarioStore.fetchCarryover(idBudget.value)
     }
   }
 )
@@ -286,7 +292,7 @@ watch(
 const initialBalanceOpen = ref(false)
 
 /** Config vigente + valor efectivo de la caché del store (única fuente). */
-const initialBalanceState = computed(() => budgetPlanningStore.initialBalance)
+const initialBalanceState = computed(() => scenarioStore.initialBalance)
 
 /** Literal RF-FE-05 (fire-once por escenario: el flujo sigue operable). */
 const NO_SOURCE_WARNING =
@@ -303,13 +309,13 @@ let warnedNoSourceForScenario = null
  * (el modal también lo pinta inline; aquí no se gasta derivación).
  */
 function ensureInitialBalanceDerivation() {
-  void budgetPlanningStore.ensureInitialBalanceDerived()
+  void scenarioStore.ensureInitialBalanceDerived()
 }
 
 /** Fire-once del warning real RF-FE-05 (solo `unavailable_reason`). */
 function warnOnceOnNoSource() {
-  const data = budgetPlanningStore.initialBalance.loaded
-    ? budgetPlanningStore.initialBalance.data
+  const data = scenarioStore.initialBalance.loaded
+    ? scenarioStore.initialBalance.data
     : null
   if (!data) return
   if (data.unavailable_reason !== 'no_source') return
@@ -324,7 +330,7 @@ function warnOnceOnNoSource() {
  * si aplica). `_hydrate` operable aunque falle (degradación RF-FE-05).
  */
 async function loadInitialBalanceSection() {
-  await budgetPlanningStore.fetchInitialBalance(idBudget.value)
+  await scenarioStore.fetchInitialBalance(idBudget.value)
   ensureInitialBalanceDerivation()
   warnOnceOnNoSource()
 }
@@ -336,7 +342,7 @@ async function loadInitialBalanceSection() {
  * re-derivan dentro de la acción).
  */
 watch(
-  () => budgetPlanningStore.currentScenario?.id_budget,
+  () => scenarioStore.currentScenario?.id_budget,
   () => {
     warnedNoSourceForScenario = null
   }
@@ -424,7 +430,7 @@ async function projectPayrollNow() {
  * líneas como filas read-only. El análisis de funcionalidad (ingresos vs
  * nómina) ocurre ANTES de marcar meta. AC-SIM-2: con status 'active' nunca
  * se inyecta (las reales ya están); la puerta es el status, no el timing. */
-const payrollSim = computed(() => budgetPlanningStore.payrollSim)
+const payrollSim = computed(() => simulationStore.payrollSim)
 
 const simLines = computed(() => {
   const base = scenario.value
@@ -455,8 +461,8 @@ const simLines = computed(() => {
  * El endpoint entrega únicamente gastos presupuestarios. Capital jamás forma
  * parte de estas filas/P&L; su flujo específico del presupuesto se consulta
  * aparte y se presenta solo en CashFlowPivotTable. */
-const financingSim = computed(() => budgetPlanningStore.financingSim)
-const financingPrincipalFlow = computed(() => budgetPlanningStore.financingPrincipalFlow)
+const financingSim = computed(() => simulationStore.financingSim)
+const financingPrincipalFlow = computed(() => simulationStore.financingPrincipalFlow)
 
 const financingPrincipalLines = computed(() => {
   const base = scenario.value
@@ -512,7 +518,7 @@ const payrollSimTotal = computed(() => Number(payrollSim.value.data?.total_annua
 
 async function loadPayrollSimulation(force = false) {
   if (!scenario.value || scenario.value.status === 'active') return
-  await budgetPlanningStore.fetchPayrollSimulation(idBudget.value, { force })
+  await simulationStore.fetchPayrollSimulation(idBudget.value, { force })
 }
 
 const financingSimCount = computed(() => financingSimLines.value.length)
@@ -524,13 +530,13 @@ const financingSimTotal = computed(() =>
 
 async function loadFinancingSimulation(force = false) {
   if (!scenario.value || scenario.value.status === 'active') return
-  await budgetPlanningStore.fetchFinancingSimulation(idBudget.value, { force })
+  await simulationStore.fetchFinancingSimulation(idBudget.value, { force })
 }
 
 /** Principal de schedule activo; independiente de las líneas presupuestarias. */
 async function loadFinancingPrincipalFlow(force = false) {
   if (!scenario.value) return
-  await budgetPlanningStore.fetchFinancingPrincipalFlow(idBudget.value, { force })
+  await simulationStore.fetchFinancingPrincipalFlow(idBudget.value, { force })
 }
 
 function goDashboard() {
@@ -543,19 +549,19 @@ function goToTaxes() {
 
 async function load(force = false) {
   detailError.value = false
-  const result = await budgetPlanningStore.fetchScenarioDetail(idBudget.value, force)
+  const result = await scenarioStore.fetchScenarioDetail(idBudget.value, force)
   if (result.ok) {
     // Refresco SUAVE del listado para resolver el escenario a desactivar en
     // "Marcar Meta Activa" (silencioso: su fallo no rompe el editor).
-    budgetPlanningStore.fetchScenarios({ year: scenario.value?.budget_year ?? 'all', force: true })
+    scenarioStore.fetchScenarios({ year: scenario.value?.budget_year ?? 'all', force: true })
     // FE-S14-IVA §4.2: el settlement se pide AL ABRIR el escenario (único
     // request server-side del IVA; silente por diseño del store: su fallo
     // degrada panel/Flujo con "sin dato de liquidación" + reintento, nunca
     // toast ni pantalla rota — NFR-FE14-3).
-    void budgetPlanningStore.fetchIvaSettlement(idBudget.value)
+    void ivaStore.fetchIvaSettlement(idBudget.value)
     // Resultados tributarios: resumen (P&G) + flujo de pagos (Vista Flujo).
     // Ambos bloques leen esta caché única; no se replican fórmulas tributarias.
-    void budgetPlanningStore.fetchTaxData(idBudget.value)
+    void scenarioStore.fetchTaxData(idBudget.value)
     // FE-S7-INITBAL: GET de saldos iniciales (precarga del chip/modal) +
     // derivación carryover si aplica (RF-FE-03/04).
     void loadInitialBalanceSection()
@@ -583,9 +589,9 @@ async function load(force = false) {
  * fetch cacheado es no-op. El GET del "Recalcular" del panel pasa `force`.
  */
 watch(activeTab, (tab) => {
-  const state = budgetPlanningStore.settlement
+  const state = ivaStore.settlement
   if (tab === 'settlement' && !state.loading && (!state.loaded || state.error)) {
-    void budgetPlanningStore.fetchIvaSettlement(idBudget.value)
+    void ivaStore.fetchIvaSettlement(idBudget.value)
   }
 })
 
@@ -635,7 +641,7 @@ const exportRoot = ref(null)
  * guard `hasLines` de `CashFlowPivotTable`) y períodos de la liquidación.
  */
 const exportDisabled = computed(() => {
-  if (budgetPlanningStore.detailLoading) return true
+  if (scenarioStore.detailLoading) return true
   const lines = scenarioView.value?.budget_lines ?? []
   switch (activeTab.value) {
     case 'executive':
@@ -647,12 +653,12 @@ const exportDisabled = computed(() => {
         financingPrincipalLines.value.length === 0 &&
         financingDisbursementLines.value.length === 0 &&
         !(
-          Array.isArray(budgetPlanningStore.carryover.lines) &&
-          budgetPlanningStore.carryover.lines.length > 0
+          Array.isArray(scenarioStore.carryover.lines) &&
+          scenarioStore.carryover.lines.length > 0
         )
       )
     case 'settlement': {
-      const state = budgetPlanningStore.settlement
+      const state = ivaStore.settlement
       if (state.loading) return true
       const periods = state.data?.periods
       return !Array.isArray(periods) || periods.length === 0
@@ -664,10 +670,10 @@ const exportDisabled = computed(() => {
 
 /** `title` del botón deshabilitado (RF-7: explicativo, nunca silent RF-10). */
 const exportDisabledTitle = computed(() => {
-  if (budgetPlanningStore.detailLoading) {
+  if (scenarioStore.detailLoading) {
     return 'Exportación disponible cuando termine de cargar el escenario.'
   }
-  if (activeTab.value === 'settlement' && budgetPlanningStore.settlement.loading) {
+  if (activeTab.value === 'settlement' && ivaStore.settlement.loading) {
     return 'Exportación disponible cuando termine de calcular la liquidación.'
   }
   return 'No hay datos que exportar en esta pestaña.'
@@ -695,22 +701,22 @@ function onExportSelect(format) {
   try {
     let sheets = []
     if (tab === 'executive') {
-      sheets = buildExecutiveSheets({ scenario: scenarioView.value, store: budgetPlanningStore })
+      sheets = buildExecutiveSheets({ scenario: scenarioView.value, store: planningStoresView })
     } else if (tab === 'flow') {
       sheets = buildFlowSheets({
         scenario: scenarioView.value,
         financingPrincipalLines: financingPrincipalLines.value,
         financingDisbursementLines: financingDisbursementLines.value,
-        store: budgetPlanningStore
+        store: planningStoresView
       })
     } else if (tab === 'editor') {
       sheets = buildEditorSheets({
         scenario: scenarioView.value,
         ivaMode: ivaMode.value,
-        store: budgetPlanningStore
+        store: planningStoresView
       })
     } else {
-      sheets = buildSettlementSheets({ store: budgetPlanningStore })
+      sheets = buildSettlementSheets({ store: planningStoresView })
     }
     if (!sheets.length) throw new Error('La pestaña activa no tiene datos para exportar.')
     exportSheets({
@@ -747,7 +753,7 @@ function backToPlanning() {
 
     <!-- Cargando primer fetch -->
     <div
-      v-if="budgetPlanningStore.detailLoading && !scenario"
+      v-if="scenarioStore.detailLoading && !scenario"
       class="ge-loading"
       aria-live="polite"
     >
@@ -881,7 +887,7 @@ function backToPlanning() {
             v-if="scenario.status !== 'active' && canTarget"
             type="button"
             class="btn btn-primary btn-sm"
-            :disabled="budgetPlanningStore.settingTarget"
+            :disabled="scenarioStore.settingTarget"
             @click="targetOpen = true"
           >
             Marcar Meta Activa
