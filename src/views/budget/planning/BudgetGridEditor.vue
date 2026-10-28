@@ -57,8 +57,22 @@
  *    común (mayor riesgo) sin que el usuario pierda cabecera en la práctica
  *    (el P&G/Acumulado Ejecutivo y el Resumen de liquidez del Flujo abren
  *    cada pestaña con su thead ya en pantalla).
+ *
+ * FASE 3 (refactor puro, cero cambio de comportamiento): los bloques de UI
+ * autocontenidos de la cabecera/fila de tabs se extrajeron VERBATIM a
+ * componentes PRESENTACIONALES en `src/components/budget/planning/`:
+ *  - `IvaModeSwitch.vue`          — switch "Neto / Con IVA" (`ge-mode-group`);
+ *    el padre sigue dueño de `budgetIvaStore` (`onIvaModeSelect`).
+ *  - `CarryoverPill.vue`          — pill de arrastre + aviso (`ge-carry-group`);
+ *    el padre sigue dueño del toggle/sincronización SD7-FE-3 y del lazy GET.
+ *  - `SimulationWhatIfNotice.vue` — avisos what-if de nómina/financiación
+ *    (`kind`); el padre sigue derivando counts/totales y el reintento force.
+ *  - `ExportMenu.vue`             — botón + menú "Exportar" (`ge-export`);
+ *    el estado abierto/cerrado y el click-fuera viven en el hijo, el padre
+ *    resuelve `disabled`/`disabledTitle` (RF-7) y el formato elegido.
+ * Los handlers/derivados correspondientes permanecen en este componente.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ExecutivePivotTable from '@/components/budget/planning/ExecutivePivotTable.vue'
 import CashFlowPivotTable from '@/components/budget/planning/CashFlowPivotTable.vue'
@@ -66,6 +80,10 @@ import BudgetLineGrid from '@/components/budget/planning/BudgetLineGrid.vue'
 import IvaSettlementPanel from '@/components/budget/planning/IvaSettlementPanel.vue'
 import SetTargetConfirmModal from '@/components/budget/planning/SetTargetConfirmModal.vue'
 import InitialBalanceModal from '@/components/budget/planning/InitialBalanceModal.vue'
+import IvaModeSwitch from '@/components/budget/planning/IvaModeSwitch.vue'
+import CarryoverPill from '@/components/budget/planning/CarryoverPill.vue'
+import SimulationWhatIfNotice from '@/components/budget/planning/SimulationWhatIfNotice.vue'
+import ExportMenu from '@/components/budget/planning/ExportMenu.vue'
 import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { useBudgetSimulationStore } from '@/stores/budgetSimulationStore.js'
 import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
@@ -77,7 +95,7 @@ import {
   budgetCollaboratorService,
   classifyCollaboratorError
 } from '@/services/budgetCollaboratorService.js'
-import { formatMoneyPlain, statusChipOf } from '@/components/budget/planning/planningFormat.js'
+import { statusChipOf } from '@/components/budget/planning/planningFormat.js'
 /**
  * FE-S20 (spec `frontend.03_20`): exportación de la tabla del tab activo a
  * Excel/CSV — el ensamble de hojas (`planningExportSheets.js`) reutiliza las
@@ -630,10 +648,6 @@ const EXPORT_TAB_SLUGS = {
   settlement: 'liquidacion'
 }
 
-/** Menú de formato abierto (RF-2) + ancla del cierre por click fuera. */
-const exportOpen = ref(false)
-const exportRoot = ref(null)
-
 /**
  * RF-7: botón deshabilitado sin datos para el tab o con carga en vuelo.
  * Checks de PRESENCIA ligeros (no re-agregan): líneas del escenario
@@ -679,24 +693,15 @@ const exportDisabledTitle = computed(() => {
   return 'No hay datos que exportar en esta pestaña.'
 })
 
-/** Cierre del menú al hacer click fuera (patrón simple con listener global). */
-function onDocClickForExport(event) {
-  if (!exportOpen.value) return
-  if (exportRoot.value && !exportRoot.value.contains(event.target)) exportOpen.value = false
-}
-
-onMounted(() => document.addEventListener('click', onDocClickForExport))
-onBeforeUnmount(() => document.removeEventListener('click', onDocClickForExport))
-
 /**
  * RF-3/RF-4/RF-5/RF-6: construye las hojas del TAB ACTIVO desde la caché del
  * store (los derivados ya respetan filtros/`ivaMode` según aplique — CA-2/
  * CA-4) y llama `exportSheets` (cero HTTP, RF-9); cualquier error inesperado
- * se notifica con `alertService` (RF-10).
+ * se notifica con `alertService` (RF-10). El cierre del menú vive en
+ * `ExportMenu` (emite `select` tras cerrarse, igual que antes).
  * @param {'csv'|'xlsx'} format
  */
 function onExportSelect(format) {
-  exportOpen.value = false
   const tab = activeTab.value
   try {
     let sheets = []
@@ -807,61 +812,21 @@ function backToPlanning() {
         <div class="ge-header-actions">
           <!-- FE-S14-IVA §5: switch segmentado "Neto / Con IVA" (barra de
                cabecera, visible en todo tab; preferencia POR ESCENARIO en
-               localStorage vía el store — D-FE14-1). -->
-          <div
-            class="ge-mode-group"
-            role="group"
-            aria-label="Modo de montos: netos o con IVA"
-            title="Neto: cifras de presupuesto sin IVA. Con IVA: la Vista Flujo muestra caja bruta proyectada (× 1.19); la cabecera y la Vista Ejecutiva (P&G) siempre muestran netos."
-          >
-            <span class="ge-mode-caption">Montos</span>
-            <div class="ge-mode-switch">
-              <button
-                type="button"
-                class="ge-mode-btn"
-                :class="{ 'is-active': !ivaMode }"
-                :aria-pressed="!ivaMode ? 'true' : 'false'"
-                @click="onIvaModeSelect(false)"
-              >
-                Neto
-              </button>
-              <button
-                type="button"
-                class="ge-mode-btn"
-                :class="{ 'is-active': ivaMode }"
-                :aria-pressed="ivaMode ? 'true' : 'false'"
-                @click="onIvaModeSelect(true)"
-              >
-                Con IVA
-              </button>
-            </div>
-          </div>
+               localStorage vía el store — D-FE14-1). Componente
+               presentacional (FASE 3): el padre sigue dueño del store. -->
+          <IvaModeSwitch :iva-mode="ivaMode" @select="onIvaModeSelect" />
           <!-- FE-S6 §5: pill del arrastre (FD6-2: visible en todo tab; efecto
-               solo en Flujo) + aviso de fuente SOLO en tab Flujo (FD6-3). -->
-          <div class="ge-carry-group">
-            <label
-              class="ge-carry-pill"
-              :class="{ 'is-on': carryover.enabled }"
-              title="Solo afecta a esta Vista Flujo; no genera líneas."
-            >
-              <input
-                type="checkbox"
-                class="ge-carry-input"
-                :checked="carryover.enabled"
-                :disabled="carryover.saving"
-                :aria-label="`Arrastrar saldos del año ${carrySourceYear} al flujo de caja`"
-                @change="onCarryoverToggle"
-              />
-              <span>Arrastrar saldos de {{ carrySourceYear }}</span>
-            </label>
-            <p
-              v-if="activeTab === 'flow' && carryover.enabled"
-              class="ge-carry-hint"
-              aria-live="polite"
-            >
-              {{ carryHintText }}
-            </p>
-          </div>
+               solo en Flujo) + aviso de fuente SOLO en tab Flujo (FD6-3).
+               Componente presentacional (FASE 3): el estado/toggle viven aquí
+               (store + sincronización de saldos SD7-FE-3). -->
+          <CarryoverPill
+            :enabled="carryover.enabled"
+            :saving="carryover.saving"
+            :source-year="carrySourceYear"
+            :show-hint="activeTab === 'flow' && carryover.enabled"
+            :hint-text="carryHintText"
+            @toggle="onCarryoverToggle"
+          />
           <!-- FE-S7-INITBAL RF-FE-03: chip "Saldo inicial" JUNTO al pill de
                arrastre (RF-FE-08: coexisten sin interferencia). Indicadores
                §5: `(manual)` / `(N-1)`, tono warning con `no_source`. -->
@@ -907,70 +872,35 @@ function backToPlanning() {
         </button>
       </div>
 
-      <div
+      <!-- BE-S11/BE-S12: avisos what-if de nómina/financiación simuladas
+           (FASE 3: UI extraída a `SimulationWhatIfNotice`; las cachés
+           `payrollSim`/`financingSim`, los counts/totales derivados y el
+           reintento con force siguen siendo de este componente). -->
+      <SimulationWhatIfNotice
         v-if="
           scenario.status !== 'active' &&
           (payrollSim.loading || payrollSim.loaded || payrollSim.error)
         "
-        class="ge-payroll-notice ge-payroll-notice-sim"
-        role="status"
-      >
-        <span v-if="payrollSim.loading">Proyectando nómina simulada…</span>
-        <span v-else-if="payrollSim.error">
-          No se pudo simular la nómina en este escenario (¿faltan parámetros de la vigencia?).
-        </span>
-        <span v-else-if="payrollSimCount">
-          Nómina simulada: {{ payrollSimCount }} líneas · Σ anual
-          {{ formatMoneyPlain(payrollSimTotal) }} — cifras what-if (no materializadas); marca Meta
-          Activa para proyectarlas de verdad.
-        </span>
-        <span v-else>Nómina simulada: sin colaboradores con salario vigente proyectable.</span>
-        <button
-          v-if="payrollSim.error"
-          type="button"
-          class="ge-payroll-action"
-          :disabled="payrollSim.loading"
-          @click="loadPayrollSimulation(true)"
-        >
-          Reintentar
-        </button>
-      </div>
+        kind="payroll"
+        :state="payrollSim"
+        :count="payrollSimCount"
+        :total="payrollSimTotal"
+        @retry="loadPayrollSimulation(true)"
+      />
 
-      <div
+      <SimulationWhatIfNotice
         v-if="
           scenario.status !== 'active' &&
           (financingSim.loading || financingSim.loaded || financingSim.error)
         "
-        class="ge-payroll-notice ge-payroll-notice-sim"
-        role="status"
-      >
-        <span v-if="financingSim.loading">Simulando gastos de financiación…</span>
-        <span v-else-if="financingSim.error">
-          No se pudo cargar la simulación de financiación para este escenario.
-        </span>
-        <span v-else-if="financingSimCount">
-          Financiación simulada: {{ financingSimCount }} líneas de gasto ({{
-            financingSim.data?.financing_credits_count ?? 0
-          }}
-          créditos) · Intereses {{ formatMoneyPlain(financingSimInterest) }} · Seguros
-          {{ formatMoneyPlain(financingSimInsurance) }} · Σ gastos anuales
-          {{ formatMoneyPlain(financingSimTotal) }} — cifras what-if/no materializadas; al marcar
-          Meta Activa se materializan.
-        </span>
-        <span v-else>
-          Financiación simulada: sin líneas de interés o seguro proyectables. Estas cifras what-if
-          no se materializan hasta marcar Meta Activa.
-        </span>
-        <button
-          v-if="financingSim.error"
-          type="button"
-          class="ge-payroll-action"
-          :disabled="financingSim.loading"
-          @click="loadFinancingSimulation(true)"
-        >
-          Reintentar
-        </button>
-      </div>
+        kind="financing"
+        :state="financingSim"
+        :count="financingSimCount"
+        :total="financingSimTotal"
+        :interest="financingSimInterest"
+        :insurance="financingSimInsurance"
+        @retry="loadFinancingSimulation(true)"
+      />
 
       <!-- =============================== Tabs =============================== -->
       <!-- FE-S20 (spec `frontend.03_20`) RF-1/RF-2: barra de pills + control
@@ -995,62 +925,15 @@ function backToPlanning() {
             {{ TAB_LABELS[tab] }}
           </button>
         </div>
-        <div ref="exportRoot" class="ge-export">
-          <button
-            type="button"
-            class="ge-export-btn"
-            :class="{ 'is-open': exportOpen }"
-            :disabled="exportDisabled"
-            :title="
-              exportDisabled
-                ? exportDisabledTitle
-                : 'Exportar la tabla de esta pestaña (Excel o CSV)'
-            "
-            aria-haspopup="menu"
-            :aria-expanded="exportOpen ? 'true' : 'false'"
-            @click.stop="exportOpen = !exportOpen"
-          >
-            <svg
-              class="ge-export-icon"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            <span>Exportar</span>
-          </button>
-          <div
-            v-if="exportOpen"
-            class="ge-export-menu"
-            role="menu"
-            aria-label="Formato de exportación"
-          >
-            <button
-              type="button"
-              class="ge-export-item"
-              role="menuitem"
-              @click="onExportSelect('xlsx')"
-            >
-              Excel (.xlsx)
-            </button>
-            <button
-              type="button"
-              class="ge-export-item"
-              role="menuitem"
-              @click="onExportSelect('csv')"
-            >
-              CSV
-            </button>
-          </div>
-        </div>
+        <!-- FE-S20 (spec `frontend.03_20`) RF-1/RF-2: control "Exportar"
+             (menú de formato Excel/CSV) junto a los pills; FASE 3: la UI
+             (botón + menú + cierre por click fuera) vive en `ExportMenu`,
+             el padre resuelve disabled/title y el formato elegido. -->
+        <ExportMenu
+          :disabled="exportDisabled"
+          :disabled-title="exportDisabledTitle"
+          @select="onExportSelect"
+        />
       </div>
 
       <div
@@ -1282,7 +1165,8 @@ function backToPlanning() {
   color: var(--color-text-muted, #8a8a8a);
 }
 
-/* Cabecera §5 (FE-S6): acciones + pill del arrastre. */
+/* Cabecera §5 (FE-S6): acciones de cabecera. El pill del arrastre
+ * (`ge-carry-group`, FASE 3) vive en `CarryoverPill.vue`. */
 
 .ge-header-actions {
   display: flex;
@@ -1292,127 +1176,8 @@ function backToPlanning() {
   justify-content: flex-end;
 }
 
-.ge-carry-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  align-items: center;
-}
-
-.ge-carry-pill {
-  display: inline-flex;
-  gap: 7px;
-  align-items: center;
-  padding: 6px 13px;
-  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
-  border-radius: 999px;
-  background-color: var(--color-surface, #f2f4f7);
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: var(--color-text-secondary, #555555);
-  cursor: pointer;
-  user-select: none;
-  transition:
-    background-color 0.18s cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 0.18s cubic-bezier(0.23, 1, 0.32, 1),
-    color 0.18s cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-:root[data-theme='dark'] .ge-carry-pill {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.ge-carry-pill.is-on {
-  border-color: rgba(3, 101, 140, 0.45);
-  background-color: rgba(3, 101, 140, 0.1);
-  color: var(--color-brand, #03658c);
-}
-
-:root[data-theme='dark'] .ge-carry-pill.is-on {
-  color: #56c8ee;
-}
-
-.ge-carry-pill:has(.ge-carry-input:focus-visible) {
-  outline: 2px solid var(--color-brand, #03658c);
-  outline-offset: 1px;
-}
-
-.ge-carry-pill:has(.ge-carry-input:disabled) {
-  opacity: 0.6;
-  cursor: progress;
-}
-
-.ge-carry-input {
-  margin: 0;
-  accent-color: var(--color-brand, #03658c);
-  cursor: inherit;
-}
-
-.ge-carry-hint {
-  max-width: 320px;
-  margin: 0;
-  font-size: 0.72rem;
-  color: var(--color-text-muted, #8a8a8a);
-  text-align: right;
-}
-
-/* ───────── FE-S14-IVA §5: switch segmentado "Neto / Con IVA" + chip de modo ───────── */
-
-.ge-mode-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  align-items: center;
-}
-
-.ge-mode-caption {
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--color-text-muted, #8a8a8a);
-}
-
-.ge-mode-switch {
-  display: inline-flex;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
-  border-radius: 999px;
-  background-color: var(--color-surface, #f2f4f7);
-}
-
-:root[data-theme='dark'] .ge-mode-switch {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.ge-mode-btn {
-  padding: 5px 13px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: var(--color-text-secondary, #555555);
-  cursor: pointer;
-  transition:
-    background-color 0.18s cubic-bezier(0.23, 1, 0.32, 1),
-    color 0.18s cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.ge-mode-btn:hover:not(.is-active) {
-  background-color: rgba(3, 101, 140, 0.08);
-  color: var(--color-text-primary, #070707);
-}
-
-.ge-mode-btn:focus-visible {
-  outline: 2px solid var(--color-brand, #03658c);
-  outline-offset: 1px;
-}
-
-.ge-mode-btn.is-active {
-  background-color: var(--color-brand, #03658c);
-  color: var(--text-white, #eeeeee);
-  box-shadow: 0 1px 4px rgba(3, 101, 140, 0.35);
-}
+/* ───────── FE-S14-IVA §5: chip del modo (el switch `ge-mode-*` vive en
+ * `IvaModeSwitch.vue` desde la FASE 3) ───────── */
 
 /* Chip ámbar del modo (misma familia "proyección" de `chip-closed`). */
 .chip-iva {
@@ -1467,7 +1232,8 @@ function backToPlanning() {
 
 /* Tabs "pill" (mismo patrón visual de Reglas Financieras)
  * FE-S20: la fila completa (pills + Exportar) lleva el margen inferior;
- * la caja de pills queda igual que antes. */
+ * la caja de pills queda igual que antes. El botón/menú "Exportar"
+ * (`ge-export*`, FASE 3) vive en `ExportMenu.vue`. */
 
 .ge-tabs-row {
   display: flex;
@@ -1488,105 +1254,6 @@ function backToPlanning() {
 
 :root[data-theme='dark'] .ge-tabs {
   background-color: rgba(255, 255, 255, 0.05);
-}
-
-/* ─── FE-S20 (spec `frontend.03_20`) RF-1/RF-2/RF-7: botón + menú Exportar ─── */
-
-.ge-export {
-  position: relative;
-}
-
-.ge-export-btn {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  padding: 8px 16px;
-  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
-  border-radius: 999px;
-  background-color: var(--color-surface-card, #ffffff);
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--color-text-secondary, #555555);
-  cursor: pointer;
-  transition:
-    background-color 0.18s cubic-bezier(0.23, 1, 0.32, 1),
-    color 0.18s cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-:root[data-theme='dark'] .ge-export-btn {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.ge-export-icon {
-  width: 14px;
-  height: 14px;
-}
-
-.ge-export-btn:hover:not(:disabled),
-.ge-export-btn.is-open {
-  background-color: rgba(3, 101, 140, 0.08);
-  color: var(--color-text-primary, #070707);
-}
-
-:root[data-theme='dark'] .ge-export-btn:hover:not(:disabled),
-:root[data-theme='dark'] .ge-export-btn.is-open {
-  background-color: rgba(86, 200, 238, 0.12);
-  color: #56c8ee;
-}
-
-.ge-export-btn:focus-visible {
-  outline: 2px solid var(--color-brand, #03658c);
-  outline-offset: 1px;
-}
-
-.ge-export-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.ge-export-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 190px;
-  padding: 6px;
-  border: 1px solid var(--color-border-strong, rgba(97, 97, 97, 0.3));
-  border-radius: 10px;
-  background-color: var(--color-surface-card, #ffffff);
-  box-shadow: 0 10px 30px rgba(7, 7, 7, 0.16);
-}
-
-:root[data-theme='dark'] .ge-export-menu {
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-}
-
-:root[data-theme='dark'] .ge-export-item {
-  color: #d5dde4;
-}
-
-.ge-export-item {
-  padding: 8px 12px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  font-size: 0.8rem;
-  color: var(--color-text-primary, #070707);
-  text-align: left;
-  cursor: pointer;
-}
-
-.ge-export-item:hover {
-  background-color: rgba(3, 101, 140, 0.08);
-}
-
-.ge-export-item:focus-visible {
-  outline: 2px solid var(--color-brand, #03658c);
-  outline-offset: -2px;
 }
 
 .tab-pill {
@@ -1644,10 +1311,9 @@ function backToPlanning() {
     justify-content: flex-start;
   }
 
-  .ge-mode-group,
-  .ge-carry-group {
-    align-items: flex-start;
-  }
+  /* FASE 3: las porciones del media query de `.ge-mode-group` y
+     `.ge-carry-group` viajaron con sus componentes (`IvaModeSwitch.vue` /
+     `CarryoverPill.vue`) — el CSS scoped del padre no las alcanza. */
 }
 .ge-payroll-notice {
   display: flex;

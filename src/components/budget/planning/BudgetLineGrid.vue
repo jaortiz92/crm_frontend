@@ -49,17 +49,29 @@
  *    internación no se inventa la cifra: el chip simplemente no aparece).
  * Con el modo OFF el DOM es byte-idéntico al del FE-S9 (AC-FE14-1: cero
  * regresión visual) — las columnas nuevas ni se montan.
+ *
+ * FASE 3 (refactor puro, cero cambio de comportamiento): la lógica de estado
+ * se extrajo VERBATIM a composables de este mismo directorio:
+ *  - `useBudgetLineCellEdit.js` — stack de edición inline de celdas (FE-S4
+ *    §8.2): refs de edición, micro-estados por celda, guard single-flight,
+ *    commit con UN solo PUT vía `updateCell`, rollback §9 y timers del ✓.
+ *    El store se INYECTA por parámetro (el grid sigue instanciándolo).
+ *  - `useBudgetLineIvaFlag.js` — toggle `Con IVA` de gastos (PUT parcial
+ *    `{ has_iva }` vía `updateScenarioLine`).
+ * El template consume los MISMO nombres que antes (retornos del composable),
+ * así que el marcado no cambió ni una línea.
  */
-import { computed, nextTick, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
 import { alertService } from '@/services/alertService.js'
 import LineFormModal from './LineFormModal.vue'
 import LineDeleteModal from './LineDeleteModal.vue'
+import { useBudgetLineCellEdit } from './useBudgetLineCellEdit.js'
+import { useBudgetLineIvaFlag } from './useBudgetLineIvaFlag.js'
 import {
   BEHAVIOR_LABELS,
   LINE_TYPE_LABELS,
   formatMoney,
-  parseCellAmount,
   lineChargesIva,
   ivaOf,
   withIva
@@ -80,22 +92,6 @@ const scenarioStore = useBudgetScenarioStore()
 
 /** Paso de paginación manual por slice (PQ-F5), independiente por sección. */
 const PAGE_SLICE = 500
-
-/* --------------------- edición de celda (stack FE-S4, verbatim) ------------ */
-
-const editingId = ref(null)
-const editValue = ref('')
-const editInvalid = ref(false)
-const editMessage = ref('')
-
-/** Micro-estado por celda: '' | 'saving' | 'saved' | 'error'. */
-const cellStatus = reactive({})
-/** Mensaje visible bajo la celda en error/validación. */
-const cellMessages = reactive({})
-/** Valor mostrado durante el PUT (rollback = borrar el override). */
-const cellOverrides = reactive({})
-
-const savedTimers = new Map()
 
 const lines = computed(() =>
   props.scenario && Array.isArray(props.scenario.budget_lines) ? props.scenario.budget_lines : []
@@ -121,6 +117,33 @@ function rowKey(line) {
   const componentId = line.id_financing_credit_installment ?? line.cost_component_code ?? ''
   return `sim-${sourceId}-${componentId}-${line.budget_date}-${line.cost_component_code}`
 }
+
+/* --------------------- edición de celda (stack FE-S4, verbatim) ------------ */
+
+/**
+ * FASE 3: el stack de edición inline vive en `useBudgetLineCellEdit.js`
+ * (movido VERBATIM; el store se inyecta por parámetro, el composable se crea
+ * UNA vez en el setup). El estado devuelto es el mismo que antes era local.
+ * (`cellOverrides` y `cellBusy` también son parte del contrato del composable,
+ * pero su consumo quedó interno — `displayAmount`/`startEdit` — así que no se
+ * destructuran aquí.)
+ */
+const {
+  editingId,
+  editValue,
+  editInvalid,
+  editMessage,
+  cellStatus,
+  cellMessages,
+  isEditable,
+  displayAmount,
+  cellLabel,
+  cellTitle,
+  startEdit,
+  onCellKeydown,
+  cancelEdit,
+  commitEdit
+} = useBudgetLineCellEdit({ store: scenarioStore, rowKey, isSimulated })
 
 /* --------------------------------- orden ----------------------------------- */
 
@@ -486,171 +509,10 @@ function lineBusy(idBudgetLine) {
 }
 
 /**
- * FE-S14-IVA §5: toggle del flag `Con IVA` de una fila EXPENSE ⇒ PUT PARCIAL
- * `{ has_iva }` sobre `/budget/planning/line/{id}` (dueño del flag
- * `lineSaving` y del cache-in-place: la respuesta reemplaza la línea, las
- * columnas IVA/Total re-pivotan por reactividad y el settlement llega
- * debounced desde el store — AC-FE14-2, ≤ 1 request nuevo). El checkbox es
- * ONE-WAY (`:checked`): si el request falla vuelve a leer la caché (jamás
- * queda marcado lo que el servidor no aceptó). 404 de línea: el store ya
- * resincronizó el detalle (`lineGone`); otros fallos ⇒ toast simple.
- * @param {object} line
- * @param {Event} event
+ * FASE 3: el toggle `Con IVA` (PUT parcial `{ has_iva }`) vive en
+ * `useBudgetLineIvaFlag.js` (movido VERBATIM, store inyectado).
  */
-async function onIvaFlagChange(line, event) {
-  if (isSimulated(line)) return
-  const next = event.target.checked
-  const result = await scenarioStore.updateScenarioLine(line.id_budget_line, {
-    has_iva: next
-  })
-  if (result.ok || result.kind === 'auth' || result.kind === 'busy') return
-  alertService.generalError(result.message || 'No se pudo guardar el flag de IVA. Reintenta.')
-}
-
-/* --------------------- edición de celda (stack FE-S4, verbatim) ------------ */
-
-/** Celda bloqueada mientras su PUT está en vuelo (guard por línea, AC-FE-8). */
-function cellBusy(idBudgetLine) {
-  return Boolean(scenarioStore.cellSaving[idBudgetLine])
-}
-
-/** §8.2: solo líneas `fixed` editables por celda (las variables llevan tasa). */
-function isEditable(line) {
-  return line.behavior_type === 'fixed' && !isSimulated(line)
-}
-
-function displayAmount(line) {
-  const id = line.id_budget_line
-  return id in cellOverrides ? cellOverrides[id] : Number(line.projected_amount)
-}
-
-function cellLabel(line) {
-  return `Monto ${scenarioStore.costCenterLabel(line.id_cost_center)} — ${line.budget_date}`
-}
-
-function cellTitle(line) {
-  const id = line.id_budget_line
-  if (isSimulated(line)) {
-    return line.source_engine === 'financing_credit_sim'
-      ? 'Línea simulada de financiación (what-if): no editable'
-      : 'Línea simulada de nómina (what-if): no editable'
-  }
-  if (cellStatus[id] === 'error' && cellMessages[id]) return cellMessages[id]
-  if (!isEditable(line)) return 'línea variable: edítela con ✏️ (tasa/fechas)'
-  if (cellStatus[id] === 'saved') return 'Guardado ✓'
-  return 'Doble clic o Enter para editar el monto'
-}
-
-async function startEdit(line) {
-  if (!isEditable(line) || cellBusy(line.id_budget_line)) return
-  // Una edición previa abierta con valor INVÁLIDO (el blur no cerró porque
-  // no se disparó PUT) se descarta al abrir otra celda: jamás bloquea la rejilla.
-  if (editingId.value !== null && !editInvalid.value) return
-  editingId.value = rowKey(line)
-  editValue.value = String(line.projected_amount ?? '')
-  editInvalid.value = false
-  editMessage.value = ''
-  await nextTick()
-  const input = document.getElementById(`cell-input-${rowKey(line)}`)
-  if (input) {
-    input.focus()
-    input.select()
-  }
-}
-
-function onCellKeydown(event, line) {
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    startEdit(line)
-  }
-}
-
-function cancelEdit() {
-  editingId.value = null
-  editValue.value = ''
-  editInvalid.value = false
-  editMessage.value = ''
-}
-
-/**
- * Mensaje legible según §9 para la celda ofensora: 422 → mensaje del backend
- * inline; network/5xx → "valor revertido"; 403 → permiso; resto → genérico.
- */
-function cellErrorMessage(result) {
-  if (result.kind === 'validation' && result.message) return result.message
-  if (result.kind === 'network') return 'Sin conexión: valor revertido.'
-  if (result.kind === 'server') return 'El servidor no pudo guardar: valor revertido.'
-  if (result.kind === 'forbidden') return 'No tiene permiso para editar esta celda.'
-  if (result.kind === 'notfound') return 'La línea ya no existe; recargue el escenario.'
-  return 'No se pudo guardar: valor revertido.'
-}
-
-function markSaved(idBudgetLine) {
-  cellStatus[idBudgetLine] = 'saved'
-  delete cellMessages[idBudgetLine]
-  const previous = savedTimers.get(idBudgetLine)
-  if (previous) clearTimeout(previous)
-  savedTimers.set(
-    idBudgetLine,
-    setTimeout(() => {
-      if (cellStatus[idBudgetLine] === 'saved') cellStatus[idBudgetLine] = ''
-      savedTimers.delete(idBudgetLine)
-    }, 1500)
-  )
-}
-
-/**
- * Cierre de edición con disparo único del PUT (NFR-F2: Enter dispara el PUT y
- * el blur posterior no encuentra edición abierta, o viceversa — jamás dos
- * requests por la misma edición).
- */
-async function commitEdit(line) {
-  if (editingId.value !== rowKey(line)) return
-
-  const parsed = parseCellAmount(editValue.value)
-  if (!parsed.valid) {
-    editInvalid.value = true
-    editMessage.value = 'Debe ser un número mayor o igual que 0.'
-    return
-  }
-
-  const original = Number(line.projected_amount)
-  if (parsed.value === original) {
-    // Sin cambio: no se contamina el servidor (PUT ≤ 1 por edición real).
-    cancelEdit()
-    return
-  }
-
-  const id = line.id_budget_line
-  cancelEdit()
-  cellOverrides[id] = parsed.value
-  cellStatus[id] = 'saving'
-  delete cellMessages[id]
-
-  const result = await scenarioStore.updateCell(id, parsed.value)
-  delete cellOverrides[id]
-
-  if (result.ok) {
-    markSaved(id)
-    return
-  }
-
-  if (result.kind === 'auth' || result.kind === 'busy') {
-    cellStatus[id] = ''
-    return
-  }
-
-  // Rollback visual: el override se borró y la celda vuelve a leer la caché.
-  cellStatus[id] = 'error'
-  cellMessages[id] = cellErrorMessage(result)
-}
-
-function clearTimers() {
-  for (const timer of savedTimers.values()) clearTimeout(timer)
-  savedTimers.clear()
-}
-
-onBeforeUnmount(clearTimers)
+const { onIvaFlagChange } = useBudgetLineIvaFlag({ store: scenarioStore, isSimulated })
 </script>
 
 <template>

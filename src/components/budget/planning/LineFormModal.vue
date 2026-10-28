@@ -70,6 +70,14 @@
  * "los ingresos y las compras siempre generan/pagan IVA (v1)" — D-S10-5: el
  * backend ignora el flag en esos tipos (no viaja jamás ⇒ payloads viejos
  * byte-idénticos cuando no se toca).
+ *
+ * FASE 3 (refactor puro, cero cambio de comportamiento): las reglas de
+ * validación PRE-red (AC-FD-8) se extrajeron VERBATIM al módulo puro
+ * `lineFormValidation.js` (mismos mensajes, mismos umbrales): los computeds
+ * `yearValid`/`cecoError`/`budgetDateError`/`amountError`/`rateError` y los
+ * helpers `ratePctNumber`/`rateDecimal`/`RATE_PREFILL_DRIFT_TOLERANCE` ahora
+ * delegan en él. La Orquestación de UI (`fieldMessage`, gating por
+ * `attempted`/campo lleno, errores de server §6) permanece aquí.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
@@ -80,6 +88,15 @@ import {
   formatMoney,
   parseCellAmount
 } from './planningFormat.js'
+import {
+  RATE_PREFILL_DRIFT_TOLERANCE,
+  parseRatePct,
+  rateDecimalOf,
+  cecoErrorOf,
+  budgetDateErrorOf,
+  amountErrorOf,
+  rateErrorOf
+} from './lineFormValidation.js'
 
 const props = defineProps({
   open: { type: Boolean, required: true },
@@ -274,68 +291,19 @@ const dialogTitle = computed(() => {
 
 const amountParse = computed(() => parseCellAmount(form.amountText))
 
-/** `null` = tasa vacía; si no, número finito (o NaN si el texto no es válido). */
-const ratePctNumber = computed(() => {
-  const raw = String(form.ratePct).trim()
-  if (!raw) return null
-  const num = Number(raw.includes(',') && !raw.includes('.') ? raw.replace(',', '.') : raw)
-  return Number.isFinite(num) ? num : NaN
-})
+/** FASE 3: `null` = tasa vacía; si no, número finito (o NaN si el texto no es válido). */
+const ratePctNumber = computed(() => parseRatePct(form.ratePct))
 
 /** Tasa cruda 0–1 para el payload (FD-8: `tasa/100`; redondeo anti float-garbage). */
-const rateDecimal = computed(() =>
-  ratePctNumber.value === null || Number.isNaN(ratePctNumber.value)
-    ? null
-    : Number((ratePctNumber.value / 100).toFixed(6))
-)
+const rateDecimal = computed(() => rateDecimalOf(ratePctNumber.value))
 
-/**
- * Tolerancia anti-drift del prefill de tasa (hallazgo 4 de auditoría FE):
- * `prefillFromLine` muestra el % con 2 decimales, así que re-guardar la línea
- * SIN tocar el campo recalcularía una fracción truncada (p. ej. 0.0833333 →
- * 0.0833) y el PUT reescribiría la tasa sin intención del usuario. El drift
- * máximo del prefill es medio paso de 0.01 % (⇒ 0.00005 de tasa); un cambio
- * REAL desde el formulario es ≥ 0.0001 (un paso del %) y siempre supera el
- * umbral, así que solo los re-guardados inocuos se suprimen.
- */
-const RATE_PREFILL_DRIFT_TOLERANCE = 0.00005
+const cecoError = computed(() => cecoErrorOf(form))
 
-const yearValid = computed(() => {
-  if (!form.budgetDate) return false
-  // `input type=date` entrega ISO puro 'YYYY-MM-DD': se lee el año del string
-  // (patrón de `planningFormat.monthIndexOf`, sin corrimiento UTC→local de
-  // `new Date(v).getFullYear()`), mismo resultado semántico que pide la spec.
-  return Number(form.budgetDate.slice(0, 4)) === Number(props.scenario?.budget_year)
-})
+const budgetDateError = computed(() => budgetDateErrorOf(form, props.scenario?.budget_year))
 
-const cecoError = computed(() => (form.idCostCenter ? '' : 'El CECO es obligatorio.'))
+const amountError = computed(() => amountErrorOf(form))
 
-const budgetDateError = computed(() => {
-  if (!form.budgetDate) return 'La fecha proyectada es obligatoria.'
-  if (!yearValid.value) {
-    return `La fecha debe ser del año ${props.scenario?.budget_year ?? '—'} del escenario.`
-  }
-  return ''
-})
-
-const amountError = computed(() => {
-  if (isVariable.value) return ''
-  if (!String(form.amountText).trim()) return 'El monto es obligatorio.'
-  if (!amountParse.value.valid) return 'Debe ser un número mayor o igual que 0.'
-  return ''
-})
-
-const rateError = computed(() => {
-  if (!isVariable.value) return ''
-  if (ratePctNumber.value === null) {
-    // Obligatoria en create; en edit vacía = "sin cambio" (PUT parcial, keep).
-    return isEdit.value ? '' : 'La tasa es obligatoria para líneas variables.'
-  }
-  if (Number.isNaN(ratePctNumber.value) || ratePctNumber.value < 0 || ratePctNumber.value > 100) {
-    return 'La tasa debe ser un número entre 0 y 100.'
-  }
-  return ''
-})
+const rateError = computed(() => rateErrorOf(form, isEdit.value))
 
 /**
  * Error visible por campo: el de servidor (inline §6) manda sobre el local;
