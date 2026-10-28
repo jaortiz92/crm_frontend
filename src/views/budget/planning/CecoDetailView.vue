@@ -57,14 +57,17 @@ import {
 } from '@/components/budget/planning/planningFormat.js'
 import {
   CARRYOVER_ORIGIN_LABELS,
+  MOVEMENT_BUCKET_AFTER,
+  MOVEMENT_BUCKET_BEFORE,
+  MOVEMENT_BUCKET_UNDATED,
   MOVEMENT_GROUP_FILTERS,
   SOURCE_KINDS,
   TAB_CAUSED,
   TAB_FLOW,
   isCarryoverOrigin,
+  movementBucketOf,
   movementsForTab,
   movementAmountReconciled,
-  movementMonthOf,
   movementGroupOf,
   normalizeBudgetLines,
   normalizeCarryoverLines,
@@ -113,6 +116,17 @@ const cecoCodeParam = computed(() =>
 )
 
 const scenario = computed(() => budgetPlanningStore.currentScenario)
+
+/**
+ * Año N del escenario (fix 2026-10-26): activa los buckets fuera de año de
+ * `movementBucketOf` en pivote y filtros (FE-S8 en el drill-down). No entero
+ * ⇒ `null` ⇒ degradación al posicionamiento mensual puro (comportamiento
+ * previo, mismos criterios de los pivotes de origen).
+ */
+const scenarioYear = computed(() => {
+  const year = Number(scenario.value?.budget_year)
+  return Number.isInteger(year) ? year : null
+})
 
 /** ¿El escenario en caché es el de la URL? (falsa=true mientras carga otro). */
 const currentReady = computed(
@@ -276,20 +290,52 @@ const cecoLines = computed(() => {
 /* ─────────────── Filtros (RF-6.1 / RF-8.7) ─────────────── */
 
 /**
- * Estado LOCAL de filtros (RF-6.1). `filters.month` opera sobre el mes de
- * POSICIONAMIENTO de la TAB ACTIVA (RF-8.5): `budget_date` en Causado,
- * `payment_date` (con fallback `cfMonth` para sims, puro para
- * capital/desembolsos) en Flujo, con la opción 'none' ("Sin fecha de pago")
- * solo disponible en Flujo. `filters.lineType` filtra por GRUPO
- * origen/tipo (RF-8.7); el comportamiento SOLO afecta a la base.
+ * Estado LOCAL de filtros (RF-6.1). `filters.month` opera sobre el bucket de
+ * POSICIONAMIENTO de la TAB ACTIVA (RF-8.5 + fix 2026-10-26): `budget_date`
+ * en Causado, `payment_date` (con fallback `cfMonth` para sims, puro para
+ * capital/desembolsos) en Flujo — comparados contra el año N del escenario
+ * (`movementBucketOf`): '0'–'11' = mes del AÑO, 'none' = "Sin fecha de pago"
+ * (solo Flujo) y 'before'/'after' = fuera de año ("Antes/Después de N",
+ * AMBOS tabs). `filters.lineType` filtra por GRUPO origen/tipo (RF-8.7); el
+ * comportamiento SOLO afecta a la base.
  */
 const filters = reactive({ month: 'all', lineType: 'all', behavior: 'all' })
 
 // Volver al tab Causado invalida 'none' ("Sin fecha de pago" es de Flujo);
-// el watch lo resetea para no dejar un filtro imposible de aplicar.
+// el watch lo resetea para no dejar un filtro imposible de aplicar. Igual con
+// 'before'/'after' si el TAB DESTINO no tiene montos en ese bucket (la opción
+// desaparece del select — fix 2026-10-26: mejor resetear que dejar un select
+// "ciego" con el filtro activo sin opción visible).
 watch(activeTab, (tab) => {
-  if (tab !== TAB_FLOW && filters.month === 'none') filters.month = 'all'
+  const current = filters.month
+  if (
+    (tab !== TAB_FLOW && current === 'none') ||
+    (current === 'before' && !ooyAvailable.value.before) ||
+    (current === 'after' && !ooyAvailable.value.after)
+  ) {
+    filters.month = 'all'
+  }
 })
+
+/**
+ * Matching del filtro "Mes" por BUCKET (fix 2026-10-26): un mes seleccionado
+ * ('0'–'11') SOLO cuadra con el mes del AÑO N — un pago con fecha efectiva en
+ * mayo de N+1 ya no aparece al filtrar "May" (va a la opción "Después de N").
+ * Espejo de la columna del pivote (`movementBucketOf`); sin fecha ⇒ 'none'
+ * (columna "Sin fecha de pago" en Flujo; en Causado no puebla columna).
+ * @param {object} movement forma común
+ * @param {string} tab `TAB_CAUSED` | `TAB_FLOW`
+ * @param {string} monthValue valor del `filters.month` ('all'|'none'|'before'|'after'|'0'...'11')
+ * @returns {boolean}
+ */
+function movementMatchesMonthFilter(movement, tab, monthValue) {
+  if (monthValue === 'all') return true
+  const bucket = movementBucketOf(movement, tab, scenarioYear.value)
+  if (monthValue === 'none') return bucket === MOVEMENT_BUCKET_UNDATED
+  if (monthValue === 'before') return bucket === MOVEMENT_BUCKET_BEFORE
+  if (monthValue === 'after') return bucket === MOVEMENT_BUCKET_AFTER
+  return bucket === Number(monthValue)
+}
 
 /* ─────────────── Movimientos de los 4 orígenes (RF-8.1/8.3) ─────────────── */
 
@@ -424,16 +470,12 @@ watch(
   }
 )
 
-/** RF-CR-07/09: slice visible del arrastre — origen + mes del tab (Flujo). */
+/** RF-CR-07/09: slice visible del arrastre — origen + bucket del tab (Flujo). */
 const carryFilteredMovements = computed(() => {
   const origin = carryOriginFilter.value
-  const month = filters.month
   return carryMovements.value.filter((movement) => {
     if (origin !== 'all' && movement.carryover_origin !== origin) return false
-    if (month === 'all') return true
-    const m = movementMonthOf(movement, TAB_FLOW)
-    if (month === 'none') return m === -1
-    return m === Number(month)
+    return movementMatchesMonthFilter(movement, TAB_FLOW, filters.month)
   })
 })
 
@@ -482,8 +524,7 @@ const filteredLines = computed(() => {
       return false
     }
     if (month === 'all') return true
-    if (month === 'none') return movementMonthOf(movement, tab) === -1
-    return movementMonthOf(movement, tab) === Number(month)
+    return movementMatchesMonthFilter(movement, tab, month)
   })
 })
 
@@ -551,6 +592,26 @@ const fixedIncomeByMonth = computed(() => {
 
 /** Etiquetas de mes para el filtro (Ene–Dic de `planningFormat`). */
 const MONTHS = MONTH_LABELS
+
+/**
+ * Disponibilidad de las opciones extra del filtro "Mes" (fix 2026-10-26):
+ * "Antes/Después de N" solo se ofrecen cuando el dataset DEL TAB (sin el
+ * propio filtro de mes — antes de que se vuelvan incapturables) tiene algún
+ * movimiento en ese bucket, en espejo de las columnas CONDICIONALES del
+ * pivote. `scenarioYear` no entero ⇒ sin opciones (degradación del bucket).
+ */
+const ooyAvailable = computed(() => {
+  const out = { before: false, after: false }
+  if (scenarioYear.value === null) return out
+  const tab = activeTab.value
+  for (const movement of tabMovements.value) {
+    if (out.before && out.after) break
+    const bucket = movementBucketOf(movement, tab, scenarioYear.value)
+    if (bucket === MOVEMENT_BUCKET_BEFORE) out.before = true
+    else if (bucket === MOVEMENT_BUCKET_AFTER) out.after = true
+  }
+  return out
+})
 
 /**
  * Total del CECO de la TAB ACTIVA (RF-3.5) sobre el dataset filtrado, con el
@@ -850,6 +911,8 @@ function onExportSelect(format) {
             >
               <option value="all">Todos los meses</option>
               <option v-if="activeTab === TAB_FLOW" value="none">Sin fecha de pago</option>
+              <option v-if="ooyAvailable.before" value="before">Antes de {{ scenarioYear }}</option>
+              <option v-if="ooyAvailable.after" value="after">Después de {{ scenarioYear }}</option>
               <option v-for="(label, index) in MONTHS" :key="label" :value="String(index)">
                 {{ label }}
               </option>
@@ -899,12 +962,15 @@ function onExportSelect(format) {
             what-if (RF-8.5). Montos en COP (sin símbolo) sobre netos: cuadra con las filas base y
             simuladas de la Vista Ejecutiva. La línea variable de gasto muestra el monto
             reconciliado tasa × ingresos fijos del mes (REVISIÓN 4). El capital y los desembolsos de
-            financiación no entran: no son gasto del P&G (RF-8.3).
+            financiación no entran: no son gasto del P&G (RF-8.3). Las causaciones del año
+            {{ scenarioYear }} llenan las columnas Ene–Dic; las de otros años van en las columnas
+            "Antes/Después de {{ scenarioYear }}" cuando existen.
           </p>
           <CecoMovementPivot
             :lines="filteredLines"
             :tab="TAB_CAUSED"
             :fixed-income-months="fixedIncomeByMonth"
+            :scenario-year="scenarioYear"
           />
           <CecoMovementTable
             :lines="filteredLines"
@@ -927,12 +993,15 @@ function onExportSelect(format) {
             bloques "Gastos fijos", "Capital de financiación" y "Desembolsos" de la Vista Flujo. La
             línea variable conservará el monto reconciliado (tasa × ingresos fijos por causación) y
             cae en el mes de su budget_date, igual que el bloque "Gastos variables (calculados)" del
-            Flujo (REVISIÓN 4). Las líneas sin fecha quedan en la columna "Sin fecha de pago".
+            Flujo (REVISIÓN 4). Solo los pagos del año {{ scenarioYear }} llenan Ene–Dic: los de
+            otros años van en "Antes/Después de {{ scenarioYear }}" cuando existen (fix de la mezcla
+            de 2026/2027 en la misma columna) y los sin fecha en la columna "Sin fecha de pago".
           </p>
           <CecoMovementPivot
             :lines="filteredLines"
             :tab="TAB_FLOW"
             :fixed-income-months="fixedIncomeByMonth"
+            :scenario-year="scenarioYear"
           />
           <CecoMovementTable
             :lines="filteredLines"

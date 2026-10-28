@@ -39,6 +39,7 @@
 import {
   lineChargesIva,
   monthIndexOf,
+  monthBucketIndexOf,
   withIva,
   formatMoneyCompact,
   formatMoneyPlain
@@ -407,6 +408,85 @@ export function movementGroupOf(movement) {
   return GROUP_KEYS.baseExpense
 }
 
+/* ═════════ FE-S22 (spec `frontend.03_22`) — desagregación por Cuenta/Categoría ═════════ */
+
+/**
+ * Clave del BUCKET especial de movimientos SIN `cost_component_code`
+ * (`''` — la cuenta vacía del `movementAccountKeyOf`).
+ */
+export const ACCOUNT_EMPTY_BUCKET_KEY = ''
+
+/** Etiqueta legible del bucket de cuenta vacía (RF-22.1/BR-22-3). */
+export const ACCOUNT_EMPTY_BUCKET_LABEL = '— Sin cuenta/categoría —'
+
+/**
+ * Clave de CUENTA/CATEGORÍA de un movimiento (FE-S22, RF-22.1):
+ * `cost_component_code` normalizado (→ string recortado); `null`/`undefined`/
+ * vacío ⇒ `ACCOUNT_EMPTY_BUCKET_KEY` (`''`, bucket "— Sin cuenta/categoría —").
+ * Helper PURO y compartido: `accountBreakdownOf` y el `grouped` de
+ * `CecoMovementPivot.vue` derivan de ESTA clave — la jerarquía es
+ * presentación pura (BR-22-1: ni `grandTotal` ni `columnTotals` cambian).
+ * @param {object|null|undefined} movement forma común del drill-down
+ * @returns {string}
+ */
+export function movementAccountKeyOf(movement) {
+  const raw = movement?.cost_component_code
+  if (raw === null || raw === undefined) return ACCOUNT_EMPTY_BUCKET_KEY
+  const key = String(raw).trim()
+  return key || ACCOUNT_EMPTY_BUCKET_KEY
+}
+
+/**
+ * Etiqueta legible de una clave de cuenta: el código propio, o el bucket de
+ * vacía (`ACCOUNT_EMPTY_BUCKET_LABEL`) con la clave `''` (BR-22-3).
+ * @param {string} accountKey salida de `movementAccountKeyOf`
+ * @returns {string}
+ */
+export function accountLabelOf(accountKey) {
+  return accountKey ? accountKey : ACCOUNT_EMPTY_BUCKET_LABEL
+}
+
+/**
+ * Orden de las sub-filas de cuenta: ALFABÉTICO por clave, con el bucket
+ * "Sin cuenta/categoría" al FINAL (las cuentas con código juntas primero).
+ * Devuelve una copia ordenada — cero mutación de la entrada.
+ * @param {Array<{accountKey: string}>} entries
+ * @returns {Array}
+ */
+export function sortAccountEntries(entries) {
+  return [...(Array.isArray(entries) ? entries : [])].sort((a, b) => {
+    const aEmpty = !a?.accountKey
+    const bEmpty = !b?.accountKey
+    if (aEmpty !== bEmpty) return aEmpty ? 1 : -1
+    return a.accountKey.localeCompare(b.accountKey)
+  })
+}
+
+/**
+ * Agrupación PURA de movimientos por Cuenta/Categoría (FE-S22, helper
+ * opcional del spec): Array ordenado según `sortAccountEntries` —
+ * `{ accountKey, label, movements }` por cuenta distinta presente en el
+ * dataset (BR-22-3/BR-22-4: el bucket vacío SOLO con movimientos sin código;
+ * una única cuenta igual genera su sub-fila).
+ * @param {Array<object>|null|undefined} movements
+ * @returns {Array<{accountKey: string, label: string, movements: Array<object>}>}
+ */
+export function accountBreakdownOf(movements) {
+  const byAccount = new Map()
+  for (const movement of Array.isArray(movements) ? movements : []) {
+    const accountKey = movementAccountKeyOf(movement)
+    if (!byAccount.has(accountKey)) {
+      byAccount.set(accountKey, {
+        accountKey,
+        label: accountLabelOf(accountKey),
+        movements: []
+      })
+    }
+    byAccount.get(accountKey).movements.push(movement)
+  }
+  return sortAccountEntries([...byAccount.values()])
+}
+
 /**
  * Normalizador de `budget_lines` del CECO a la forma común (RF-8.3): anota
  * `source_kind: 'base'` + clave estable de fila, SIN tocar su forma de
@@ -609,6 +689,67 @@ export function movementMonthOf(movement, tab) {
     return monthIndexOf(movement?.payment_date || movement?.budget_date)
   }
   return tab === TAB_CAUSED ? causedMonthOf(movement) : flowMonthOf(movement)
+}
+
+/* ═════════ BUCKETS fuera de año (fix 2026-10-26 — FE-S8 en el drill-down) ═════════ */
+
+/**
+ * Bucket extendido de POSICIONAMIENTO: réplica del criterio FE-S8 de los
+ * pivotes de origen (`monthBucketIndexOf` en `planningFormat.js` + los
+ * builders de `cashFlowPivot.js`), que hasta hoy el drill-down NO respetaba:
+ * posicionaba por `monthIndexOf` crudo (solo mes 0–11, sin año), así que un
+ * movimiento con fecha efectiva en enero de N+1 caía en la MISMA columna
+ * "Ene" del año N — mezcla de 2026 con 2027 en la misma celda (bug del
+ * reporte `/budget/planning/576/ceco/510100?tab=flow`).
+ *
+ * Valores de retorno (constantes exportadas de abajo):
+ *  - `MOVEMENT_BUCKET_BEFORE` (-2) — año efectivo < N ⇒ columna "Antes de N".
+ *  - `0..11` — MES del año N ⇒ columna mensual Ene–Dic.
+ *  - `MOVEMENT_BUCKET_AFTER` (12) — año efectivo > N ⇒ columna "Después de N".
+ *  - `MOVEMENT_BUCKET_UNDATED` (-99) — sin fecha posicionable o ilegible ⇒
+ *    columna "Sin fecha de pago" (tab Flujo; en Causado no puebla columna).
+ *
+ * Reglas de FECHA EFECTIVA por origen — espejo de `movementMonthOf` (RF-8.5):
+ *  - variable reconciliada ⇒ `budget_date` (AMBOS tabs — criterio A-03 de los
+ *    builders variables de la matriz, que posicionan por `budget_date`).
+ *  - nómina/financiación what-if ⇒ Causado `budget_date`; Flujo
+ *    `payment_date || budget_date` (fallback `cfMonth`).
+ *  - capital/desembolsos ⇒ `payment_date` PURO.
+ *  - arrastre ⇒ `payment_date || budget_date` (espejo `buildCarryPivot`).
+ *  - resto de la base ⇒ Flujo `payment_date` estricto / Causado `budget_date`.
+ *
+ * Con `scenarioYear` no entero (`null`) la degradación es la MISMA del resto
+ * de los pivotes (`monthBucketIndexOf` ⇒ mes 0–11 del año legible): fechas
+ * de cualquier año caen a su columna mensual (comportamiento previo).
+ * @param {object|null|undefined} movement forma común del drill-down
+ * @param {string} tab `TAB_CAUSED` | `TAB_FLOW`
+ * @param {number|null|undefined} scenarioYear año N del escenario (`budget_year` entero)
+ * @returns {-2|0|1|2|3|4|5|6|7|8|9|10|11|12|-99}
+ */
+export const MOVEMENT_BUCKET_BEFORE = -2
+export const MOVEMENT_BUCKET_AFTER = 12
+export const MOVEMENT_BUCKET_UNDATED = -99
+
+export function movementBucketOf(movement, tab, scenarioYear) {
+  // REVISIÓN 4 (RF-11.4/AC-16): la línea variable de gasto se posiciona por
+  // su MES DE CAUSACIÓN en AMBOS tabs — aquí por el BUCKET de `budget_date`.
+  if (isReconciledVariableMovement(movement)) {
+    return monthBucketIndexOf(movement?.budget_date, scenarioYear)
+  }
+  const kind = movement?.source_kind ?? SOURCE_KINDS.BASE
+  let effective = null
+  if (kind === SOURCE_KINDS.PAYROLL || kind === SOURCE_KINDS.FINANCING) {
+    effective =
+      tab === TAB_FLOW ? movement?.payment_date || movement?.budget_date : movement?.budget_date
+  } else if (kind === SOURCE_KINDS.PRINCIPAL || kind === SOURCE_KINDS.DISBURSEMENT) {
+    effective = movement?.payment_date
+  } else if (kind === SOURCE_KINDS.CARRYOVER) {
+    effective = movement?.payment_date || movement?.budget_date
+  } else {
+    effective = tab === TAB_FLOW ? movement?.payment_date : movement?.budget_date
+  }
+  // `null`/ilegible ⇒ UNDATED: el llamador decide la columna por tab.
+  return monthBucketIndexOf(effective, scenarioYear)
 }
 
 /**
