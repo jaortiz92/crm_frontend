@@ -65,6 +65,62 @@ const values = reactive({})
 /** Draft ARL: clase → texto de porcentaje ("1.044" = 1.044 % = 0.01044). */
 const arlDraft = reactive({ I: '', II: '', III: '', IV: '', V: '' })
 
+/*
+ * FE 03_24 (FR-F2): toggles de parafiscales en modo `custom`. Mapean las
+ * claves anuales `liquidar_sena` / `liquidar_icbf` / `liquidar_caja` de
+ * `labor_cost_parameters` ("1"/"0", mismo mecanismo de upsert que el resto).
+ * OFF ⇒ "0"; ON ⇒ "1". Cuando el modo NO es custom los toggles se ocultan y
+ * sus valores guardados NO se tocan (el payload omite estas claves).
+ */
+const LIQUIDAR_DEFS = [
+  { key: 'liquidar_sena', label: 'Liquidar SENA' },
+  { key: 'liquidar_icbf', label: 'Liquidar ICBF' },
+  { key: 'liquidar_caja', label: 'Liquidar CAJA' }
+]
+/** Draft de toggles: key BE → "1"/"0" (default "1" = liquidar, comportamiento
+ * por defecto del motor; se corrige al hidratar con lo que responda el BE). */
+const liquidar = reactive({ liquidar_sena: '1', liquidar_icbf: '1', liquidar_caja: '1' })
+
+const isCustomParafiscales = computed(
+  () => String(values.aplicacion_parafiscales ?? '') === 'custom'
+)
+
+/*
+ * FE 03_24 (FR-F4): tope de exoneración de parafiscales, editable SOLO en
+ * modo `exonerated_lt100`. El BE lo exige con el guard R-05
+ * (`MissingLaborParametersError`) cuando el modo es exonerated_lt100, así
+ * que el save SIEMPRE puede completarlo: si el BE aún no la guarda, draft
+ * default "10" (valor legal actual, Ley 1780/2016 — IBC < 10 SMLV exonerado).
+ * En otros modos la clave se OMITE del payload (no toca el valor guardado).
+ */
+const TOPE_EXON_KEY = 'parafiscales_tope_exoneracion_smlv'
+const TOPE_EXON_DEFAULT = '10'
+/** Draft: texto decimal (múltiplo de SMLV); el motor lo parsea con `_param_dec`. */
+const topeExon = ref(TOPE_EXON_DEFAULT)
+
+const isExoneratedParafiscales = computed(
+  () => String(values.aplicacion_parafiscales ?? '') === 'exonerated_lt100'
+)
+
+/** Normaliza el draft: trim + coma→punto (decimal BE). '' si queda vacío. */
+function normalizedTopeExon() {
+  return String(topeExon.value ?? '').trim().replace(',', '.')
+}
+
+/**
+ * Validación pre-red (patrón `keyErrorsFor`): obligatorio y numérico > 0
+ * SOLO cuando el modo es exonerated_lt100; en otros modos no se valida
+ * (la clave ni siquiera viaja).
+ */
+const topeExonError = computed(() => {
+  if (!isExoneratedParafiscales.value) return ''
+  const text = normalizedTopeExon()
+  if (!text) return 'Obligatorio en modo exonerado (R-05).'
+  const num = Number(text)
+  if (!Number.isFinite(num) || num <= 0) return 'Debe ser un número > 0 (múltiplo de SMLV).'
+  return ''
+})
+
 const busy = computed(() => loading.value || saving.value || duplicating.value)
 
 /* ───────────────────────────── codecs tipo↔UI ───────────────────────────── */
@@ -101,6 +157,21 @@ function hydrate(payload) {
     const text = String(raw)
     values[def.key] = def.type === 'percent' ? formatPercentFromFraction(text) : text
   }
+  // FE 03_24: toggles de liquidación de parafiscales ("1"/"0"). Si el BE aún
+  // no los guarda se queda el default "1" (liquidar); sin defaults inventados
+  // en el GRID, estos toggles solo afectan sus propias claves.
+  for (const def of LIQUIDAR_DEFS) {
+    const raw = rawValues?.[def.key]
+    liquidar[def.key] = String(raw) === '0' ? '0' : '1'
+  }
+  // FE 03_24 (FR-F4): tope de exoneración. Si el BE aún no guarda la clave,
+  // default "10" (legal vigente) para que el save siempre pueda completarla
+  // (guard R-05 del BE en modo exonerated_lt100). Tras duplicar, si el BE
+  // respondió la clave del año previo, hydrate la toma aquí.
+  topeExon.value =
+    rawValues?.[TOPE_EXON_KEY] !== undefined && rawValues?.[TOPE_EXON_KEY] !== null
+      ? String(rawValues[TOPE_EXON_KEY]).trim()
+      : TOPE_EXON_DEFAULT
   const rawArl = payload?.arl_rates ?? payload?.arl ?? {}
   const arlEntries = Array.isArray(rawArl)
     ? rawArl.map((row) => [row?.risk_class, row?.rate])
@@ -135,6 +206,8 @@ async function loadVigencia(target = vigencia.value) {
     const result = classifyCollaboratorError(err)
     for (const def of LABOR_PARAM_DEFS) values[def.key] = ''
     for (const risk of RISK_CLASS_OPTIONS) arlDraft[risk] = ''
+    for (const def of LIQUIDAR_DEFS) liquidar[def.key] = '1'
+    topeExon.value = TOPE_EXON_DEFAULT
     if (result.kind === 'notfound' || result.kind === 'validation' || result.kind === 'conflict') {
       missingVigencia.value = true
       missingMessage.value = result.message || ''
@@ -208,6 +281,7 @@ const arlErrors = computed(() => {
 const gridInvalid = computed(
   () =>
     LABOR_PARAM_DEFS.some((def) => keyErrorsFor(def)) ||
+    Boolean(topeExonError.value) ||
     Object.values(arlErrors.value).some(Boolean)
 )
 
@@ -231,7 +305,25 @@ function buildPayload() {
     const fraction = fractionFromPercentText(arlDraft[risk])
     if (fraction !== null) arl[risk] = fraction
   }
-  return { vigencia: Number(vigencia.value), values: out, arl_rates: arl }
+  const payload = { vigencia: Number(vigencia.value), values: out, arl_rates: arl }
+  // FE 03_24: las claves `liquidar_*` SOLO viajan en modo custom. En los otros
+  // modos el motor las ignora y el upsert NO debe tocar los valores guardados.
+  if (isCustomParafiscales.value) {
+    for (const def of LIQUIDAR_DEFS) payload.values[def.key] = liquidar[def.key]
+  }
+  // FE 03_24 (FR-F4): el tope de exoneración SOLO viaja en modo
+  // exonerated_lt100 (guard R-05 del BE lo exige ahí); en otros modos se
+  // omite para no tocar el valor guardado. Texto decimal normalizado
+  // (trim + coma→punto), ej. "10"; el motor lo parsea con `_param_dec`.
+  // Un draft inválido no se envía y ya bloquea el save vía `gridInvalid`.
+  if (isExoneratedParafiscales.value) {
+    const text = normalizedTopeExon()
+    const num = Number(text)
+    if (text && Number.isFinite(num) && num > 0) {
+      payload.values[TOPE_EXON_KEY] = text
+    }
+  }
+  return payload
 }
 
 async function handleSave() {
@@ -480,6 +572,57 @@ function diaPagoDay(def) {
             </p>
           </div>
         </div>
+
+        <!-- FE 03_24 (FR-F2): toggles de liquidación de parafiscales, solo modo custom -->
+        <div v-if="group.name === 'Parafiscales' && isCustomParafiscales" class="lp-liquidar">
+          <div class="lp-liquidar-toggles">
+            <label v-for="def in LIQUIDAR_DEFS" :key="def.key" class="lp-check" :for="`lp-${def.key}`">
+              <input
+                :id="`lp-${def.key}`"
+                v-model="liquidar[def.key]"
+                type="checkbox"
+                true-value="1"
+                false-value="0"
+                :disabled="busy || missingVigencia"
+              />
+              <span>{{ def.label }}</span>
+            </label>
+          </div>
+          <p class="lp-liquidar-help">
+            Solo aplica con modo custom; los otros modos ignoran estos valores.
+            «Exonerados &lt; 100 empleados» (exonerated_lt100) exonera SENA/ICBF para IBC &lt; 10 SMLV
+            (Ley 1780/2016); CAJA siempre se liquida.
+          </p>
+        </div>
+
+        <!-- FE 03_24 (FR-F4): tope de exoneración, solo modo exonerated_lt100 -->
+        <div
+          v-else-if="group.name === 'Parafiscales' && isExoneratedParafiscales"
+          class="lp-liquidar"
+        >
+          <div class="lp-liquidar-field">
+            <label class="lp-cell-label" for="lp-tope-exon">Tope de exoneración (SMLV)</label>
+            <input
+              id="lp-tope-exon"
+              v-model="topeExon"
+              class="lp-input lp-tope-input"
+              :class="{ 'is-invalid': Boolean(topeExonError) }"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="decimal"
+              autocomplete="off"
+              :disabled="busy || missingVigencia"
+            />
+            <p v-if="topeExonError" class="lp-cell-error" aria-live="polite">
+              {{ topeExonError }}
+            </p>
+          </div>
+          <p class="lp-liquidar-help">
+            SENA e ICBF se liquidan únicamente si el IBC del mes es ≥ este tope × SMLV de la
+            vigencia (ej. 10). CAJA se liquida siempre.
+          </p>
+        </div>
       </section>
 
       <!-- Tabla ARL I–V (§4.4 BE) -->
@@ -726,6 +869,65 @@ function diaPagoDay(def) {
   font-size: 0.7rem;
   font-weight: 500;
   color: #c53030;
+}
+
+/* FE 03_24: toggles "Liquidar SENA/ICBF/CAJA" (solo modo custom). */
+.lp-liquidar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--color-border-strong, rgba(97, 97, 97, 0.3));
+  border-radius: 8px;
+  background-color: var(--color-surface, #f7f7f7);
+}
+
+:root[data-theme='dark'] .lp-liquidar {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.lp-liquidar-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+}
+
+.lp-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--color-text-primary, #070707);
+  cursor: pointer;
+}
+
+.lp-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-brand, #03658c);
+  cursor: pointer;
+}
+
+.lp-liquidar-help {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--color-text-muted, #8a8a8a);
+}
+
+/* FE 03_24 (FR-F4): campo "Tope de exoneración (SMLV)" (solo modo exonerado). */
+.lp-liquidar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 220px;
+}
+
+.lp-tope-input {
+  width: 140px;
+  max-width: 140px;
 }
 
 :root[data-theme='dark'] .lp-cell-error {

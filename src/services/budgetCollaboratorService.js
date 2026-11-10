@@ -54,12 +54,14 @@ export const budgetCollaboratorService = {
     return axiosInstance.get(`/budget/collaborator/${id}`)
   },
 
-  /** Alta manual (maestro). 409 `doc_value` duplicado ⇒ clasificado 'duplicate'. */
+  /** Alta manual (maestro). 409 `doc_value` duplicado ⇒ clasificado 'duplicate'.
+   * El payload viaja plano e incluye `pays_pension: boolean` (FE 03_24 FR-F1). */
   createCollaborator(payload) {
     return axiosInstance.post('/budget/collaborator', payload)
   },
 
-  /** Edición del maestro (NO salario — D-FE15-6). */
+  /** Edición del maestro (NO salario — D-FE15-6). Incluye `pays_pension: boolean`
+   * (FE 03_24 FR-F1; el BE lo acepta en `CollaboratorUpdate`). */
   updateCollaborator(id, payload) {
     return axiosInstance.put(`/budget/collaborator/${id}`, payload)
   },

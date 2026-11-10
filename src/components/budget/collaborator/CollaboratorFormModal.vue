@@ -68,7 +68,9 @@ const form = reactive({
   terminationDate: '',
   riskClass: '',
   idCollection: '',
-  notes: ''
+  notes: '',
+  /** FE 03_24 (FR-F1): flag "Cotiza pensión" (BE `pays_pension`, default true). */
+  paysPension: true
 })
 
 /** PRIMER plan en alta (D-FE15-6: el plan SIEMPRE viaja por salary-plan). */
@@ -281,7 +283,9 @@ function buildMasterPayload() {
     termination_date: form.terminationDate || null,
     risk_class: form.riskClass || null,
     id_collection: form.idCollection ? Number(form.idCollection) : null,
-    notes: form.notes.trim() || null
+    notes: form.notes.trim() || null,
+    /** FE 03_24: aporte patronal de pensión se liquida para este colaborador. */
+    pays_pension: Boolean(form.paysPension)
   }
   return payload
 }
@@ -372,7 +376,8 @@ function resetForms() {
     terminationDate: '',
     riskClass: '',
     idCollection: '',
-    notes: ''
+    notes: '',
+    paysPension: true
   })
   Object.assign(initialPlan, {
     salaryText: '',
@@ -399,7 +404,9 @@ function prefillFromCollaborator(item) {
     terminationDate: item.termination_date ?? '',
     riskClass: item.risk_class ?? '',
     idCollection: item.id_collection != null ? String(item.id_collection) : '',
-    notes: item.notes ?? ''
+    notes: item.notes ?? '',
+    // FE 03_24: si el BE aún no envía `pays_pension`, default true (fallback).
+    paysPension: item.pays_pension !== false
   })
 }
 
@@ -593,6 +600,22 @@ const dialogTitle = computed(() => (isEdit.value ? 'Editar colaborador' : 'Nuevo
                 {{ option.label }}
               </option>
             </select>
+          </div>
+          <div class="cf-field cf-field-pension">
+            <span class="cf-label">Cotiza pensión</span>
+            <label class="cf-check" for="cf-pays-pension">
+              <input
+                id="cf-pays-pension"
+                v-model="form.paysPension"
+                type="checkbox"
+                :disabled="saving"
+              />
+              <span>{{ form.paysPension ? 'Sí — liquida aporte patronal' : 'No — exento' }}</span>
+            </label>
+            <p class="cf-field-help">
+              Si se desactiva, el motor no liquida el aporte patronal de pensión (C_PENSION);
+              salud, ARL, caja y provisiones no cambian.
+            </p>
           </div>
         </div>
 
@@ -1127,6 +1150,18 @@ const dialogTitle = computed(() => (isEdit.value ? 'Editar colaborador' : 'Nuevo
   margin: 0;
   accent-color: var(--color-brand, #03658c);
   cursor: pointer;
+}
+
+.cf-field-pension {
+  flex: 0 1 230px;
+  min-width: 210px;
+}
+
+.cf-field-help {
+  margin: 2px 0 0;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--color-text-muted, #8a8a8a);
 }
 
 .cf-salary-line {
