@@ -42,6 +42,7 @@ import {
   CARRYOVER_ORIGIN_LABELS,
   SOURCE_KIND_LABELS,
   SOURCE_KINDS,
+  TAB_FLOW,
   isReconciledVariableMovement,
   movementAmountReconciled,
   movementMetaText
@@ -62,6 +63,12 @@ const props = defineProps({
    * AC-16). Sin serie ⇒ esas líneas aportan 0 (igual que la matriz).
    */
   fixedIncomeMonths: { type: Array, required: true },
+  /**
+   * frontend.03_25 (BR-VS-02): año N del escenario — filtro de año del aporte
+   * `variable_outflows` (causación fuera de N ⇒ 0). `null` ⇒ sin filtro
+   * (degradación del resto de las superficies).
+   */
+  scenarioYear: { type: Number, default: null },
   /**
    * FE-S21-CARRYDRILL (RF-CR-05/06): año fuente del grupo de arrastre
    * (`Arrastre {N−1}`) para el meta del chip de origen.
@@ -166,7 +173,13 @@ const SORT_ACCESSORS = {
   budget_date: (line) => line.budget_date || '',
   payment_date: (line) => line.payment_date || '',
   monto: (line) =>
-    movementAmountReconciled(line, props.tab, ivaActive.value, props.fixedIncomeMonths)
+    movementAmountReconciled(
+      line,
+      props.tab,
+      ivaActive.value,
+      props.fixedIncomeMonths,
+      props.scenarioYear
+    )
 }
 
 const sort = reactive({ key: '', asc: true })
@@ -210,7 +223,8 @@ const selectionTotal = computed(() => {
       line,
       props.tab,
       ivaActive.value,
-      props.fixedIncomeMonths
+      props.fixedIncomeMonths,
+      props.scenarioYear
     )
     if (Number.isFinite(amount)) total += amount
   }
@@ -219,7 +233,13 @@ const selectionTotal = computed(() => {
 
 /** Monto formateado de la fila (plain COP sin símbolo; '—' si no finito). */
 function moneyText(line) {
-  const amount = movementAmountReconciled(line, props.tab, ivaActive.value, props.fixedIncomeMonths)
+  const amount = movementAmountReconciled(
+    line,
+    props.tab,
+    ivaActive.value,
+    props.fixedIncomeMonths,
+    props.scenarioYear
+  )
   return Number.isFinite(amount) ? formatMoneyPlain(amount) : '—'
 }
 
@@ -231,21 +251,34 @@ function moneyText(line) {
  * explican el 0 ("igual que la matriz") en el mismo idioma de degradación
  * del módulo (celda 0, sin spinner ni avisos nuevos). `null` para el resto
  * de movimientos (sin tooltip extra).
+ * frontend.03_25: para `variable_outflows` el desglose lee la base de
+ * salidas del TAB (caused/flow — base GLOBAL, no por CECO).
  * @param {object} line
  * @returns {string|null}
  */
 function moneyTitle(line) {
   if (!isReconciledVariableMovement(line)) return null
   const month = monthIndexOf(line?.budget_date)
+  const isOutflows = line?.behavior_type === 'variable_outflows'
+  const series = isOutflows
+    ? (props.fixedIncomeMonths?.outflows ?? {})[props.tab === TAB_FLOW ? 'flow' : 'caused']
+    : props.fixedIncomeMonths
   const base =
-    Array.isArray(props.fixedIncomeMonths) && month >= 0
-      ? Number(props.fixedIncomeMonths[month]) || 0
+    Array.isArray(series) && month >= 0
+      ? Number(series[month]) || 0
       : 0
   const raw = Number(line?.projected_amount)
   const rate = formatVariableRate(line?.variable_rate)
   const baseText = formatMoneyPlain(base)
   const baseNote =
-    base === 0 ? ' sin ingresos fijos base en ese mes ⇒ monto 0 (igual que la matriz)' : ''
+    base === 0 ? ' sin base en ese mes ⇒ monto 0 (igual que la matriz)' : ''
+  if (isOutflows) {
+    return (
+      `Monto reconciliado = tasa ${rate} × SALIDAS del Flujo del mes de causación ` +
+      `(${baseText}, base global del presupuesto)${baseNote}. Crudo proyectado de la línea: ` +
+      `${Number.isFinite(raw) ? formatMoneyPlain(raw) : '—'} (no es el monto de la matriz).`
+    )
+  }
   return (
     `Monto reconciliado = tasa ${rate} × Σ ingresos fijos del mes de causación ` +
     `(${baseText})${baseNote}. Crudo proyectado de la línea: ` +

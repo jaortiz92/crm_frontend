@@ -855,7 +855,9 @@ describe('labels — constantes de presentación', () => {
     expect(BEHAVIOR_LABELS).toEqual({
       fixed: 'Fijo',
       variable_sales: 'Variable por Facturación',
-      variable_receivables: 'Variable por Recaudo'
+      variable_receivables: 'Variable por Recaudo',
+      // frontend.03_25: tercera opción del enum (Variable por Salidas).
+      variable_outflows: 'Variable por Salidas'
     })
   })
   it('LINE_TYPE_LABELS (FE-S9 §2.1: += purchase)', () => {

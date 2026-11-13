@@ -85,6 +85,14 @@ import {
   entradasCausacionByVariableCeco
 } from '@/components/budget/planning/planningFormat.js'
 /**
+ * frontend.03_25 (spec §4.7): la TERCERA base del gasto variable
+ * (`variable_outflows` — salidas del presupuesto del mes de causación) se
+ * compone con el motor de Flujo espejo (`createOutflowsBaseMonths`,
+ * cero HTTP — misma caché del store).
+ */
+import { createOutflowsBaseMonths } from '@/components/budget/planning/cashFlowPivot.js'
+import { createPlanningStoresView } from '@/stores/planningStoresBridge.js'
+/**
  * FE-S20 (spec `frontend.03_20`): exportación del tab activo (Causado/Flujo)
  * a Excel/CSV — reutiliza los movimientos YA FILTRADOS de la vista
  * (`filteredLines`, sincronía 1:1 con `CecoMovementTable`) y el monto
@@ -106,6 +114,10 @@ const scenarioStore = useBudgetScenarioStore()
 const simulationStore = useBudgetSimulationStore()
 const ivaStore = useBudgetIvaStore()
 const userStore = useUserStore()
+// frontend.03_25: vista de puentes (escenario + simulación + IVA) para el
+// motor espejo que compone la Base de salidas (settlement/tax/capital viven
+// en sub-stores distintos del de escenario — FASE 2).
+const planningStoresView = createPlanningStoresView()
 
 /** Tab INICIAL (RF-8.10): `?tab=flow` al llegar desde la Vista Flujo;
  * cualquier otro valor (o ausencia) ⇒ "Causado" (default de la vista). */
@@ -491,7 +503,8 @@ const carryFilteredTotal = computed(() => {
       movement,
       TAB_FLOW,
       ivaActive.value,
-      fixedIncomeByMonth.value
+      fixedIncomeByMonth.value,
+      scenarioYear.value
     )
     if (Number.isFinite(amount)) total += amount
   }
@@ -538,6 +551,59 @@ const filteredLines = computed(() => {
 const ivaActive = computed(() => ivaStore.ivaMode === true)
 
 /**
+ * frontend.03_25 — vista del ESCENARIO COMPLETO (espejo de
+ * `BudgetGridEditor.scenarioView`): líneas base + what-if de nómina y
+ * financiación (MISMOS normalizadores de `cecoMovements.js`, budgetId-checked
+ * y solo para escenarios NO activos). Es la fuente del motor espejo que
+ * compone la Base de salidas (BR-VS-F1: los gastos what-if son salidas del
+ * flujo — sin ellos la Base del borrador saldría corta frente al editor).
+ */
+const scenarioViewForBase = computed(() => {
+  const base = currentReady.value ? scenario.value : null
+  if (!base) return null
+  const budgetId = idBudget.value
+  const extra = []
+  if (base.status !== 'active') {
+    const payrollSim = simulationStore.payrollSim
+    if (payrollSim.budgetId === budgetId && Array.isArray(payrollSim.data?.lines)) {
+      extra.push(...normalizePayrollSimLines(payrollSim.data.lines, budgetId))
+    }
+    const financingSim = simulationStore.financingSim
+    if (financingSim.budgetId === budgetId && Array.isArray(financingSim.data?.lines)) {
+      extra.push(...normalizeFinancingSimLines(financingSim.data.lines, budgetId))
+    }
+  }
+  if (!extra.length) return base
+  return { ...base, budget_lines: [...(base.budget_lines || []), ...extra] }
+})
+
+/**
+ * frontend.03_25 (spec §4.7) — bases de SALIDAS del presupuesto por mes para
+ * el tercer comportamiento (`variable_outflows`), compuestas por el motor de
+ * Flujo espejo sobre la MISMA caché (cero HTTP):
+ *  - `caused` (NETA — tab Causado / P&G): el motor corre con el modo IVA
+ *    APAGADO (la base de devengo es neta, D-FE14-7).
+ *  - `flow` (PRESENTADA — tab Flujo): la MISMA composición con el modo
+ *    heredado ⇒ byte-cuadre con la celda del bloque "Salidas — Gastos
+ *    variables por salidas" del pivote de origen (RF-7.4) en ambos modos.
+ * Degradación documentada: la caché de settlement IVA / planeación
+ * tributaria no se pide al entrar al detalle (cero HTTP extra, RF-1.4); sin
+ * caché sus componentes aportan 0 (pivote homónimo `null`). El capital /
+ * desembolsos salen del caché `financingPrincipalFlow`, que esta vista SÍ
+ * asegura en `load()` (RF-8.2).
+ */
+const outflowsBaseCausedMonths = createOutflowsBaseMonths({
+  scenario: () => scenarioViewForBase.value,
+  store: planningStoresView,
+  neto: true
+})
+const outflowsBaseFlowMonths = createOutflowsBaseMonths({
+  scenario: () => scenarioViewForBase.value,
+  store: planningStoresView,
+  neto: false
+})
+
+/**
  * REVISIÓN 5 (RF-11.3/RF-11.6 + spec `frontend.03_21` §5.3): serie de
  * ingresos fijos por mes de causación CORTADA POR CECO — la base del monto
  * variable ES la facturación del MES del PROPIO CECO del detalle (espejo
@@ -568,10 +634,22 @@ const ivaActive = computed(() => ivaStore.ivaMode === true)
  *  PAR de series `{ sales, receivables }` que `movementAmountReconciled`
  *  selecciona por línea (AC-FE21-10/AC-FE21-11): pivot/tabla/exportación
  *  quedan byte-cuadre con ambos bloques de la matriz (AC-16).
+ *
+ *  frontend.03_25 (spec §4.5/§4.7, 2026-11-11): la tercera base —
+ *  `variable_outflows` ("Variable por Salidas") NO usa resolución por CECO:
+ *  su base es la SALIDA GLOBAL del presupuesto del mes de causación
+ *  (`outflows: { caused: NETA, flow: PRESENTADA }`, BR-VS-F1/F2/F3), y el
+ *  monto reconciliado es `tasa × Base(m)` SIN gross-up (BR-VS-F6).
  */
 const fixedIncomeByMonth = computed(() => {
   const zeroSeries = Array.from({ length: 12 }, () => 0)
-  if (!currentReady.value) return { sales: zeroSeries, receivables: zeroSeries }
+  if (!currentReady.value) {
+    return {
+      sales: zeroSeries,
+      receivables: zeroSeries,
+      outflows: { caused: zeroSeries, flow: zeroSeries }
+    }
+  }
   const lines = scenario.value.budget_lines
   const costCenters = scenarioStore.costCenters
   const id = costCenterId.value
@@ -591,7 +669,12 @@ const fixedIncomeByMonth = computed(() => {
     // cobros ⇒ 12 ceros (AC-FE21-11, sin fallback a otras zonas/líneas).
     entradasCausacionByCeco(lines, Number(scenario.value.budget_year)).get(id) ??
     zeroSeries
-  return { sales: salesSeries, receivables: receivablesSeries }
+  // frontend.03_25: base de salidas GLOBAL (no del CECO) por tab.
+  const outflowsSeries = {
+    caused: outflowsBaseCausedMonths.value,
+    flow: outflowsBaseFlowMonths.value
+  }
+  return { sales: salesSeries, receivables: receivablesSeries, outflows: outflowsSeries }
 })
 
 /** Etiquetas de mes para el filtro (Ene–Dic de `planningFormat`). */
@@ -631,7 +714,8 @@ const cecoTotal = computed(() => {
       line,
       activeTab.value,
       ivaActive.value,
-      fixedIncomeByMonth.value
+      fixedIncomeByMonth.value,
+      scenarioYear.value
     )
     if (Number.isFinite(amount)) total += amount
   }
@@ -717,6 +801,7 @@ function onExportSelect(format) {
       tab: activeTab.value,
       ivaActive: ivaActive.value,
       fixedIncomeByMonth: fixedIncomeByMonth.value,
+      scenarioYear: scenarioYear.value,
       sheetName: TAB_LABELS[activeTab.value]
     })
     if (!sheets.length) throw new Error('El tab activo no tiene movimientos para exportar.')
@@ -980,6 +1065,7 @@ function onExportSelect(format) {
             :lines="filteredLines"
             :tab="TAB_CAUSED"
             :fixed-income-months="fixedIncomeByMonth"
+            :scenario-year="scenarioYear"
           />
         </div>
 
@@ -1011,6 +1097,7 @@ function onExportSelect(format) {
             :lines="filteredLines"
             :tab="TAB_FLOW"
             :fixed-income-months="fixedIncomeByMonth"
+            :scenario-year="scenarioYear"
           />
 
           <!-- ═════ FE-S21-CARRYDRILL RF-CR-05: grupo "Arrastre {N−1}" ═════
@@ -1054,6 +1141,7 @@ function onExportSelect(format) {
               :lines="carryFilteredMovements"
               :tab="TAB_FLOW"
               :fixed-income-months="fixedIncomeByMonth"
+              :scenario-year="scenarioYear"
               :carry-year="carryGroupYear"
               carry-mode
             />

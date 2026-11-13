@@ -31,21 +31,47 @@
  * El monto NO se almacena en las líneas del escenario; se recalcula al ajustar
  * el presupuesto. El drill-down de movimientos por CECO muestra esta MISMA
  * cifra reconciliada por línea (REVISIÓN 5 / frontend.03_21 §5.3 + A-02 §11).
+ *
+ * frontend.03_25 (spec `04_Spec_Gasto_variable_por_salidas` §8.1, 2026-11-11):
+ * TERCERA base `variable_outflows` ("Variable por Salidas") — tasa × SALIDAS
+ * del Flujo del MES de CAUSACIÓN de la línea (budget_date, NO pago), compuesta
+ * por TODAS las filas de salida del pivot (fijos + variables calculados +
+ * pago a proveedores + capital de financiación + impuestos, EXCLUYENDO el
+ * propio aporte por salidas — BR-VS-F1/F2). Base GLOBAL del presupuesto: el
+ * aporte se contabiliza en el CECO PROPIO de la línea, SIN resolución por
+ * cubeta (a diferencia de las dos primeras bases). Identidad presentada:
+ * Salidas(m) = Base(m) + Σ aportes (BR-VS-F6).
  */
 export const VARIABLE_PIVOT_NOTE =
   'Monto estimado según el comportamiento de la línea, con base por CECO ' +
   'resuelto (A-01): facturado = tasa × ingreso presupuestado del MES de ' +
   'causación; recaudo = tasa × ENTRADAS del Flujo del MES de cobro (base ' +
-  'neta — specs backend.02_24 §5.2 / frontend.03_21 §4/§11). No se almacena ' +
+  'neta — specs backend.02_24 §5.2 / frontend.03_21 §4/§11); salidas = ' +
+  'tasa × SALIDAS del Flujo del MES de causación del presupuesto (base ' +
+  'GLOBAL, CECO propio — spec frontend.03_25 BR-VS-F1/F2). No se almacena ' +
   'en las líneas del escenario; se recalcula al ajustar el presupuesto. El ' +
   'drill-down de movimientos por CECO muestra esta MISMA cifra reconciliada ' +
   'por línea (REVISIÓN 5 / frontend.03_21 §5.3).'
+
+/**
+ * frontend.03_25 §4.1 — nota del bloque "Salidas — Gastos variables por
+ * salidas" (Vista Flujo): describe la base BR-VS-F1/F2 y la identidad
+ * BR-VS-F6 del usuario.
+ */
+export const VARIABLE_OUTFLOWS_PIVOT_NOTE =
+  'Derivado: tasa × SALIDAS del Flujo del MES de causación (budget_date, ' +
+  'NO pago) — salidas fijas + variables calculadas + pago a proveedores + ' +
+  'capital de financiación + impuestos del presupuesto, EXCLUYENDO este ' +
+  'aporte. Base GLOBAL del presupuesto: el gasto se contabiliza en el CECO ' +
+  'PROPIO de la línea (sin resolución por cubeta — spec frontend.03_25). ' +
+  'Identidad: Salidas(m) = Base(m) + Σ aportes, exacta en presentación.'
 
 /** Etiquetas legibles de `behavior_type` (esquema `BehaviorTypeEnum`). */
 export const BEHAVIOR_LABELS = {
   fixed: 'Fijo',
   variable_sales: 'Variable por Facturación',
-  variable_receivables: 'Variable por Recaudo'
+  variable_receivables: 'Variable por Recaudo',
+  variable_outflows: 'Variable por Salidas'
 }
 
 /** Etiquetas legibles de `line_type` (FE-S9 §2.1: += `purchase`). */

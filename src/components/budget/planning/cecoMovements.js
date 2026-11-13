@@ -31,6 +31,12 @@
  *    COMPORTAMIENTO de la línea (I causado para `variable_sales`; ENTRADAS
  *    del Flujo por mes de pago —NETA— para `variable_receivables`), resuelta
  *    con las series A-01/A-02 por CECO (ver `movementAmountReconciled`).
+ *    frontend.03_25 (spec `04_Spec_Gasto_variable_por_salidas` §4.5,
+ *    2026-11-11): TERCERA base para `variable_outflows` — el movimiento del
+ *    CECO c en el mes m = tasa × Base(m), base GLOBAL de salidas del
+ *    presupuesto (NO del CECO, sin resolución por cubeta), posicionada por
+ *    el MES DE CAUSACIÓN (`budget_date`) en AMBOS tabs; SIN gross-up en el
+ *    tab Flujo (la identidad Salidas = Base + Σ aportes manda — BR-VS-F6).
  *
  * Cero dependencias reactivas: los llamadores pasan el estado (tab, ivaMode,
  * catálogo) — los componentes consumen sus `computed` del store como hacen
@@ -168,28 +174,59 @@ export function isReconciledVariableMovement(movement) {
  * series ya resueltas A-01/A-02 por CECO. La TASA sigue visible en la
  * columna/tasa y el crudo queda en tooltip del render
  * (`CecoMovementTable`/`CecoMovementPivot`).
+ *
+ * frontend.03_25 (spec §4.5, 2026-11-11): el objeto gana la TERCERA base
+ * `outflows: { caused, flow }` para `variable_outflows` — `caused` = Base(m)
+ * NETA (motor de Flujo en neto, tab Causado / P&G) y `flow` = Base(m)
+ * PRESENTADA (mismo caché que el bloque "Salidas — Gastos variables por
+ * salidas" del Flujo, tab Flujo). El aporte es `tasa × Base(mes de
+ * causación)` y NUNCA lleva gross-up: la base `flow` ya es la serie
+ * presentada ⇒ la identidad Salidas = Base + Σ aportes cuadra en ambos modos
+ * (BR-VS-F6). Con `scenarioYear` (5º parámetro opcional) se aplica el filtro
+ * de año BR-VS-02: causación fuera del año N ⇒ aporte 0 (idéntico al pivote).
  * @param {object|null|undefined} line movimiento de la forma común
  * @param {string} tab `TAB_CAUSED` | `TAB_FLOW`
  * @param {boolean} ivaActive modo "Con IVA" (`budgetIvaStore.ivaMode`)
- * @param {number[]|{sales?: number[], receivables?: number[]}|null|undefined}
+ * @param {number[]|{sales?: number[], receivables?: number[], outflows?: {caused?: number[], flow?: number[]}}|null|undefined}
  *   [fixedIncomeByMonth] serie(s) compartida(s) de base por mes, resuelta(s)
- *   por comportamiento (A-02). Sin serie para el comportamiento ⇒ la línea
- *   variable aporta 0 (degradación honesta: sin base no hay cifra
+ *   por comportamiento (A-02/A-03-25). Sin serie para el comportamiento ⇒ la
+ *   línea variable aporta 0 (degradación honesta: sin base no hay cifra
  *   reconciliada que mostrar).
+ * @param {number|null} [scenarioYear=null] año N del escenario (frontend.03_25:
+ *   filtro BR-VS-02 SOLO para `variable_outflows`); `null`/omitido ⇒ sin
+ *   filtro de año (mes de causación legible basta — degradación del resto).
  * @returns {number}
  */
-export function movementAmountReconciled(line, tab, ivaActive, fixedIncomeByMonth) {
+export function movementAmountReconciled(line, tab, ivaActive, fixedIncomeByMonth, scenarioYear = null) {
   if (!isReconciledVariableMovement(line)) return movementAmount(line, tab, ivaActive)
   const rate = Number(line?.variable_rate) || 0
-  // ENMIENDA A-02: serie por comportamiento (plana legacy ⇒ I para todos).
-  const behaviorSeries = Array.isArray(fixedIncomeByMonth)
-    ? fixedIncomeByMonth
-    : line?.behavior_type === 'variable_receivables'
-      ? (fixedIncomeByMonth?.receivables ?? null)
-      : (fixedIncomeByMonth?.sales ?? null)
+  // Serie por comportamiento (plana legacy ⇒ I para todos).
+  let behaviorSeries
+  if (Array.isArray(fixedIncomeByMonth)) {
+    behaviorSeries = fixedIncomeByMonth
+  } else if (line?.behavior_type === 'variable_outflows') {
+    // frontend.03_25: base de salidas por TAB (neta en Causado, presentada
+    // en Flujo) — base GLOBAL, no por CECO (BR-VS-F2).
+    const pair = fixedIncomeByMonth?.outflows
+    behaviorSeries = tab === TAB_FLOW ? pair?.flow : pair?.caused
+  } else if (line?.behavior_type === 'variable_receivables') {
+    behaviorSeries = fixedIncomeByMonth?.receivables ?? null
+  } else {
+    behaviorSeries = fixedIncomeByMonth?.sales ?? null
+  }
   if (!Array.isArray(behaviorSeries)) return 0
   const month = monthIndexOf(line?.budget_date)
   if (month < 0 || month > 11) return 0
+  if (line?.behavior_type === 'variable_outflows') {
+    // BR-VS-02 (backend.02_28): el aporte solo aplica con la causación dentro
+    // del año N (el backend filtra year(budget_date) == budget_year).
+    if (scenarioYear != null) {
+      const year = Number(String(line?.budget_date ?? '').slice(0, 4))
+      if (Number.isFinite(year) && year !== Number(scenarioYear)) return 0
+    }
+    // SIN gross-up (BR-VS-F6): la base `flow` ya es la serie presentada.
+    return rate * (Number(behaviorSeries[month]) || 0)
+  }
   const amount = rate * (Number(behaviorSeries[month]) || 0)
   if (tab !== TAB_FLOW || !ivaActive) return amount
   return withIva(amount, lineChargesIva(line))

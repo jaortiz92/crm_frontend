@@ -14,6 +14,9 @@ dist-ssr
 coverage
 *.local
 dev-fixtures/
+# frontend.03_25: carpeta de repro/fixture de depuración (scripts con sintaxis
+# legada, p. ej. `with`), fuera del código lintable del proyecto.
+_repro/
 
 /cypress/videos/
 /cypress/screenshots/

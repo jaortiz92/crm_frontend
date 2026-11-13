@@ -182,6 +182,7 @@ import {
   IVA_RATE,
   resolveCogsPctByLine
 } from './planningFormat.js'
+import { VARIABLE_OUTFLOWS_PIVOT_NOTE } from './planningLabels.js'
 import { costCenterCodeOf, lineIdForCostCenter } from './cecoMovements.js'
 /**
  * FE-S20 (spec `frontend.03_20` §7.2): TODO el cómputo de la matriz de
@@ -192,7 +193,11 @@ import { costCenterCodeOf, lineIdForCostCenter } from './cecoMovements.js'
  * (cero cambio de comportamiento); aquí queda solo la presentación
  * (celdas `·`/`—`/compactas, notas, toggle fuera-de-año y tooltips).
  */
-import { buildOoyBucketSeries, createCashFlowPivotModel, monthEndOf } from './cashFlowPivot.js'
+import {
+  buildOoyBucketSeries,
+  createCashFlowPivotModel,
+  monthEndOf
+} from './cashFlowPivot.js'
 
 const props = defineProps({
   /** `BudgetFull` + `parent_budget_name` de la caché del store. */
@@ -280,6 +285,7 @@ const {
   fijosPivot,
   comprasPivot,
   variablesPivot,
+  variableOutflowsPivot,
   purchaseLines,
   purchasingKeys,
   cogsIncomeLines,
@@ -508,13 +514,16 @@ const COMPRAS_NOTE =
   'por términos de la Línea, en “Salidas — Pago a proveedores”.'
 
 /**
- * Bloques del template. Orden vigente (FE-S9 §2.4 + FE-S10 §2.5): Entradas →
- * [Compras del mes] → [Pago a proveedores] → [Pago de internación] → Gastos
- * fijos → Gastos variables — el orden relativo FE-S4B/FE-S7 se conserva;
- * "Compras del mes" entra JUSTO antes de Pago a proveedores y solo con
- * compras; "Pago de internación" entra JUSTO DESPUÉS de Pago a proveedores
- * (antes de fijos) y solo con filas propias ∨ arrastre `internment`
- * (NFR-FE9-3/NFR-FE10-3: sin configuraciones el DOM es idéntico al previo).
+ * Bloques del template. Orden vigente (FE-S9 §2.4 + FE-S10 §2.5 + FE-S14
+ * D-FE14-4 + FE-S17 + frontend.03_25 §4.3.5): Entradas → [Compras del mes] →
+ * [Pago a proveedores] → [Pago de internación] → Gastos fijos → Gastos
+ * variables — el orden relativo FE-S4B/FE-S7 se conserva; "Compras del mes"
+ * entra JUSTO antes de Pago a proveedores y solo con compras; "Pago de
+ * internación" entra JUSTO DESPUÉS de Pago a proveedores (antes de fijos) y
+ * solo con filas propias ∨ arrastre `internment` (NFR-FE9-3/NFR-FE10-3: sin
+ * configuraciones el DOM es idéntico al previo); tras los gastos variables
+ * entra el bloque nuevo "Salidas — Gastos variables por salidas" (solo con
+ * filas derivadas), seguido de liquidación de IVA e impuestos.
  */
 const blocks = computed(() => {
   // FE-S16 RF-1.1 (linkable) + Revisión 2 RF-8: los bloques base (Entradas,
@@ -634,6 +643,23 @@ const blocks = computed(() => {
       // buckets reales (Antes/Después de la causación de la línea vs año N)
       // ⇒ mismas columnas ooy que el resto de bloques (AC-FE21-12/13/14).
       ooy: true
+    })
+  }
+  // frontend.03_25 (spec §4.3.5): bloque NUEVO "Salidas — Gastos variables
+  // por salidas" — filas por CECO propio y mes de causación; entra al
+  // resumen de salidas por la factory (`buildCashFlowResumen`). Solo se
+  // renderiza cuando la derivación produjo filas con Base ≠ 0 (`null` ⇒ sin
+  // bloque ⇒ DOM idéntico en presupuestos sin el tercer tipo, AC-FE-VS-7).
+  // `ooy: false`: el aporte vive SOLO en meses del año N (BR-VS-02, backend
+  // filtra year(budget_date) == budget_year) ⇒ sin columnas extra ni chip.
+  if (variableOutflowsPivot.value) {
+    list.push({
+      title: 'Salidas — Gastos variables por salidas',
+      emptyName: 'gastos variables por salidas',
+      pivot: variableOutflowsPivot.value,
+      aria: 'Salidas de gastos variables por salidas de dinero, por centro de costo propio y mes de causación',
+      note: VARIABLE_OUTFLOWS_PIVOT_NOTE,
+      ooy: false
     })
   }
   // FE-S14-IVA D-FE14-4: bloque NUEVO alimentado por `settlementCache` — los
@@ -787,7 +813,10 @@ const ooySeries = computed(() =>
     liquidation: settlementPaymentsPivot.value,
     taxFlow: taxPaymentsPivot.value,
     // ENMIENDA A-03 (frontend.03_21 §12): buckets reales del bloque variable.
-    variables: variablesPivot.value
+    variables: variablesPivot.value,
+    // frontend.03_25: la serie por salidas entra a la cola de salidas (sus
+    // Antes/Después ≡ 0 por construcción — BR-VS-02).
+    variableOutflows: variableOutflowsPivot.value
   })
 )
 
@@ -1069,6 +1098,9 @@ const resumenCoverageNote = computed(() => {
   }
   if (financingPrincipalPivot.value) {
     parts.push('El resumen incluye pagos de capital de financiación; no son gastos P&L.')
+  }
+  if (variableOutflowsPivot.value) {
+    parts.push('El resumen incluye gastos variables por salidas de dinero (frontend.03_25).')
   }
   return parts.join(' ') || null
 })

@@ -264,6 +264,14 @@ export function buildDerivedPivot(rows, { costCenterLabel, scenarioYear }) {
  *    (`entradasCausacionByVariableCeco` — ENTRADAS del Flujo por MES DE PAGO
  *    del generador, serie NETA sin gross-up ×1.19: el modo IVA del bloque
  *    Entradas es SOLO presentación, no base de comisiones).
+ *  - **frontend.03_25 (spec `04_Spec_Gasto_variable_por_salidas` §8.2,
+ *    2026-11-11)** — `variable_outflows` ⇒ base de SALIDAS GLOBAL
+ *    (`Base(m)`, BR-VS-F1/F2 — compuesta por `buildOutflowsBaseBuckets` en la
+ *    factory); NUNCA entra a este pivote: la factory lo excluye de su fuente
+ *    (`variableSourceLines`) y lo deriva en la serie propia
+ *    `variableOutflowsPivot` (`buildVariableOutflowsFlowPivot`); el guard de
+ *    abajo mantiene la exclusión para llamadores legacy que le pasen líneas
+ *    del tercer comportamiento (no caen en la base de facturación).
  * CECO sin base resuelta o bucket sin base
  * ⇒ aporte 0 (BR-VE-02/BR-FE21-02: sin exclusión, sin NaN). Gross-up × 1.19
  * del monto DERIVADO según el flag efectivo (D-FE14: base neta, monto
@@ -398,6 +406,13 @@ export function buildVariableFlowPivot(
   }
 
   for (const line of source) {
+    // frontend.03_25 — TERCERA rama del condicional hoy binario (spec §4.3.4):
+    // las líneas `variable_outflows` NO usan base de facturación ni de
+    // recaudo; su aporte vive en la serie derivada propia
+    // (`variableOutflowsPivot` ⇒ `buildVariableOutflowsFlowPivot`). El
+    // llamador normal (factory) ya las excluye de `source`; el guard es
+    // defensivo para llamadores legacy.
+    if (line.behavior_type === 'variable_outflows') continue
     const key = line.id_cost_center
     if (!byCeco.has(key)) {
       byCeco.set(key, {
@@ -440,6 +455,9 @@ export function buildVariableFlowPivot(
     // la serie ya llega resuelta y keyed por el CECO de la línea; la elección
     // por comportamiento (facturado ⇒ I causado; recaudo ⇒ cobro del mes)
     // vive en el llamador vía los DOS maps. Sin resolución ⇒ 0.
+    // frontend.03_25: el tercer comportamiento (`variable_outflows`, base de
+    // salidas GLOBAL) ya fue excluido por el guard de arriba — el ternario
+    // solo resuelve los DOS comportamientos con base por CECO.
     const baseByCeco =
       line.behavior_type === 'variable_receivables' ? baseByCecoRecaudo : baseByCecoSales
     const baseC = baseByCeco.get(line.id_cost_center)
@@ -492,6 +510,216 @@ export function buildVariableFlowPivot(
     beforeAfterRowCount,
     undatedTotal: 0
   }
+}
+
+/* ═════ frontend.03_25 — Gasto variable por salidas de dinero (`variable_outflows`) ═════
+ * Spec `frontend.03_25_Spec_frontend_variable_expense_outflows.md` §4.3 (espejo
+ * `backend.02_28` §5.5): tercera serie derivada de salidas cuya base es la
+ * PROPIA cola de salidas del Flujo del presupuesto en el MES DE CAUSACIÓN.
+ */
+
+/**
+ * Base de salidas del presupuesto por mes (`Base(m)`, BR-VS-F1 / espejo
+ * `backend.02_28` §5.5): composición POR MES de las series de salida YA
+ * derivadas del pivot de Flujo — gastos fijos + gastos variables calculados
+ * (facturación y recaudo) + pago a proveedores (costo de ventas) + capital de
+ * financiación (principal por fecha de pago del BE) + impuestos (liquidación
+ * de IVA y planeación tributaria). La factory la llama ANTES de agregar la
+ * serie nueva ⇒ el aporte `variable_outflows` queda EXCLUIDO por construcción
+ * (sin circularidad — BR-VS-F1).
+ *
+ * NOTA DE MANTENIMIENTO (spec §4.3.2): cualquier fila de SALIDA que se agregue
+ * al pivot de Flujo en el futuro DEBE sumar aquí (y en el resumen) — la Base es
+ * la definición única compartida con backend.02_28 §6 BR-VS-01.
+ * @param {{
+ *   fijos?: object|null, variables?: object|null, costes?: object|null,
+ *   principal?: object|null, liquidation?: object|null, taxFlow?: object|null
+ * }} pivots snapshot de pivotes de salida con `columnTotals[12]` +
+ *   `beforeTotal`/`afterTotal` (shape de los builders de arriba; `null` ⇒ 0).
+ * @returns {{ before: number, months: number[], after: number }}
+ */
+export function buildOutflowsBaseBuckets(pivots) {
+  const snapshot = pivots ?? {}
+  const list = [
+    snapshot.fijos,
+    snapshot.variables,
+    snapshot.costes,
+    snapshot.principal,
+    snapshot.liquidation,
+    snapshot.taxFlow
+  ]
+  const months = Array.from({ length: 12 }, (_, month) =>
+    list.reduce((acc, pivot) => acc + (pivot?.columnTotals?.[month] ?? 0), 0)
+  )
+  const before = list.reduce((acc, pivot) => acc + (pivot?.beforeTotal ?? 0), 0)
+  const after = list.reduce((acc, pivot) => acc + (pivot?.afterTotal ?? 0), 0)
+  return { before, months, after }
+}
+
+/**
+ * Serie derivada "Salidas — Gastos variables por salidas" (frontend.03_25
+ * §4.3.1, BR-VS-F2/F3): filas por el CECO PROPIO de cada línea
+ * `variable_outflows` (SIN resolución por cubeta ni reatribución) y por el
+ * MES DE CAUSACIÓN (`monthBucketIndexOf(budget_date)` — NO `cfMonth`/pago);
+ * celda = `tasa × Base(mes)` con la base de salidas GLOBAL de
+ * `buildOutflowsBaseBuckets`.
+ *
+ * Reglas:
+ *  - BR-VS-02 (backend.02_28): el aporte solo aplica con la causación DENTRO
+ *    del año N del escenario — bucket −1/12 (fuera de año) o −99 (ilegible)
+ *    ⇒ aporte 0 (la fila del CECO existe con celdas en 0, política idéntica
+ *    a los pivotes hermanos).
+ *  - SIN gross-up ×1.19 (divergencia INTENCIONAL de los otros dos variables,
+ *    D-FE14): la Base ya es la serie PRESENTADA del pivot (con el modo IVA
+ *    cuando esté activo), así que `Salidas(m) = Base(m) + Σ aportes` cuadra
+ *    EXACTO en presentación en ambos modos (BR-VS-F6).
+ *  - `null` si no hay líneas del tercer comportamiento o la Base es toda
+ *    cero (el bloque no se renderiza ⇒ regresión 0 en presupuestos sin el
+ *    tipo — AC-FE-VS-7).
+ * @param {Array<object>} source líneas `expense` + `variable_outflows`
+ * @param {{ before: number, months: number[], after: number }|null} baseBuckets
+ *   Base de salidas por mes (BR-VS-F1) en buckets extendidos.
+ * @param {(id: number|string|null|undefined) => string} costCenterLabel
+ * @param {number|null|undefined} scenarioYear año N del escenario
+ * @returns {object|null} shape homogéneo con `buildFlowPivot` (Antes/
+ *   Después/undated ≡ 0 por construcción — `ooy: false` en el bloque).
+ */
+export function buildVariableOutflowsFlowPivot(source, baseBuckets, costCenterLabel, scenarioYear) {
+  const lines = Array.isArray(source) ? source : []
+  const base =
+    baseBuckets &&
+    (baseBuckets.before !== 0 ||
+      baseBuckets.after !== 0 ||
+      (Array.isArray(baseBuckets.months) && baseBuckets.months.some((value) => value !== 0)))
+  if (!lines.length || !base) return null
+
+  const byCeco = new Map()
+  const columnTotals = Array.from({ length: 12 }, () => 0)
+  // A-05 (BR-FE21-16/17): `grandTotal` = solo 12 meses (Antes/Después ≡ 0).
+  let grandTotal = 0
+  let grandGeneralTotal = 0
+
+  for (const line of lines) {
+    const key = line.id_cost_center
+    if (!byCeco.has(key)) {
+      byCeco.set(key, {
+        id: key,
+        label: costCenterLabel(key),
+        months: Array.from({ length: 12 }, () => 0),
+        total: 0,
+        generalTotal: 0,
+        before: 0,
+        after: 0
+      })
+    }
+    const row = byCeco.get(key)
+    // BR-VS-F2/F4: causación manda (budget_date, NO cfMonth); fuera de año
+    // o ilegible ⇒ aporte 0 (fila existe, igual que los builders hermanos).
+    const bucket = monthBucketIndexOf(line.budget_date, scenarioYear)
+    if (bucket < 0 || bucket > 11) continue
+    const rate = Number(line.variable_rate) || 0
+    // SIN gross-up: la Base es la serie presentada ⇒ identidad BR-VS-F6.
+    const amount = rate * (Number(baseBuckets.months[bucket]) || 0)
+    row.months[bucket] += amount
+    columnTotals[bucket] += amount
+    row.total += amount
+    grandTotal += amount
+    row.generalTotal += amount
+    grandGeneralTotal += amount
+  }
+
+  const rows = [...byCeco.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'))
+  return {
+    rows,
+    columnTotals,
+    grandTotal,
+    grandGeneralTotal,
+    beforeTotal: 0,
+    afterTotal: 0,
+    beforeAfterRowCount: 0,
+    undatedTotal: 0
+  }
+}
+
+/* ─── frontend.03_25 §4.4/§4.7: Base NETA para superficies de devengo ─── */
+
+/**
+ * Vista de store con el modo IVA FORZADO a OFF para correr el motor de Flujo
+ * en NETO (la Ejecutiva y el tab Causado del drill-down son SIEMPRE netos —
+ * D-FE14-7). `Object.create` conserva los getters/accesores del store base en
+ * la cadena de prototipos (la reactividad vive en el sub-store dueño y el
+ * track de dependencias se mantiene); solo `ivaMode` se sobreescribe.
+ * @param {object|undefined} store vista de stores del llamador
+ * @returns {object} vista de solo lectura con `ivaMode ≡ false`.
+ */
+function storeViewIvaOff(store) {
+  const view = Object.create(store ?? {})
+  Object.defineProperty(view, 'ivaMode', {
+    get: () => false,
+    enumerable: true
+  })
+  return view
+}
+
+/** Líneas de CAPITAL del caché `financingPrincipalFlow` del store (budgetId-checked). */
+function principalLinesFromStore(store, scenarioValue) {
+  const flow = store?.financingPrincipalFlow
+  if (!flow || !scenarioValue || flow.budgetId !== scenarioValue.id_budget || !flow.data) {
+    return []
+  }
+  return Array.isArray(flow.data.lines) ? flow.data.lines : []
+}
+
+/** Líneas de DESEMBOLSOS del mismo caché (budgetId-checked). */
+function disbursementLinesFromStore(store, scenarioValue) {
+  const flow = store?.financingPrincipalFlow
+  if (!flow || !scenarioValue || flow.budgetId !== scenarioValue.id_budget || !flow.data) {
+    return []
+  }
+  return Array.isArray(flow.data.disbursement_lines) ? flow.data.disbursement_lines : []
+}
+
+/**
+ * Serie de `Base(m)` para las superficies de DEVENGO que no corren el motor
+ * de Flujo por su cuenta (frontend.03_25 §4.4 Ejecutiva + §4.7 drill-down):
+ * levanta un motor `createCashFlowPivotModel` ESPEJO sobre la MISMA caché del
+ * store (cero HTTP) con el modo IVA APAGADO (`neto: true` — la base de
+ * devengo es neta, D-FE14-7; `neto: false` ⇒ base presentada, cuadre con el
+ * bloque del Flujo en el tab Flujo del drill-down) y compone las series de
+ * salida con `buildOutflowsBaseBuckets`.
+ *
+ * Degradación documentada: los componentes cuya caché no esté cargada en el
+ * llamador (settlement IVA / planeación tributaria / capital) aportan 0 (el
+ * pivot homónimo es `null` — degradación honesta del motor).
+ *
+ * El CAPITAL y los DESEMBOLSOS se leen del caché `store.financingPrincipalFlow`
+ * (budgetId-checked) — el mismo origen que alimenta las props de la Vista
+ * Flujo del editor.
+ * @param {{
+ *   scenario: object|(() => object), store: object, neto?: boolean
+ * }} params
+ * @returns {import('vue').ComputedRef<number[]>} serie `number[12]` (Base por
+ *   mes del año N; Antes/Después no aplican a devengo).
+ */
+export function createOutflowsBaseMonths({ scenario, store, neto = false }) {
+  const scenarioRef = computed(() => (typeof scenario === 'function' ? scenario() : scenario))
+  const model = createCashFlowPivotModel({
+    scenario: () => scenarioRef.value,
+    financingPrincipalLines: () => principalLinesFromStore(store, scenarioRef.value),
+    financingDisbursementLines: () => disbursementLinesFromStore(store, scenarioRef.value),
+    store: neto ? storeViewIvaOff(store) : store
+  })
+  return computed(
+    () =>
+      buildOutflowsBaseBuckets({
+        fijos: model.fijosPivot.value,
+        variables: model.variablesPivot.value,
+        costes: model.costPaymentsPivot.value,
+        principal: model.financingPrincipalPivot.value,
+        liquidation: model.settlementPaymentsPivot.value,
+        taxFlow: model.taxPaymentsPivot.value
+      }).months
+  )
 }
 
 /**
@@ -557,7 +785,8 @@ export function buildCarryPivot(carryLines, match, costCenterLabel, carryActive)
  * @param {{
  *   disbursement: object|null, entradas: object, fijos: object,
  *   costes: object|null, internment: object|null, principal: object|null,
- *   liquidation: object|null, taxFlow: object|null, variables: object|null
+ *   liquidation: object|null, taxFlow: object|null, variables: object|null,
+ *   variableOutflows: object|null
  * }} pivots
  * @returns {{ entradas: number[], salidas: number[], neto: number[], any: boolean }}
  */
@@ -570,7 +799,8 @@ export function buildOoyBucketSeries({
   principal,
   liquidation,
   taxFlow,
-  variables = null
+  variables = null,
+  variableOutflows = null
 }) {
   const entradasSeries = [
     entradas.beforeTotal + (disbursement ? disbursement.beforeTotal : 0),
@@ -580,6 +810,10 @@ export function buildOoyBucketSeries({
   // (Antes/Después) ⇒ entra a la serie de SALIDAS y a la bandera `any`,
   // para que las columnas aparezcan cuando SOLO las variables tienen fuera
   // de año (AC-FE21-14).
+  // frontend.03_25 (spec §4.3.3): la serie "Gastos variables por salidas"
+  // entra TAMBIÉN a la cola de salidas — sus aportes viven SOLO en meses del
+  // año N (BR-VS-02) ⇒ before/after ≡ 0 por construcción (no-op hoy; si la
+  // composición de la Base cambiara, esta cola la hereda automáticamente).
   const salidasSeries = [
     fijos.beforeTotal +
       (costes ? costes.beforeTotal : 0) +
@@ -587,14 +821,16 @@ export function buildOoyBucketSeries({
       (principal ? principal.beforeTotal : 0) +
       (liquidation ? liquidation.beforeTotal : 0) +
       (taxFlow ? taxFlow.beforeTotal : 0) +
-      (variables ? variables.beforeTotal : 0),
+      (variables ? variables.beforeTotal : 0) +
+      (variableOutflows ? variableOutflows.beforeTotal : 0),
     fijos.afterTotal +
       (costes ? costes.afterTotal : 0) +
       (internment ? internment.afterTotal : 0) +
       (principal ? principal.afterTotal : 0) +
       (liquidation ? liquidation.afterTotal : 0) +
       (taxFlow ? taxFlow.afterTotal : 0) +
-      (variables ? variables.afterTotal : 0)
+      (variables ? variables.afterTotal : 0) +
+      (variableOutflows ? variableOutflows.afterTotal : 0)
   ]
   const any =
     entradas.beforeAfterRowCount +
@@ -605,7 +841,8 @@ export function buildOoyBucketSeries({
       (disbursement ? disbursement.beforeAfterRowCount : 0) +
       (liquidation ? liquidation.beforeAfterRowCount : 0) +
       (taxFlow ? taxFlow.beforeAfterRowCount : 0) +
-      (variables ? variables.beforeAfterRowCount : 0) >
+      (variables ? variables.beforeAfterRowCount : 0) +
+      (variableOutflows ? variableOutflows.beforeAfterRowCount : 0) >
     0
   return {
     entradas: entradasSeries,
@@ -625,7 +862,8 @@ export function buildOoyBucketSeries({
  *   disbursement: object|null, cobros: object|null, pagos: object|null,
  *   costes: object|null, internment: object|null, principal: object|null,
  *   liquidation: object|null, taxFlow: object|null,
- *   entradasPivot: object, fijosPivot: object, variablesPivot: object|null
+ *   entradasPivot: object, fijosPivot: object, variablesPivot: object|null,
+ *   variableOutflowsPivot: object|null
  * }} pivots
  * @param {number} [initialCash=0] - FE-S7-INITBAL (RF-FE-06): saldo inicial
  *   de EFECTIVO que siembra el acumulado desde el primer mes de N. Omitido/0
@@ -643,13 +881,18 @@ export function buildCashFlowResumen(
     taxFlow,
     entradasPivot,
     fijosPivot,
-    variablesPivot
+    variablesPivot,
+    variableOutflowsPivot = null
   },
   initialCash = 0
 ) {
   const entradasPropias = entradasPivot.columnTotals
   const fijos = fijosPivot.columnTotals
   const variables = variablesPivot ? variablesPivot.columnTotals : null
+  // frontend.03_25 (BR-VS-F6): la serie nueva entra a Σ Salidas en el MISMO
+  // punto que el bloque variable; con ella la identidad del usuario
+  // Salidas(m) = Base(m) + Σ aportes es exacta a 2 decimales en presentación.
+  const outflowsVariables = variableOutflowsPivot ? variableOutflowsPivot.columnTotals : null
 
   const entradas = entradasPropias.map(
     (value, m) =>
@@ -661,6 +904,7 @@ export function buildCashFlowResumen(
     (_, m) =>
       fijos[m] +
       (variables ? variables[m] : 0) +
+      (outflowsVariables ? outflowsVariables[m] : 0) +
       (pagos ? pagos.columnTotals[m] : 0) +
       (costes ? costes.columnTotals[m] : 0) +
       (internment ? internment.columnTotals[m] : 0) +
@@ -686,6 +930,7 @@ export function buildCashFlowResumen(
   const salidasTotal =
     fijosPivot.grandTotal +
     (variablesPivot ? variablesPivot.grandTotal : 0) +
+    (variableOutflowsPivot ? variableOutflowsPivot.grandTotal : 0) +
     (pagos ? pagos.grandTotal : 0) +
     (costes ? costes.grandTotal : 0) +
     (internment ? internment.grandTotal : 0) +
@@ -707,6 +952,7 @@ export function buildCashFlowResumen(
   const salidasGeneralTotal =
     fijosPivot.grandGeneralTotal +
     (variablesPivot ? variablesPivot.grandGeneralTotal : 0) +
+    (variableOutflowsPivot ? variableOutflowsPivot.grandGeneralTotal : 0) +
     (pagos ? pagos.grandGeneralTotal : 0) +
     (costes ? costes.grandGeneralTotal : 0) +
     (internment ? internment.grandGeneralTotal : 0) +
@@ -907,9 +1153,30 @@ export function createCashFlowPivotModel({
     entradasBucketByVariableCeco(lines.value, store.costCenters, scenarioYear.value)
   )
 
-  /** Líneas de gasto variables (origen crudo del bloque estimado). */
-  const variableSourceLines = computed(() =>
-    lines.value.filter((line) => line.line_type === 'expense' && line.behavior_type !== 'fixed')
+  /** Líneas de gasto variables (origen crudo del bloque estimado).
+   *  frontend.03_25: el tercer comportamiento (`variable_outflows`) sale de
+   *  esta fuente — su base es la SALIDA global del presupuesto, jamás la de
+   *  facturación/recaudo por CECO (BR-VS-F1/F2); deriva en su serie propia
+   *  `variableOutflowsPivot`. */
+  const variableSourceLines = computed(
+    () =>
+      lines.value.filter(
+        (line) =>
+          line.line_type === 'expense' &&
+          line.behavior_type !== 'fixed' &&
+          line.behavior_type !== 'variable_outflows'
+      )
+  )
+
+  /**
+   * frontend.03_25 — líneas del TERCER comportamiento (fuente de la serie
+   * "Salidas — Gastos variables por salidas"). El aporte se despliega en el
+   * CECO PROPIO de la línea (BR-VS-F3, sin resolución por cubeta).
+   */
+  const variableOutflowsLines = computed(() =>
+    lines.value.filter(
+      (line) => line.line_type === 'expense' && line.behavior_type === 'variable_outflows'
+    )
   )
 
   /**
@@ -945,6 +1212,39 @@ export function createCashFlowPivotModel({
       ivaActive.value,
       scenarioYear.value,
       variableCollectionDistributionByLine.value
+    )
+  )
+
+  /**
+   * frontend.03_25 §4.3.2 (BR-VS-F1) — Base de salidas del presupuesto por
+   * mes, compuesta por MES de las series de salida YA derivadas de esta
+   * factory (fijos + variables calculados + pago a proveedores + capital de
+   * financiación + impuestos IVA/tributarios). El ORDEN de composición
+   * garantiza la exclusión de BR-VS-F1: la serie `variableOutflowsPivot` no
+   * existe todavía cuando esto se evalúa (y de todos modos no participa).
+   */
+  const variableOutflowsBaseBuckets = computed(() =>
+    buildOutflowsBaseBuckets({
+      fijos: fijosPivot.value,
+      variables: variablesPivot.value,
+      costes: costPaymentsPivot.value,
+      principal: financingPrincipalPivot.value,
+      liquidation: settlementPaymentsPivot.value,
+      taxFlow: taxPaymentsPivot.value
+    })
+  )
+
+  /**
+   * frontend.03_25 §4.3.1 — serie derivada "Salidas — Gastos variables por
+   * salidas": filas por CECO propio y mes de causación (`budget_date`), celda
+   * = tasa × Base(mes). `null` ⇒ sin bloque (regresión 0, AC-FE-VS-7).
+   */
+  const variableOutflowsPivot = computed(() =>
+    buildVariableOutflowsFlowPivot(
+      variableOutflowsLines.value,
+      variableOutflowsBaseBuckets.value,
+      costCenterLabel,
+      scenarioYear.value
     )
   )
 
@@ -1408,7 +1708,8 @@ export function createCashFlowPivotModel({
         taxFlow: taxPaymentsPivot.value,
         entradasPivot: entradasPivot.value,
         fijosPivot: fijosPivot.value,
-        variablesPivot: variablesPivot.value
+        variablesPivot: variablesPivot.value,
+        variableOutflowsPivot: variableOutflowsPivot.value
       },
       // FE-S7-INITBAL: semilla del acumulado de caja con el saldo inicial.
       initialSeed.value.cash
@@ -1481,6 +1782,9 @@ export function createCashFlowPivotModel({
     variableReceivablesLines,
     variableCollectionDistributionByLine,
     variablesPivot,
+    variableOutflowsLines,
+    variableOutflowsBaseBuckets,
+    variableOutflowsPivot,
     cogsIncomeLines,
     purchaseIndex,
     purchaseLines,

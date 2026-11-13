@@ -12,6 +12,18 @@
  *  - ENMIENDA A-03 (frontend.03_21 §12): buckets fuera de año extendidos.
  *  - ENMIENDA A-04 (frontend.03_21 §13): la comisión de recaudo sigue AL COBRO
  *    (`variableCollectionDistribution`).
+ *  - **frontend.03_25** (spec `04_Spec_Gasto_variable_por_salidas` §4.6,
+ *    2026-11-11): TERCERA base del gasto variable — `variable_outflows`
+ *    ("Variable por Salidas") NO consume NINGUNO de los maps por CECO de este
+ *    módulo: su base es la SALIDA GLOBAL del presupuesto en el mes de
+ *    CAUSACIÓN (`budget_date` de la línea), compuesta por
+ *    `buildOutflowsBaseBuckets`/`createOutflowsBaseMonths` (`cashFlowPivot.js`)
+ *    y contabilizada en el CECO PROPIO de la línea SIN resolución por cubeta
+ *    (BR-VS-F1/F2/F3). El evento se causa en el mes de `budget_date` (patrón
+ *    `monthBucketIndexOf`, como los otros dos variables) sobre ese CECO
+ *    propio — el posicionamiento vive en los builders de pivote y en
+ *    `cecoMovements.movementBucketOf`, que ya posicionan la variable
+ *    reconciliada por `budget_date` en ambos tabs.
  *
  * Importa sus primitivas temporales directamente de `planningDate.js`
  * (NUNCA del barril `planningFormat.js`, que importa de aquí).
@@ -230,6 +242,8 @@ export function entradasCausacionByCeco(lines, scenarioYear = null) {
  * serie de drill-down de `CecoDetailView` (AC-FE21-4/AC-FE21-10). Las series
  * devueltas son NETA (sin gross-up — la base de comisiones nunca lleva IVA;
  * el modo ON de los inflows solo afecta a la presentación del bloque Entradas).
+ * frontend.03_25: el tercer comportamiento (`variable_outflows`) NO consume
+ * este map — base de salidas GLOBAL, CECO propio sin resolución (BR-VS-F3).
  * @param {Array<object>|null|undefined} lines `budget_lines` crudas del escenario
  * @param {Array<object>|null|undefined} costCenters catálogo del store
  * @returns {Map<number|string, number[]>} `cecoVariableLine → months[12]`
@@ -259,6 +273,9 @@ export function entradasCausacionByVariableCeco(lines, costCenters, scenarioYear
  * la genera (Antes / Mes del año / Después), usando la tasa de la línea
  * concepto del MES DE FACTURACIÓN del cobro. La Ejecutiva sigue devengo
  * (divergencia por diseño — §13). Solo presentación; no toca cifras del P&G.
+ * frontend.03_25 (§4.6): el tercer comportamiento (`variable_outflows`)
+ * causa en el MES DE `budget_date` de la línea (devengo y Flujo) sobre su
+ * CECO PROPIO — no sigue la distribución de cobro de esta nota.
  */
 export const VARIABLE_COLLECTION_DISTRIBUTION_NOTE =
   'Criterio de caja (A-04): la comisión por recaudo se muestra en el MES en ' +
@@ -430,6 +447,8 @@ export function entradasBucketByVariableCeco(lines, costCenters, scenarioYear) {
  * las líneas `variable_receivables` del Flujo consumen SU entrada idéntica
  * (gross-up ×1.19 según flag efectivo, D-FE14). Ejecutiva y drill-down NO
  * consumen este map (devengo intacto — A-02, divergencia por diseño).
+ * frontend.03_25: `variable_outflows` tampoco lo consume (base de salidas
+ * global del mes de causación, CECO propio — BR-VS-F1/F2/F3).
  * @param {Array<object>|null|undefined} varReceivablesLines líneas
  *   `expense` + `variable_receivables` del escenario
  * @param {Array<object>|null|undefined} incomeLines líneas de ingreso fijas

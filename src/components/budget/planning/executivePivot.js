@@ -35,6 +35,9 @@ import {
   resolveVariableBaseCeco
 } from './planningFormat.js'
 import { lineIdForCostCenter } from './cecoMovements.js'
+// frontend.03_25 (spec §4.4): la Base de salidas (BR-VS-F1/F2) se compone con
+// el motor de Flujo en NETO — helper compartido de `cashFlowPivot.js`.
+import { createOutflowsBaseMonths } from './cashFlowPivot.js'
 // FASE 1: primitiva de fecha consolidada en `planningDate.js` (movida verbatim).
 import { monthEndsOfYear } from './planningDate.js'
 import { taxCalculationAvailable, pnlTaxMonthly } from '../taxes/taxPresentation.js'
@@ -152,10 +155,18 @@ export function buildFixedPivot(lines, lineType, costCenterLabel) {
  *    serie NETA por mes de pago `cfMonth = payment_date ?? budget_date`,
  *    `entradasCausacionByCeco`). La presentación del modo IVA del bloque
  *    Entradas (gross-up ×1.19) NO toca esta base — D-FE14-7.
- *  Ambos se posicionan en el MES de `budget_date` de la LÍNEA (causación de
- *  la comisión): la celda del mes `m` muestra `tasa × base(m)` con `m` el
- *  mes de presupuestación de la línea (para recaudo, `base(m)` son los
- *  cobros cuyo **cfMonth = m**).
+ *  - **frontend.03_25 (spec `04_Spec_Gasto_variable_por_salidas` §8.2,
+ *    2026-11-11)** — `variable_outflows` ⇒ base de SALIDAS GLOBAL
+ *    (`outflowsBaseMonths`, `number[12]` = Base(m) BR-VS-F1/F2 compuesta por
+ *    `createOutflowsBaseMonths` en la factory con el motor de Flujo en NETO):
+ *    aporte = tasa × Base(mes de `budget_date` de la línea), keyeado por el
+ *    CECO PROPIO (SIN resolución por cubeta — BR-VS-F3) y SIEMPRE neto (la
+ *    Ejecutiva no lleva IVA — D-FE14-7). Hoy caería en la rama de facturación
+ *    por defecto; la rama explícita lo evita.
+ *  Ambos primeros se posicionan en el MES de `budget_date` de la LÍNEA
+ *  (causación de la comisión): la celda del mes `m` muestra `tasa × base(m)`
+ *  con `m` el mes de presupuestación de la línea (para recaudo, `base(m)`
+ *  son los cobros cuyo **cfMonth = m**).
  * @param {Array<object>} variableExpenseLines
  * @param {Array<{ id: number|string, months: number[] }>} incomeRows filas del
  *   pivote de Ingresos (`buildFixedPivot(..., 'income', ...)` — `row.id` ES el
@@ -169,18 +180,26 @@ export function buildFixedPivot(lines, lineType, costCenterLabel) {
  *   líneas del escenario — misma convención temporal que el bloque "Entradas"
  *   de la Vista Flujo, sin gross-up). `[]`/`undefined` ⇒ `variable_receivables`
  *   con base 0 (AC-FE21-11).
+ * @param {number[]} [outflowsBaseMonths] serie de la Base de salidas del
+ *   presupuesto por mes (frontend.03_25 BR-VS-F1/F2, NETA para la Ejecutiva);
+ *   `[]`/`undefined` ⇒ las líneas `variable_outflows` aportan 0 (degradación
+ *   honesta — NUNCA toman la base de facturación).
  */
 export function buildVariableExpensePivot(
   variableExpenseLines,
   incomeRows,
   costCenterLabel,
   costCenters,
-  entradasRows = []
+  entradasRows = [],
+  outflowsBaseMonths = []
 ) {
   const source = variableExpenseLines
   const hasIncomeBase = incomeRows.some((row) => row.months.some((value) => value !== 0))
   const hasEntradasBase = entradasRows.some((row) => row.months.some((value) => value !== 0))
-  if (!source.length || (!hasIncomeBase && !hasEntradasBase)) {
+  // frontend.03_25: la base de salidas habilita el pivote por sí sola (un
+  // escenario con SOLO líneas variable_outflows y sin facturación/cobros).
+  const hasOutflowsBase = (outflowsBaseMonths ?? []).some((value) => value !== 0)
+  if (!source.length || (!hasIncomeBase && !hasEntradasBase && !hasOutflowsBase)) {
     return null
   }
 
@@ -221,6 +240,20 @@ export function buildVariableExpensePivot(
     const month = monthIndexOf(line.budget_date)
     if (month < 0) continue
     const rate = Number(line.variable_rate) || 0
+
+    // frontend.03_25 — TERCERA rama del condicional hoy binario (spec §4.4):
+    // `variable_outflows` toma la base de SALIDAS GLOBAL (mes de causación,
+    // CECO propio — BR-VS-F2/F3); NUNCA la de facturación. Sin gross-up: la
+    // Ejecutiva es SIEMPRE neta y la base ya llega neta.
+    if (line.behavior_type === 'variable_outflows') {
+      const outflowsAmount = rate * (Number(outflowsBaseMonths?.[month]) || 0)
+      row.months[month] += outflowsAmount
+      row.total += outflowsAmount
+      columnTotals[month] += outflowsAmount
+      grandTotal += outflowsAmount
+      continue
+    }
+
     // Base por CECO generador (A-01 + A-02, frontend.03_21 §5.1/§10/§11):
     // variable_sales ⇒ I por budget_date del CECO con facturación de la
     // MISMA (zona, línea); variable_receivables ⇒ R (entradas por mes de
@@ -406,6 +439,20 @@ export function createExecutivePivotModel({ scenario, store }) {
   )
 
   /**
+   * frontend.03_25 (spec §4.4) — serie NETA de la Base de salidas del
+   * presupuesto por mes (BR-VS-F1/F2): motor de Flujo espejo sobre la MISMA
+   * caché con el modo IVA APAGADO (`neto: true` — la Ejecutiva es SIEMPRE
+   * netos, D-FE14-7). El capital/desembolsos salen del caché
+   * `store.financingPrincipalFlow` (budgetId-checked); settlement/tax no
+   * cargados ⇒ aportan 0 (degradación honesta documentada en el helper).
+   */
+  const outflowsBaseMonths = createOutflowsBaseMonths({
+    scenario: () => scenarioRef.value,
+    store,
+    neto: true
+  })
+
+  /**
    * Pivote estimado — SIEMPRE neto (D-FE14-7). REVISIÓN 5 (spec
    * `frontend.03_21` §5.1): la base es POR CECO — pasan las FILAS del pivote
    * de Ingresos (`incomePivot.value.rows`, `{ id: cecoId, months[12] }`) y el
@@ -421,6 +468,9 @@ export function createExecutivePivotModel({ scenario, store }) {
    * (Σ cobros por mes de pago del CECO resuelto, NETA); `variable_sales`
    * conserva la base I por causación. Ambas resoluciones comparten la MISMA
    * regla A-01 (`resolveVariableBaseCeco`).
+   * frontend.03_25 (§4.4): 6º parámetro `outflowsBaseMonths` — la TERCERA
+   * rama del builder (`variable_outflows`) consume la base de salidas global
+   * NETA (BR-VS-F1/F2) posicionada por mes de causación sobre el CECO propio.
    * El drill-down del CECO (`CecoDetailView` + series resueltas por
    * comportamiento) reproduce la MISMA regla — byte-cuadre AC-16/AC-FE21-8.
    */
@@ -430,7 +480,8 @@ export function createExecutivePivotModel({ scenario, store }) {
       incomePivot.value.rows,
       store.costCenterLabel,
       store.costCenters,
-      entradasRows.value
+      entradasRows.value,
+      outflowsBaseMonths.value
     )
   )
 
@@ -500,6 +551,7 @@ export function createExecutivePivotModel({ scenario, store }) {
     incomePivot,
     expensePivot,
     entradasRows,
+    outflowsBaseMonths,
     variablePivot,
     hasIncomeRows,
     monthlyRates,

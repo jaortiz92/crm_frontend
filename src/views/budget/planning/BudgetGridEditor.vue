@@ -89,7 +89,7 @@ import { useBudgetSimulationStore } from '@/stores/budgetSimulationStore.js'
 import { useBudgetIvaStore } from '@/stores/budgetIvaStore.js'
 import { createPlanningStoresView } from '@/stores/planningStoresBridge.js'
 import { useUserStore } from '@/stores/userStore.js'
-import { canSetBudgetTarget } from '@/router/index.js'
+import { canManageCollaborators, canSetBudgetTarget } from '@/router/index.js'
 import { alertService } from '@/services/alertService.js'
 import {
   budgetCollaboratorService,
@@ -163,6 +163,15 @@ const idBudget = computed(() => Number(route.params.idBudget))
 const scenario = computed(() => scenarioStore.currentScenario)
 
 const canTarget = computed(() => canSetBudgetTarget())
+
+/* FE-S21: recálculo manual de la nómina materializada. El motor SOLO
+ * materializa en el escenario ACTIVO (Opción C): si cambian parámetros
+ * laborales (p.ej. política de parafiscales), las líneas persistidas del
+ * escenario activo quedan obsoletas hasta re-ejecutar el recálculo. Gate
+ * canManageCollaborators = mismo allow-list que exige el backend (403). */
+const canRecalcPayroll = computed(
+  () => scenario.value?.status === 'active' && canManageCollaborators()
+)
 
 const statusChip = computed(() =>
   scenario.value ? statusChipOf(scenario.value.status) : { label: '', tone: 'draft' }
@@ -427,9 +436,10 @@ async function projectPayrollNow() {
   try {
     const res = await budgetCollaboratorService.recalculate({ month: `${year}-01` })
     const created = Number(res?.data?.created_lines ?? 0)
+    const replaced = Number(res?.data?.replaced_lines ?? 0)
     const warns = res?.data?.warnings ?? []
     alertService.generalSucces(
-      `Nómina proyectada en el escenario: ${created} líneas.` +
+      `Nómina recalculada: ${created} líneas creadas, ${replaced} reemplazadas.` +
         (warns.length ? ` Aviso: ${warns[0]}` : '')
     )
     await load(true)
@@ -847,6 +857,19 @@ function backToPlanning() {
             @click="goToTaxes"
           >
             Planeación tributaria
+          </button>
+          <!-- FE-S21: recálculo manual de la nómina del escenario ACTIVO
+               (las líneas materializadas quedan obsoletas tras cambios de
+               parámetros laborales; en borradores la simulación es en vivo). -->
+          <button
+            v-if="canRecalcPayroll"
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="payrollBusy"
+            title="Re-ejecuta el motor de nómina (R-13 idempotente): regenera las líneas del escenario con los parámetros laborales vigentes"
+            @click="projectPayrollNow"
+          >
+            {{ payrollBusy ? 'Recalculando...' : 'Recalcular nómina' }}
           </button>
           <button
             v-if="scenario.status !== 'active' && canTarget"

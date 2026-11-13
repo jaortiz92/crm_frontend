@@ -426,6 +426,13 @@ export function buildFlowSheets({
       // Después en la hoja por `matrixSheet(ooy)` (AC-FE21-16).
       ooy: true
     },
+    {
+      // frontend.03_25 (spec §4.3.5): bloque nuevo — export = matriz visible.
+      // `ooy: false`: el aporte vive solo en meses del año N (BR-VS-02).
+      title: 'Salidas — Gastos variables por salidas',
+      pivot: model.variableOutflowsPivot.value,
+      ooy: false
+    },
     { title: 'Pago de liquidación de IVA', pivot: model.settlementPaymentsPivot.value, ooy: true },
     {
       title: 'Salidas — Impuestos (planeación tributaria)',
@@ -625,10 +632,18 @@ export function buildSettlementSheets({ store }) {
  *   tab: string,
  *   ivaActive: boolean,
  *   sheetName: string,
- *   fixedIncomeByMonth?: number[]
+ *   fixedIncomeByMonth?: number[],
+ *   scenarioYear?: number|null
  * }} params
  */
-export function buildCecoSheets({ movements, tab, ivaActive, sheetName, fixedIncomeByMonth }) {
+export function buildCecoSheets({
+  movements,
+  tab,
+  ivaActive,
+  sheetName,
+  fixedIncomeByMonth,
+  scenarioYear = null
+}) {
   const list = Array.isArray(movements) ? movements : []
   if (!list.length) return []
   const columns = [
@@ -670,7 +685,8 @@ export function buildCecoSheets({ movements, tab, ivaActive, sheetName, fixedInc
     {
       key: 'monto',
       label: 'Monto',
-      value: (m) => rawNumber(movementAmountReconciled(m, tab, ivaActive, fixedIncomeByMonth))
+      value: (m) =>
+        rawNumber(movementAmountReconciled(m, tab, ivaActive, fixedIncomeByMonth, scenarioYear))
     }
   ]
   const rows = list.map((movement) => {
@@ -681,7 +697,7 @@ export function buildCecoSheets({ movements, tab, ivaActive, sheetName, fixedInc
   // Footer: Σ Total de la selección (mismo acumulado que `CecoMovementTable`).
   let total = 0
   for (const movement of list) {
-    const amount = movementAmountReconciled(movement, tab, ivaActive, fixedIncomeByMonth)
+    const amount = movementAmountReconciled(movement, tab, ivaActive, fixedIncomeByMonth, scenarioYear)
     if (Number.isFinite(amount)) total += amount
   }
   rows.push({ lineNo: 'Σ Total de la selección', monto: rawNumber(total) })

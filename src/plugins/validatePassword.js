@@ -1,4 +1,4 @@
-export const validatePassword = {
+﻿export const validatePassword = {
   passwordRules: function () {
     return [
       { regex: /.{8,}/, message: 'Menos de 8 caracteres' },
@@ -17,11 +17,10 @@ export const validatePassword = {
     return errors.length === 0
   },
   validatePassword: function (password) {
-    console.log(password)
+    // Fixes 2 (SECU): never log the password or its derivative state
+    // (console output leaks credentials on Login/Reset/Update/UserForm).
     const errors = this.passwordErrors(password)
-    console.log(errors)
     const isValid = this.isPasswordValid(errors)
-    console.log(isValid)
     return {
       isValid: isValid,
       errors: errors

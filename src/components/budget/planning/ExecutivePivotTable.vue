@@ -9,15 +9,18 @@
  * Ingresos, Costo de ventas estimado (FE-S4C), Gastos fijos (filas = CECO
  * agrupando todas sus líneas, columnas = Ene–Dic del `budget_year`, celda =
  * Σ del mes, totales por fila/columna), un tercer bloque estimado "Gastos
- * variables (calculados)": cada línea de GASTO `variable_sales`/`variable_receivables`
- * aporta `tasa × Σ ingresos presupuestados del mes de su `budget_date`
+ * variables (calculados)": cada línea de GASTO
+ * `variable_sales`/`variable_receivables` aporta
+ * `tasa × Σ ingresos presupuestados del mes de su `budget_date`
  * (réplica client-side de la regla de `budgetEngine.project_cash_flow`,
  * Opción A), y — tras él — "Resultado (P&G)" y "Acumulado (Ene→Mes)"
  * derivados SOLO de columnas ya computadas (FE-S4C §3.3). Esos montos son
  * DERIVADOS de presentación —no se almacenan en las líneas (BR-CLN-03: las
  * líneas guardan solo tasas)— y se recalculan solos al ajustar ingresos. El
  * detalle por línea se lista además debajo como tabla de tasas de solo
- * lectura.
+ * lectura. frontend.03_25: la TERCERA base — `variable_outflows` ("Variable
+ * por Salidas") aporta `tasa × Base(m)` (salidas del presupuesto del mes de
+ * causación, base GLOBAL neta) sobre el CECO propio; ver `executivePivot.js`.
  *
  * FE-S4C — decisiones normativas (spec `frontend.03_05`):
  *  - D-1: el costo se ESTIMA con las tasas "Costos por Línea" de Reglas
@@ -108,6 +111,7 @@
  */
 import { computed } from 'vue'
 import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
+import { createPlanningStoresView } from '@/stores/planningStoresBridge.js'
 import ScenarioTaxPnlSection from '@/components/budget/taxes/ScenarioTaxPnlSection.vue'
 import PivotMonthTable from './PivotMonthTable.vue'
 /**
@@ -200,7 +204,12 @@ function labelTitleOf(block, row) {
 
 const model = createExecutivePivotModel({
   scenario: () => props.scenario,
-  store: scenarioStore
+  // frontend.03_25: vista de puentes (escenario + simulación + IVA) — la
+  // Base de salidas del tercer comportamiento (BR-VS-F1) necesita leer
+  // settlement/tax/capital del MISMO caché que la Vista Flujo (miembros que
+  // el sub-store de escenario solo ya no expone en FASE 2). Los miembros
+  // existentes (catálogos, tasas, tax) delegan idéntico.
+  store: createPlanningStoresView()
 })
 const {
   variableSourceLines,

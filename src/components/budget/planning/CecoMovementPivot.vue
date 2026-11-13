@@ -136,7 +136,8 @@ const grouped = computed(() => {
       movement,
       props.tab,
       ivaActive.value,
-      props.fixedIncomeMonths
+      props.fixedIncomeMonths,
+      props.scenarioYear
     )
     if (!Number.isFinite(amount)) continue
     const groupKey = movementGroupOf(movement)
