@@ -9,6 +9,14 @@
  * ('planning-ingresos' / 'planning-gastos'). NO existe matriz importable: la
  * matriz Ene–Dic es presentación de solo lectura en el editor (§8.2).
  *
+ * Simplificación de campos (2026-11): los campos "Período" y "Departamento"
+ * se retiraron del formulario. Ambos eran metadatos sin efecto en el proceso
+ * (el ETL de los Excel SIIGO define los meses; ningún motor/filtro lee
+ * `budget_period`/`id_department`). El multipart conserva el contrato del BE:
+ * `budget_period` viaja fijo 'ANUAL' (default del servicio) y `id_department`
+ * simplemente NO se anexa (el BE lo recibe Optional/None). El clonado sigue
+ * copiando ambos valores desde el presupuesto origen.
+ *
  * FE-S9-PURCHASES-BODEGA §2.8 (aditivo, helper reemplazado por la Enmienda
  * A-01 §6.3): TERCERA zona opcional "Plan de importaciones" → `file_compras`
  * (layout REAL SIIGO: hoja 1, encabezados en la fila 8, columna Temporada
@@ -37,7 +45,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import FileDropZone from '@/components/budget/upload/FileDropZone.vue'
 import { useBudgetScenarioStore } from '@/stores/budgetScenarioStore.js'
-import { departmentService } from '@/services/departmentService.js'
 import { alertService } from '@/services/alertService.js'
 import { buildYearOptions, formatMoney } from '@/components/budget/planning/planningFormat.js'
 
@@ -62,9 +69,7 @@ const files = reactive({
 
 const form = reactive({
   name: '',
-  year: String(new Date().getFullYear() + 1),
-  period: 'ANUAL',
-  department: ''
+  year: String(new Date().getFullYear() + 1)
 })
 
 /**
@@ -112,24 +117,8 @@ const yearOptions = buildYearOptions()
 
 /* ------------------------------ departamentos ------------------------------ */
 
-const departments = ref([])
-const departmentsLoaded = ref(false)
-
-/** Catálogo de departments ya consumido por el CRM (PQ-F2). */
-async function loadDepartmentsOnce() {
-  if (departmentsLoaded.value || busy.value) return
-  departmentsLoaded.value = true
-  try {
-    const response = await departmentService.getDepartments()
-    const rows = Array.isArray(response?.data) ? response.data : []
-    departments.value = [...rows].sort((a, b) =>
-      String(a.department_name).localeCompare(String(b.department_name), 'es')
-    )
-  } catch {
-    // Silencioso: el select queda con la opción vacía; la carga no se bloquea.
-    departmentsLoaded.value = false
-  }
-}
+/* Retirado (2026-11): el campo "Departamento" era metadata sin efecto en el
+ * proceso; el multipart ya no anexa `id_department` (BE Optional/None). */
 
 /* -------------------------------- validación ------------------------------- */
 
@@ -201,8 +190,6 @@ function resetForm() {
   files.gastos = null
   files.compras = null
   form.name = ''
-  form.period = 'ANUAL'
-  form.department = ''
   // FE-S7-INITBAL SD7-FE-2 (v1.1): defaults CARRYOVER al reabrir (mejora A).
   initialBalances.cash.mode = 'carryover'
   initialBalances.cash.manual = '0'
@@ -243,8 +230,8 @@ async function handleUpload() {
   const result = await scenarioStore.uploadScenario({
     scenarioName: form.name,
     budgetYear: Number(form.year),
-    budgetPeriod: form.period,
-    idDepartment: form.department === '' ? null : Number(form.department),
+    // `budget_period` viaja fijo 'ANUAL' (default del servicio); el BE lo
+    // persiste como metadato y `id_department` ya no se anexa (Optional).
     fileIngresos: files.ingresos,
     fileGastos: files.gastos instanceof File ? files.gastos : null,
     // FE-S9 §2.8: el store/servicio anexan `file_compras` SOLO si es File.
@@ -335,7 +322,6 @@ watch(
     filesError.value = ''
     serverError.value = null
     form.year = String(new Date().getFullYear() + 1)
-    loadDepartmentsOnce()
     await nextTick()
     dialogRef.value?.focus()
   }
@@ -401,32 +387,6 @@ onBeforeUnmount(() => {
             <select id="bi-year" v-model="form.year" class="bi-input" :disabled="busy">
               <option v-for="year in yearOptions" :key="year" :value="String(year)">
                 {{ year }}
-              </option>
-            </select>
-          </div>
-
-          <div class="bi-field">
-            <label class="bi-label" for="bi-period">Período</label>
-            <input
-              id="bi-period"
-              v-model="form.period"
-              class="bi-input"
-              type="text"
-              maxlength="20"
-              :disabled="busy"
-            />
-          </div>
-
-          <div class="bi-field">
-            <label class="bi-label" for="bi-department">Departamento</label>
-            <select id="bi-department" v-model="form.department" class="bi-input" :disabled="busy">
-              <option value="">Sin departamento</option>
-              <option
-                v-for="dept in departments"
-                :key="dept.id_department"
-                :value="String(dept.id_department)"
-              >
-                {{ dept.department_name }}
               </option>
             </select>
           </div>
