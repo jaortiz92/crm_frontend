@@ -23,7 +23,7 @@ const userStore = useUserStore()
 // The fiscal year is the budget's year (set by BudgetTaxesView before mounting).
 const taxYear = computed(() => Number(store.taxYear))
 const canEdit = computed(
-  () => userStore.hasPermission('high') || userStore.hasRole(['Gerente', 'Financiero'])
+  () => userStore.hasPermission('high') || userStore.hasRole(['Financiero'])
 )
 const selectedRegime = ref(store.selectedRegime || 'ordinary')
 const selectedProfileId = ref('')

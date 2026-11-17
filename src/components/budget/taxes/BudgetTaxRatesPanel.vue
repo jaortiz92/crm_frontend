@@ -7,7 +7,7 @@ const store = useBudgetTaxStore()
 const userStore = useUserStore()
 
 const canEdit = computed(
-  () => userStore.hasPermission('high') || userStore.hasRole(['Gerente', 'Financiero'])
+  () => userStore.hasPermission('high') || userStore.hasRole(['Financiero'])
 )
 
 const TAX_TYPES = [

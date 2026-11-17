@@ -8,7 +8,7 @@ defineProps({ idBudget: { type: [String, Number], default: null } })
 const store = useBudgetTaxStore()
 const userStore = useUserStore()
 const canEdit = computed(
-  () => userStore.hasPermission('high') || userStore.hasRole(['Gerente', 'Financiero'])
+  () => userStore.hasPermission('high') || userStore.hasRole(['Financiero'])
 )
 const selectedProfileId = ref('')
 const feedback = ref('')

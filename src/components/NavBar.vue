@@ -93,9 +93,10 @@ const navGroups = [
       {
         label: 'Centro de Ingesta',
         to: '/budget/upload',
-        // Gateo por escala de acceso + nombres de rol reales (PQ-1):
-        // hasPermission('high') deja pasar a 'Administrador' (all); los roles
-        // 'Gerente' y 'Financiero' (gerencia/contabilidad) pasan por nombre.
+        // Gateo por escala de acceso + nombre de rol real (PQ-1):
+        // hasPermission('high') deja pasar a 'Administrador' (all) y a los
+        // roles con access_type 'high'; el rol 'Financiero' (contabilidad)
+        // pasa por nombre. 'Gerente' ya no entra por nombre.
         permission: 'high',
         roles: BUDGET_UPLOAD_ROLES
       },

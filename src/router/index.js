@@ -48,12 +48,12 @@ import CustomerTripsWithoutOrdersQueryView from '@/views/query/formats/CustomerT
 import DeletionsView from '@/views/deletions/DeletionsView.vue'
 
 /**
- * Roles con acceso al Módulo Presupuestal (PQ-1): no existen roles literales
- * "gerencia"/"contabilidad" en el CRM; los nombres reales en la BD son
- * 'Gerente' (gerencia) y 'Financiero' (contabilidad). La escala de acceso
- * (`hasPermission`) cubre además a 'Administrador' (all ≥ high).
+ * Roles con acceso al Módulo Presupuestal (PQ-1): el rol 'Financiero'
+ * (contabilidad) pasa por nombre. 'Gerente' ya NO entra por nombre: solo
+ * accede si su access_type alcanza la escala 'high' (misma regla que
+ * 'Administrador', all ≥ high, vía `hasPermission`).
  */
-export const BUDGET_UPLOAD_ROLES = ['Gerente', 'Financiero']
+export const BUDGET_UPLOAD_ROLES = ['Financiero']
 
 /**
  * Roles que pueden designar la Meta Activa del año (FE-S4-BUDGET-PLANNING
